@@ -670,7 +670,9 @@ real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_int
 ! additional arrays for llcs convection
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: theta_neil, q_neil, p_full_neil, &
   conv_dt_tg_neil, conv_dt_qg_neil
-real, dimension(size(ug,1), size(ug,2), size(ug,3)+1) :: p_half_neil 
+real, dimension(size(ug,1), size(ug,2), size(ug,3)+1) :: p_half_neil
+! loop variables for llcs convection
+integer :: i, j, k
 
 if(current == previous) then
    delta_t = dt_real
@@ -709,8 +711,8 @@ case(LLCS_CONV)
   do i = 1, size(ug,1)
     do j = 1, size(ug,2)
       do k = 1, size(ug,3)
-        conv_dt_tg_neil(i,j,k) = conv_dt_tg_neil(i,j,k)*(p_full_neil(i,j,k,previous)/100000)**(rdgas/cp_air)
-        theta_neil(i,j,k) = theta_neil(i,j,k)*(p_full(i,j,k)/100000)**(rdgas/cp_air)
+        conv_dt_tg_neil(i,j,k) = conv_dt_tg_neil(i,j,k)*(p_full_neil(i,j,k)/100000)**(rdgas/cp_air)
+        theta_neil(i,j,k) = theta_neil(i,j,k)*(p_full(i,j,k,previous)/100000)**(rdgas/cp_air)
       end do
     end do
   end do
