@@ -24,6 +24,8 @@ use         lscale_cond_mod, only: lscale_cond_init, lscale_cond, lscale_cond_en
 
 use qe_moist_convection_mod, only: qe_moist_convection_init, qe_moist_convection, qe_moist_convection_end
 
+use                    llcs, only: llcs_control
+
 use        betts_miller_mod, only: betts_miller, betts_miller_init
 
 use      dry_convection_mod, only: dry_convection_init, dry_convection
@@ -86,11 +88,13 @@ integer, parameter :: UNSET = -1,                & !! are NONE, SIMPLE_BETTS_MIL
                       NO_CONV = 0,               &
                       SIMPLE_BETTS_CONV = 1,         &
                       FULL_BETTS_MILLER_CONV = 2,     &
-                      DRY_CONV = 3
+                      DRY_CONV = 3, &
+                      LLCS_CONV = 4 ! NTL llcs_option 
 integer :: r_conv_scheme = UNSET  ! the selected convection scheme
 
 logical :: lwet_convection = .false.
 logical :: do_bm = .false.
+logical :: do_llcs = .false. !NTL llcs_flag
 
 !s Radiation options
 logical :: two_stream_gray = .true.
@@ -125,7 +129,7 @@ real :: robert_bucket = 0.04   ! default robert coefficient for bucket depth LJJ
 real :: raw_bucket = 0.53       ! default raw coefficient for bucket depth LJJ
 ! end RG Add bucket
 
-namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, roughness_heat,  &
+namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_llcs, roughness_heat,  &
                                       two_stream_gray, do_rrtm_radiation, do_damping,&
                                       mixed_layer_bc, do_simple,                     &
                                       roughness_moist, roughness_mom, do_virtual,    &
@@ -308,6 +312,7 @@ if(uppercase(trim(convection_scheme)) == 'NONE') then
   r_conv_scheme = NO_CONV
   lwet_convection = .false.
   do_bm           = .false.
+  do_llcs         = .false.
   call error_mesg('idealized_moist_phys','No convective adjustment scheme used.', NOTE)
 
 else if(uppercase(trim(convection_scheme)) == 'SIMPLE_BETTS_MILLER') then
@@ -315,18 +320,28 @@ else if(uppercase(trim(convection_scheme)) == 'SIMPLE_BETTS_MILLER') then
   call error_mesg('idealized_moist_phys','Using Frierson Quasi-Equilibrium convection scheme.', NOTE)
   lwet_convection = .true.
   do_bm           = .false.
+  do_llcs         = .false.
 
 else if(uppercase(trim(convection_scheme)) == 'FULL_BETTS_MILLER') then
   r_conv_scheme = FULL_BETTS_MILLER_CONV
   call error_mesg('idealized_moist_phys','Using Betts-Miller convection scheme.', NOTE)
   do_bm           = .true.
   lwet_convection = .false.
+  do_llcs         = .false.
 
 else if(uppercase(trim(convection_scheme)) == 'DRY') then
   r_conv_scheme = DRY_CONV
   call error_mesg('idealized_moist_phys','Using dry convection scheme.', NOTE)
   lwet_convection = .false.
   do_bm           = .false.
+  do_llcs         = .false.  
+
+else if(uppercase(trim(convection_scheme)) == 'LLCS') then
+  r_conv_scheme = LLCS_CONV
+  call error_mesg('idealized_moist_phys','Using idealised LLCS convection scheme.', NOTE)
+  lwet_convection = .false.
+  do_bm           = .false.
+  do_llcs         = .true.
 
 else if(uppercase(trim(convection_scheme)) == 'UNSET') then
   call error_mesg('idealized_moist_phys','determining convection scheme from flags', NOTE)
@@ -334,17 +349,25 @@ else if(uppercase(trim(convection_scheme)) == 'UNSET') then
     r_conv_scheme = SIMPLE_BETTS_CONV
     call error_mesg('idealized_moist_phys','Using Frierson Quasi-Equilibrium convection scheme.', NOTE)
   end if
-  if (do_bm) then
+  if (do_bm) then     
     r_conv_scheme = FULL_BETTS_MILLER_CONV
     call error_mesg('idealized_moist_phys','Using Betts-Miller convection scheme.', NOTE)
   end if
+  if (do_llcs) then
+    r_conv_scheme = LLCS_CONV
+    call error_mesg('idealized_moist_phys','Using idealised LLCS convection.',NOTE)
+  end if 
 else
   call error_mesg('idealized_moist_phys','"'//trim(convection_scheme)//'"'//' is not a valid convection scheme.'// &
-      ' Choices are NONE, SIMPLE_BETTS, FULL_BETTS_MILLER, DRY', FATAL)
+      ' Choices are NONE, SIMPLE_BETTS, FULL_BETTS_MILLER, DRY, LLCS', FATAL)
 endif
 
 if(lwet_convection .and. do_bm) &
   call error_mesg('idealized_moist_phys','lwet_convection and do_bm cannot both be .true.',FATAL)
+if(do_llcs .and. do_bm) &
+  call error_mesg('idealized_moist_phys','do_llcs and do_bm cannot both be .true.',FATAL)
+if(lwet_convection .and. do_llcs) &
+  call error_mesg('idealized_moist_phys','lwet_convection and do_llcs cannot both be .true.',FATAL)
 
 nsphum = nhum
 Time_step = Time_step_in
@@ -599,8 +622,7 @@ if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, ge
     if (do_rrtm_radiation) then
         call error_mesg('idealized_moist_phys','do_rrtm_radiation is .true. but compiler flag -D RRTM_NO_COMPILE used. Stopping.', FATAL)
     endif
-#else
-    if(do_rrtm_radiation) then
+#else    if(do_rrtm_radiation) then
        id=ie-is+1 !s Taking dimensions from equivalend calls in vert_turb_driver_init
        jd=je-js+1
        kd=num_levels
@@ -645,6 +667,11 @@ real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 real :: delta_t
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp
 
+! additional arrays for llcs convection
+real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: theta_neil, q_neil, p_full_neil, &
+  conv_dt_tg_neil, conv_dt_qg_neil
+real, dimension(size(ug,1), size(ug,2), size(ug,3)+1) :: p_half_neil 
+
 if(current == previous) then
    delta_t = dt_real
 else
@@ -659,6 +686,61 @@ endif
 rain = 0.0; snow = 0.0; precip = 0.0
 
 select case(r_conv_scheme)
+
+case(LLCS_CONV)
+  ! something needs to go here to flip the arrays
+  ! also need to make theta, p_zero - use p_half(:,:,1,previous), after call to convection theta needs to be changed to temperature
+  ! flip input arrays 
+  do i = 1, size(ug,1)
+    do j = 1, size(ug,2)
+      do k = 1, size(ug,3)
+        theta_neil(i,j,size(ug,3)-k+1) = tg(i,j,k,previous)*(p_full(i,j,k)/100000)**(rdgas/cp_air)
+        q_neil(i,j,size(ug,3)-k+1) = grid_tracers(i,j,k,previous,nsphum)
+        p_half_neil(i,j,size(ug,3)-k+2) = p_half(i,j,k,previous)
+        p_full_neil(i,j,size(ug,3)-k+1) = p_full(i,j,k,previous)
+      end do
+      p_half_neil(i,j,1) = p_half(i,j,size(ug,3)+1,previous)
+    end do
+  end do
+
+  
+  call llcs_control(theta_neil,q_neil,p_half_neil(:,:,1),p_half_neil,p_full_neil,conv_dt_tg_neil,conv_dt_qg_neil,rain)
+  !convert back from potential temperature to temperature 
+  do i = 1, size(ug,1)
+    do j = 1, size(ug,2)
+      do k = 1, size(ug,3)
+        conv_dt_tg_neil(i,j,k) = conv_dt_tg_neil(i,j,k)*(p_full_neil(i,j,k)/100000)**(rdgas/cp_air)
+        theta_neil(i,j,k) = theta_neil(i,j,k)*(p_full(i,j,k)/100000)**(rdgas/cp_air)
+      end do
+    end do
+  end do
+  ! make increments 
+  conv_dt_tg_neil = conv_dt_tg_neil - theta_neil 
+  conv_dt_qg_neil = conv_dt_qg_neil - q_neil 
+  ! flip arrays back
+  do i  = 1, size(ug,1)
+    do j = 1, size(ug,2)
+      do k = 1, size(ug,3)
+        conv_dt_tg(i,j,size(ug,3)-k+1) = conv_dt_tg_neil(i,j,k)
+        conv_dt_qg(i,j,size(ug,3)-k+1) = conv_dt_qg_neil(i,j,k)
+      end do
+    end do
+  end do
+
+  ! increment and update fields following method for SIMPLE_BETTS_CONV
+  
+  tg_tmp = conv_dt_tg + tg(:,:,:,previous)
+  qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
+
+  conv_dt_tg = conv_dt_tg/delta_t
+  conv_dt_qg = conv_dt_qg/delta_t
+
+  precip = rain ! rain from LLCS is already output in kgm^-2s^-1, no need to
+                ! divide by delta_t
+
+  if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
+  if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
+  if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
 
 case(SIMPLE_BETTS_CONV)
 
