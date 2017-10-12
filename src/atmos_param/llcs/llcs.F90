@@ -5,7 +5,6 @@
 ! *****************************COPYRIGHT*******************************
 
 MODULE llcs
-  USE qsat_wat_data, ONLY: T_low, T_high, delta_T, zerodegc, es
 
 ! Description:
 !  Module containing all subroutines for the Lambert-Lewis
@@ -15,16 +14,25 @@ MODULE llcs
 ! Code Owner: Please refer to the UM file CodeOwners.txt
 ! This file belongs in section: Convection
 
+! OFFLINE / ISCA CHANGES 
+USE qsat_wat_data, ONLY: T_low, T_high, delta_T, zerodegc, es
+
 !USE planet_constants_mod, ONLY: cp,r,kappa,rv,g,repsilon,               &
 !     one_minus_epsilon, p_zero
 !USE timestep_mod, ONLY: timestep
 !USE water_constants_mod, ONLY: lc,hcapv
 
 IMPLICIT NONE
-
+PRIVATE
 
 ! The only public interface is the 'UM Wrapper' module llcscontrol.
-!PUBLIC llcs_control, calc_temp, cp, nlevels, r, g, timestep, lc
+! Also add here switches available outside scheme
+PUBLIC llcs_control, l_output_is_cloud
+
+! -- OPTIONS -- !
+! Options of the scheme
+LOGICAL :: l_output_is_cloud = .FALSE. ! determine whether scheme outputs
+                                       ! rain or cloud
 
 ! -- PARAMETERS -- !
 ! Parameters (of the scheme / model)
@@ -32,8 +40,9 @@ REAL, PARAMETER :: timescale = 3600.0 ! Convective "timescale" in seconds
                                      ! (Tompkins and Craig (1998))
 
 REAL, PARAMETER :: rh_crit = 0.8 ! Critical relative humidity required
-! to trigger moist convection.
+                                 ! to trigger moist convection.
 
+! OFFLINE / ISCA CHANGES                                  
 REAL, PARAMETER :: repsilon = 0.61298
 REAL, PARAMETER :: one_minus_epsilon = 1 - repsilon
 REAL, PARAMETER :: cp = 1005.0
@@ -44,9 +53,9 @@ REAL, PARAMETER :: g = 9.80655
 REAL, PARAMETER :: lc = 2.501e6
 REAL, PARAMETER :: hcapv = 1850.0
 REAL, PARAMETER :: timestep = 1200.0
-REAL, PARAMETER :: p_zero = 100000.0
+REAL, PARAMETER :: p_zero = 100000.0                                 
 
-!CHARACTER(LEN=*), PARAMETER :: ModuleName = 'LLCS'
+CHARACTER(LEN=*), PARAMETER :: ModuleName = 'LLCS'
 
 CONTAINS
 
@@ -55,7 +64,8 @@ CONTAINS
 ! ----------------------------------------------------------------------
 
 SUBROUTINE llcs_control(t_s_array, q_s_array, p_surf_array,             &
-p_half_array, p_full_array, t_f_array, q_f_array, rain_array)
+     p_half_array, p_full_array, t_f_array, q_f_array, qcl_array,       &
+     cfl_array, rain_array)
 
 !USE yomhook, ONLY: lhook, dr_hook
 !USE parkind1, ONLY: jprb, jpim
@@ -71,10 +81,11 @@ REAL, INTENT(IN) :: p_surf_array(:,:)
 INTEGER :: a, b, dim1, dim2, nlevels
 
 ! OUTPUTS
-REAL, INTENT(OUT) :: t_f_array(:,:,:), q_f_array(:,:,:)
+REAL, INTENT(OUT) :: t_f_array(:,:,:), q_f_array(:,:,:),                &
+     qcl_array(:,:,:), cfl_array(:,:,:)
 REAL, INTENT(OUT) :: rain_array(:,:)
 
-!CHARACTER(LEN=*), PARAMETER :: RoutineName = 'LLCS_CONTROL'
+CHARACTER(LEN=*), PARAMETER :: RoutineName = 'LLCS_CONTROL'
 
 !INTEGER(KIND=jpim), PARAMETER :: zhook_in = 0
 !INTEGER(KIND=jpim), PARAMETER :: zhook_out = 1
@@ -91,9 +102,27 @@ DO a = 1 , dim1
 
     CALL convection_scheme(t_s_array(a,b,:), q_s_array(a,b,:),          &
     p_surf_array(a,b), p_half_array(a,b,:), p_full_array(a,b,:),        &
-    nlevels, t_f_array(a,b,:), q_f_array(a,b,:), rain_array(a,b))
+    nlevels, t_f_array(a,b,:), q_f_array(a,b,:), qcl_array(a,b,:),      &
+    cfl_array(a,b,:),rain_array(a,b))
   END DO
 END DO
+
+IF (l_output_is_cloud) THEN
+  ! zero the rain-rate
+  DO a = 1 , dim1
+    DO b = 1 , dim2
+      rain_array(a,b) = 0.0
+    END DO
+  END DO
+ELSE
+  ! zero the cloud increments
+  DO a = 1 , dim1
+    DO b = 1 , dim2
+      qcl_array(a,b,:) = 0.0
+      cfl_array(a,b,:) = 0.0
+    END DO
+  END DO
+END IF
 
 !IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_out,zhook_handle)
 
@@ -104,7 +133,7 @@ END SUBROUTINE llcs_control
 ! ----------------------------------------------------------------------
 
 SUBROUTINE convection_scheme(theta_start, q_start, p_surf, p_half,      &
-p_full, nlevels, theta_final, q_final, rain_sec)
+p_full, nlevels, theta_final, q_final, qcl_inc, cloud_frac, rain_sec)
 
 ! Required inputs are potential temperature, specific humidity, pressure
 ! on full model levels, pressure on half model levels and surface
@@ -175,7 +204,8 @@ INTEGER :: convbase, cloudbase, final_level, j, moist_has_happened,     &
 REAL :: rh_use
 
 ! OUTPUTS
-REAL, INTENT(OUT) :: theta_final(:), q_final(:)
+REAL, INTENT(OUT) :: theta_final(:), q_final(:), qcl_inc(:),            &
+     cloud_frac(:)
 REAL, INTENT(OUT) :: rain_sec
 
 ! The scheme calls subroutines below here
@@ -183,7 +213,7 @@ REAL, INTENT(OUT) :: rain_sec
 ! 1, Initialise variables.
 CALL initialise(theta_start, theta_adjust, theta_noq_adjust,            &
 theta_adj_rlx, theta_noq_adj_rlx, theta_final, q_start, q_adjust,       &
-q_adj_rlx, q_conserve, q_dummy, q_final, rain_sec,                      &
+q_adj_rlx, q_conserve, q_dummy, q_final, qcl_inc, cloud_frac,           &
 final_level, moist_has_happened, convection_flag)
 
 ! 2 & 3), Diagnose and then perform convection.
@@ -228,21 +258,19 @@ IF (convection_flag  ==  1) THEN ! convection has happened so we need to
                                       ! latent heating.
 
     CALL rain(nlevels, theta_start, theta_adj_rlx, theta_noq_adj_rlx,   &
-         q_conserve, p_full, p_half, p_surf, q_final, rain_sec)
+         q_conserve, p_full, p_half, p_surf, q_final, qcl_inc,          &
+         cloud_frac, rain_sec)
 
   END IF
 
   ! 9), Conserve enthalpy
-
   IF (moist_has_happened == 1) THEN
-     CALL conserve(nlevels, theta_start, theta_adj_rlx, theta_noq_adj_rlx, &
-          p_full, p_half, p_surf, theta_final)
+    CALL conserve(nlevels, theta_start, theta_adj_rlx, theta_noq_adj_rlx, &
+         p_full, p_half, p_surf, theta_final)
   ELSE
-     CALL conserve(nlevels, theta_start, theta_adj_rlx, theta_adj_rlx, p_full, &
-          p_half, p_surf, theta_final)
+    CALL conserve(nlevels, theta_start, theta_adj_rlx, theta_adj_rlx,   &
+         p_full, p_half, p_surf, theta_final)
   END IF
-  
-  
 
 END IF
 
@@ -263,7 +291,7 @@ END SUBROUTINE convection_scheme
 SUBROUTINE initialise(theta_start, theta_adjust,                        &
 theta_noq_adjust, theta_adj_rlx, theta_noq_adj_rlx, theta_final,        &
 q_start, q_adjust, q_adj_rlx, q_conserve, q_dummy, q_final,             &
-rain_sec, final_level, moist_has_happened,                              &
+qcl_inc, cloud_frac, final_level, moist_has_happened,                   &
 convection_flag)
 
 ! 1) INITIALISE VARIABLES
@@ -284,9 +312,11 @@ REAL, INTENT(IN) :: theta_start(:), q_start(:)
 REAL, INTENT(OUT) :: theta_adjust(:), theta_noq_adjust(:),              &
      theta_adj_rlx(:), theta_noq_adj_rlx(:), theta_final(:)
 REAL, INTENT(OUT) :: q_adjust(:), q_adj_rlx(:), q_conserve(:),          &
-     q_dummy(:), q_final(:)
-REAL, INTENT(OUT) :: rain_sec
+     q_dummy(:), q_final(:), qcl_inc(:), cloud_frac(:)
+
 INTEGER, INTENT(OUT) :: final_level, moist_has_happened, convection_flag
+
+INTEGER :: k
 
 theta_adjust = theta_start
 theta_noq_adjust = theta_start
@@ -300,7 +330,10 @@ q_conserve = q_start
 q_final = q_start
 q_dummy = q_start
 
-rain_sec = 0.0
+DO k = 1 , SIZE(q_start)
+  qcl_inc(k) = 0.0
+  cloud_frac(k) = 0.0
+END DO
 
 final_level = 1
 moist_has_happened = -1
@@ -349,7 +382,7 @@ cloudbase = -1
 convbase = -1
 final_level = -1
 moist_trigger = -1
-rh_use = rh_crit
+rh_use = 1.0
 
 temperature = theta_start(current_level) * (p_full(current_level)       &
 /p_zero) ** (kappa)
@@ -358,9 +391,9 @@ CALL qsat_wat_mix(q_sat,temperature,p_full(current_level),1,.FALSE.)
 q_crit = rh_crit * q_sat
 IF ((theta_start(current_level)  >=  theta_start(current_level+1)) .OR. &
 (q_start(current_level)  >=  q_crit)) THEN
-  
+
   IF (q_start(current_level)  >=  q_crit) THEN
-     moist_trigger = 1
+    moist_trigger = 1
   END IF
 
   IF (q_start(current_level)  >=  0.0) THEN
@@ -386,23 +419,24 @@ IF ((theta_start(current_level)  >=  theta_start(current_level+1)) .OR. &
         END IF
         EXIT
       END IF
-   END DO
+    END DO
 
-   ! Allows reference profile RH to adopt RH of layer where moist
-   ! convection begins.
-   
-   IF (cloudbase /= -1) THEN
-      temperature = theta_start(cloudbase) * (p_full(cloudbase)/p_zero)**(Kappa)
-      CALL qsat_wat_mix(q_sat,temperature,p_full(cloudbase),1,.FALSE.)
-      rh = q_start(cloudbase) / q_sat
-      IF ((rh > rh_use).and.(rh<=1)) then
-         rh_use = rh
-      END IF
-      IF (rh > 1) THEN
-         rh_use = 1
-      END IF
-   END IF
-   
+    ! Allows reference profile RH to adopt RH of layer where moist
+    ! convection begins.
+    !***This is commented out for now pending further testing, but the code
+    ! is left here for ease of future development
+
+    ! IF (cloudbase /= -1) THEN
+    !   temperature = theta_start(cloudbase) *                            &
+    !        (p_full(cloudbase)/p_zero)**(Kappa)
+    !   CALL qsat_wat_mix(q_sat,temperature,p_full(cloudbase),1,.FALSE.)
+    !   rh = q_start(cloudbase) / q_sat
+    !   IF ((rh > rh_use) .AND. (rh <= 1.0)) THEN
+    !     rh_use = rh
+    !   ELSE IF (rh > 1.0) THEN
+    !     rh_use = 1.0
+    !   END IF
+    ! END IF
 
   ELSE
     final_level = current_level + 1
@@ -443,17 +477,14 @@ REAL, INTENT(INOUT) :: theta_adjust(:), theta_noq_adjust(:),            &
 INTEGER, INTENT(INOUT) :: moist_has_happened, moist_trigger
 INTEGER, INTENT(OUT) :: final_level
 
-
 IF (cloudbase  ==  -1) THEN
   CALL dry_convection(nlevels, convbase, theta_adjust,                  &
-       theta_noq_adjust, q_adjust, final_level)
+  theta_noq_adjust, q_adjust, final_level)
 ELSE
   CALL moist_convection(nlevels, theta_adjust, theta_noq_adjust,        &
   q_adjust, q_dummy, p_full, p_surf, convbase, cloudbase, final_level,  &
   moist_has_happened, moist_trigger, rh_use)
 END IF
-
-
 
 END SUBROUTINE convection
 
@@ -598,12 +629,13 @@ IF (final_level  ==  -1) THEN ! below cloudbase, so we now do moist
 
       IF (q_adjust(j-1)  >=  0.0) THEN
 
+        ! Adjust specific humidity    CHANGES HERE REMOVE RH_CRITS
         ! DEPENDS ON: qsat_wat_mix
-         CALL qsat_wat_mix(q_sat,temperature(j),p_full(j),1,.FALSE.)
-         q_sat = rh_use * q_sat
+        CALL qsat_wat_mix(q_sat,temperature(j),p_full(j),1,.FALSE.)
+        q_sat = rh_use * q_sat
 
+        q_adjust_save = q_adjust(j)
         IF (q_adjust(j)  <   q_sat) THEN
-           q_adjust_save = q_adjust(j)
           q_adjust(j) = q_sat ! adjust SH profile
         END IF
 
@@ -623,12 +655,11 @@ IF (final_level  ==  -1) THEN ! below cloudbase, so we now do moist
         gamma_p = (1.0/(rho*g)) * gamma_s ! saturated dT/dp
         IF ((temperature(j-1)+(gamma_p*(p_full(j-1)-p_full(j)))) <= &
              temperature(j)) THEN
-           final_level = j
-           q_adjust(j) = q_adjust_save
-           EXIT
+          final_level = j
+          q_adjust(j) = q_adjust_save
+          EXIT
         END IF
         
- 
         temperature(j) = temperature(j-1) + (gamma_p *                  &
         (p_full(j-1)-p_full(j))) ! this is reference profile temperature
         theta_adjust(j) = temperature(j) * ((p_zero/p_full(j)) **       &
@@ -777,7 +808,8 @@ END SUBROUTINE moisture_conserve
 ! ----------------------------------------------------------------------
 
 SUBROUTINE rain(nlevels, theta_start, theta_adj_rlx, theta_noq_adj_rlx, &
-     q_conserve, p_full, p_half, p_surf, q_final, rain_sec)
+     q_conserve, p_full, p_half, p_surf, q_final, qcl_inc, cloud_frac,  &
+     rain_sec)
 
 ! 8) RAIN / LATENT
 ! This routine calculates the total amount of latent heating within a
@@ -802,6 +834,7 @@ REAL, INTENT(IN) :: p_surf
 ! Outputs
 REAL, INTENT(INOUT) :: theta_adj_rlx(:)
 REAL, INTENT(OUT) :: q_final(:)
+REAL, INTENT(OUT) :: qcl_inc(:), cloud_frac(:)
 REAL, INTENT(OUT) :: rain_sec
 
 ! For calculation
@@ -825,6 +858,8 @@ q_final = q_conserve
 theta_inc = theta_adj_rlx - theta_start
 DO j = 1 , nlevels
   theta_inc(j) = ABS(theta_inc(j))
+  qcl_inc(j) = 0.0
+  cloud_frac(j) = 0.0
 END DO
 
 n = 2 ! part of find_bounds set up.
@@ -866,6 +901,17 @@ DO j = 1 , nlevels
       ! of latent heating that has taken place.
       total_latent  = SUM(latent(bottom:top))
       IF (total_latent  >   0.0) THEN
+        DO k = bottom, top
+          qcl_inc(k) = latent(k) * (g / p_change(k)) / lc
+          ! CHANGE HERE WAS LC*TIMESTEP
+          IF (qcl_inc(k) > 0.0) THEN
+            ! detrain cloud up to a fraction of 0.6 in the timescale of
+            ! convection
+            cloud_frac(k) = 0.6*timestep/timescale
+          END IF
+        END DO
+
+         
         rain_out = total_latent / lc
         rain_sec = rain_sec + (rain_out / timestep )
 
@@ -894,6 +940,7 @@ DO j = 1 , nlevels
             theta_adj_rlx(k) = temperature_new / ((p_full(k)/           &
             p_zero)**(kappa))
           END DO
+          qcl_inc = qcl_inc * event_q_total / rain_out
           event_q_total = rain_out_new
           rain_out = rain_out_new
         END IF
@@ -1282,5 +1329,6 @@ END SUBROUTINE qsat_wat_mix
 !------
 !-- END OF QSAT_WAT_MIX
 !--------
+
 
 END MODULE llcs
