@@ -669,10 +669,16 @@ real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_int
 
 ! additional arrays for llcs convection
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: theta_neil, q_neil, p_full_neil, &
-  conv_dt_tg_neil, conv_dt_qg_neil
+  conv_dt_tg_neil, conv_dt_qg_neil, cloud1, cloud2
 real, dimension(size(ug,1), size(ug,2), size(ug,3)+1) :: p_half_neil
 ! loop variables for llcs convection
-integer :: i, j, k
+integer :: i, j, k, kk
+
+integer :: neil_flag
+
+neil_flag = 0
+
+open(77,file='/scratch/nl290/output.dat')
 
 if(current == previous) then
    delta_t = dt_real
@@ -696,40 +702,41 @@ case(LLCS_CONV)
   do i = 1, size(ug,1)
     do j = 1, size(ug,2)
       do k = 1, size(ug,3)
-        theta_neil(i,j,size(ug,3)-k+1) = tg(i,j,k,previous)*(p_full(i,j,k,previous)/100000)**(rdgas/cp_air)
+        theta_neil(i,j,size(ug,3)-k+1) = tg(i,j,k,previous)*(100000/p_full(i,j,k,previous))**(rdgas/cp_air)
         q_neil(i,j,size(ug,3)-k+1) = grid_tracers(i,j,k,previous,nsphum)
         p_half_neil(i,j,size(ug,3)-k+2) = p_half(i,j,k,previous)
         p_full_neil(i,j,size(ug,3)-k+1) = p_full(i,j,k,previous)
       end do
-      p_half_neil(i,j,1) = p_half(i,j,size(ug,3)+1,previous)
+      p_half_neil(i,j,1) = p_half(i,j,size(ug,3)+1,previous) 
     end do
   end do
 
+  call llcs_control(theta_neil,q_neil,p_half_neil(:,:,1),p_half_neil,p_full_neil,conv_dt_tg_neil,conv_dt_qg_neil,cloud1,cloud2,rain)
   
-  call llcs_control(theta_neil,q_neil,p_half_neil(:,:,1),p_half_neil,p_full_neil,conv_dt_tg_neil,conv_dt_qg_neil,rain)
-  !convert back from potential temperature to temperature 
+  !convert back from potential temperature to temperature, create increments and flip arrays 
   do i = 1, size(ug,1)
     do j = 1, size(ug,2)
       do k = 1, size(ug,3)
-        conv_dt_tg_neil(i,j,k) = conv_dt_tg_neil(i,j,k)*(p_full_neil(i,j,k)/100000)**(rdgas/cp_air)
-        theta_neil(i,j,k) = theta_neil(i,j,k)*(p_full(i,j,k,previous)/100000)**(rdgas/cp_air)
-      end do
+        conv_dt_tg(i,j,size(ug,3)-k+1) = conv_dt_tg_neil(i,j,k)/(100000/p_full(i,j,size(ug,3)-k+1,previous))**(rdgas/cp_air) & 
+				       - tg(i,j,size(ug,3)-k+1,previous)
+	conv_dt_qg(i,j,size(ug,3)-k+1) = conv_dt_qg_neil(i,j,k) - grid_tracers(i,j,size(ug,3)-k+1,previous,nsphum)		
+      end do 
+        if (rain(i,j)>1e-8) then
+           write(77,*) 'input'
+ 	   write(77,*) tg(i,j,:,previous)
+	   write(77,*) 'increment'
+	   write(77,*) conv_dt_tg(i,j,:)
+	end if 
+      !end do
     end do
   end do
   ! make increments 
-  conv_dt_tg_neil = conv_dt_tg_neil - theta_neil 
-  conv_dt_qg_neil = conv_dt_qg_neil - q_neil 
-  ! flip arrays back
-  do i  = 1, size(ug,1)
-    do j = 1, size(ug,2)
-      do k = 1, size(ug,3)
-        conv_dt_tg(i,j,size(ug,3)-k+1) = conv_dt_tg_neil(i,j,k)
-        conv_dt_qg(i,j,size(ug,3)-k+1) = conv_dt_qg_neil(i,j,k)
-      end do
-    end do
-  end do
+  !conv_dt_tg_neil = conv_dt_tg_neil - theta_neil 
+  !conv_dt_qg_neil = conv_dt_qg_neil - q_neil 
+ 
 
   ! increment and update fields following method for SIMPLE_BETTS_CONV
+
   
   tg_tmp = conv_dt_tg + tg(:,:,:,previous)
   qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
