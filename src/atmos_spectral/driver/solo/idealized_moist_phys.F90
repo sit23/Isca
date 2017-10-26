@@ -995,7 +995,7 @@ endif
 
 if(gp_surface) then
 
-	call gp_surface_flux (dt_tg(:,:,:), p_half(:,:,:,current), num_levels)
+	call gp_surface_flux (dt_tg(:,:,:), dt_tracers(:,:,:,nsphum), grid_tracers(:,:,:,previous,nsphum), p_half(:,:,:,current), num_levels)
 	
     call compute_rayleigh_bottom_drag( 1,                     ie-is+1, &
                                        1,                     je-js+1, &

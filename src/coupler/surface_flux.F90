@@ -260,12 +260,15 @@ logical :: ncar_ocean_flux       = .false.
 logical :: ncar_ocean_flux_orig  = .false. ! for backwards compatibility
 logical :: raoult_sat_vap        = .false.
 logical :: do_simple             = .false.
+logical :: gp_deep_water_source  = .false.
 
 real    :: land_humidity_prefactor  =  1.0    !s Default is that land makes no difference to evaporative fluxes
 
 real    :: flux_heat_gp  =  5.7    !s Default value for Jupiter of 5.7 Wm^-2
 real    :: diabatic_acce =  1.0    !s Diabatic acceleration??
 
+real    :: q_deep_sphum  =  1.74e-3 !s Solar abundance. Taken from O/H ratio quoted in doi:10.1029/98JE01049    
+real    :: tau_sphum     =  18000.  !s 5-hours is default value from Lian & Showman '08 doi:10.1016/j.icarus.2009.10.006
 
 namelist /surface_flux_nml/ no_neg_q,             &
                             use_virtual_temp,     &
@@ -280,7 +283,8 @@ namelist /surface_flux_nml/ no_neg_q,             &
                             do_simple,            &
                             land_humidity_prefactor, & !s Added to make land 'dry', i.e. to decrease the evaporative heat flux in areas of land.
                             flux_heat_gp,         &    !s prescribed lower boundary heat flux on a giant planet
-			    diabatic_acce
+                            diabatic_acce,        &
+                            gp_deep_water_source
 
 
 
@@ -970,9 +974,10 @@ real   , intent(inout), dimension(:) :: cd, ch, ce, ustar, bstar
 
 end subroutine ncar_ocean_fluxes
 
-subroutine gp_surface_flux (dt_tg, p_half, num_levels)
+subroutine gp_surface_flux (dt_tg, dt_sphum, sphum, p_half, num_levels)
 
-real   , intent(inout), dimension(:,:,:) :: dt_tg
+real   , intent(inout), dimension(:,:,:) :: dt_tg, dt_sphum
+real   , intent(in), dimension(:,:,:) :: sphum
 real   , intent(in), dimension(:,:,:) :: p_half
 integer   , intent(in) :: num_levels
 
@@ -981,6 +986,10 @@ integer   , intent(in) :: num_levels
 dt_tg(:,:,num_levels) = dt_tg(:,:,num_levels)                          &
   + diabatic_acce*grav*flux_heat_gp/(cp_air*(p_half(:,:,num_levels+1)    &
   - p_half(:,:,num_levels)))
+
+if (gp_deep_water_source) then
+    dt_sphum(:,:,num_levels) = dt_sphum(:,:,num_levels) + (q_deep_sphum - sphum(:,:,num_levels))/(tau_sphum)
+endif
 
 
 end subroutine gp_surface_flux
