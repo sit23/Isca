@@ -284,9 +284,9 @@ namelist /surface_flux_nml/ no_neg_q,             &
                             land_humidity_prefactor, & !s Added to make land 'dry', i.e. to decrease the evaporative heat flux in areas of land.
                             flux_heat_gp,         &    !s prescribed lower boundary heat flux on a giant planet
                             diabatic_acce,        &
-                            gp_deep_water_source
-
-
+                            gp_deep_water_source, &
+                            q_deep_sphum,         &
+                            tau_sphum
 
 contains
 
