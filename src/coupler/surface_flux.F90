@@ -268,7 +268,7 @@ real    :: flux_heat_gp  =  5.7    !s Default value for Jupiter of 5.7 Wm^-2
 real    :: diabatic_acce =  1.0    !s Diabatic acceleration??
 
 real    :: q_deep_sphum  =  1.74e-3 !s Solar abundance. Taken from O/H ratio quoted in doi:10.1029/98JE01049    
-real    :: tau_sphum     =  18000.  !s 5-hours is default value from Lian & Showman '08 doi:10.1016/j.icarus.2009.10.006
+real    :: tau_sphum     =  18000.  !s 5-hours is default value from Lian & Showman '10 doi:10.1016/j.icarus.2009.10.006
 
 namelist /surface_flux_nml/ no_neg_q,             &
                             use_virtual_temp,     &

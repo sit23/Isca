@@ -216,6 +216,8 @@ real, allocatable, dimension(:,:) ::                                          &
 
 real, allocatable, dimension(:,:) ::                                          &
      klzbs,                &   ! stored level of zero buoyancy values
+     plzbs,                &   ! stored level of zero buoyancy pressure values
+     plcls,                &   ! stored lifting condensation level pressure values 
      cape,                 &   ! convectively available potential energy
      cin,                  &   ! convective inhibition (this and the above are before the adjustment)
      invtau_q_relaxation,  &   ! temperature relaxation time scale
@@ -252,7 +254,12 @@ integer ::           &
      id_diss_heat_ray,&  ! Heat dissipated by rayleigh bottom drag if gp_surface=.True.
      id_z_tg,        &   ! Relative humidity
      id_cape,        &
-     id_cin
+     id_cin,         &
+     id_klzb,        &
+     id_plzb,        &
+     id_plcl,        &
+     id_tref,        &
+     id_qref
 
 integer, allocatable, dimension(:,:) :: & convflag ! indicates which qe convection subroutines are used
 real,    allocatable, dimension(:,:) :: rad_lat, rad_lon
@@ -459,6 +466,8 @@ allocate(cond_dt_qg  (is:ie, js:je, num_levels))
 
 allocate(coldT        (is:ie, js:je)); coldT = .false.
 allocate(klzbs        (is:ie, js:je))
+allocate(plzbs        (is:ie, js:je))
+allocate(plcls        (is:ie, js:je))
 allocate(cape         (is:ie, js:je))
 allocate(cin          (is:ie, js:je))
 allocate(invtau_q_relaxation  (is:ie, js:je))
@@ -598,6 +607,17 @@ id_cape = register_diag_field(mod_name, 'cape',          &
      axes(1:2), Time, 'Convective Available Potential Energy','J/kg')
 id_cin = register_diag_field(mod_name, 'cin',          &
      axes(1:2), Time, 'Convective Inhibition','J/kg')
+
+id_klzb = register_diag_field(mod_name, 'klzb',          &
+     axes(1:2), Time, 'Level of zero buoyancy','None')
+id_plzb = register_diag_field(mod_name, 'plzb',          &
+     axes(1:2), Time, 'Pressure of level of zero buoyancy','Pa')
+id_plcl = register_diag_field(mod_name, 'plcl',          &
+     axes(1:2), Time, 'Pressure of Lifting Condensation Level','Pa')
+id_tref = register_diag_field(mod_name, 't_ref',          &
+     axes(1:3), Time, 'Reference temperature profile','K')
+id_qref = register_diag_field(mod_name, 'q_ref',          &
+     axes(1:3), Time, 'Reference specific humidity profile','kg/kg')
 
 if(bucket) then
   id_bucket_depth = register_diag_field(mod_name, 'bucket_depth',            &         ! RG Add bucket
@@ -757,7 +777,8 @@ case(SIMPLE_BETTS_CONV)
                                  rain,                            snow,      &
                            conv_dt_tg,                      conv_dt_qg,      &
                                 q_ref,                        convflag,      &
-                                klzbs,                            cape,      &
+                                klzbs,                           plzbs,      &
+                                plcls,                            cape,      &
                                   cin,             invtau_q_relaxation,      &
                   invtau_t_relaxation,                           t_ref)
 
@@ -776,6 +797,11 @@ case(SIMPLE_BETTS_CONV)
    if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
    if(id_cape  > 0) used = send_data(id_cape, cape, Time)
    if(id_cin  > 0) used = send_data(id_cin, cin, Time)
+   if(id_klzb  > 0) used = send_data(id_klzb, klzbs, Time)
+   if(id_plzb  > 0) used = send_data(id_plzb, plzbs, Time)
+   if(id_plcl  > 0) used = send_data(id_plcl, plcls, Time)
+   if(id_tref  > 0) used = send_data(id_tref, t_ref, Time)
+   if(id_qref  > 0) used = send_data(id_qref, q_ref, Time)
 
 case(FULL_BETTS_MILLER_CONV)
 
