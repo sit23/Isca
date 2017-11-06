@@ -981,6 +981,7 @@ real   , intent(in), dimension(:,:,:) :: sphum
 real   , intent(in), dimension(:,:,:) :: p_half
 integer   , intent(in) :: num_levels
 
+  if (do_init) call surface_flux_init
 
 ! add the internal heat flux
 dt_tg(:,:,num_levels) = dt_tg(:,:,num_levels)                          &
