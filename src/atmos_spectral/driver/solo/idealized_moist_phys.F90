@@ -252,6 +252,8 @@ integer ::           &
      id_bucket_depth_lh,   &   ! bucket depth variation induced by LH  - RG Add bucket
      id_rh,          & 	 ! Relative humidity
      id_diss_heat_ray,&  ! Heat dissipated by rayleigh bottom drag if gp_surface=.True.
+     id_gp_surface_flux_dtemp, & !Temperature tendency from gp_surface_flux
+     id_gp_surface_flux_dsphum, &!Sphum tendency from gp_surface_flux     
      id_z_tg,        &   ! Relative humidity
      id_cape,        &
      id_cin,         &
@@ -555,6 +557,12 @@ call rayleigh_bottom_drag_init(get_axis_id(), Time)
 axes = get_axis_id()
 id_diss_heat_ray = register_diag_field(mod_name, 'diss_heat_ray', &
                    axes(1:3), Time, 'dissipated heat from Rayleigh drag', 'K/s')
+
+id_gp_surface_flux_dtemp = register_diag_field(mod_name, 'dtemp_bb_surface_flux', &
+                   axes(1:2), Time, 'temperature tendency from bottom-boundary heat flux', 'K/s')                   
+id_gp_surface_flux_dsphum = register_diag_field(mod_name, 'dsphum_bb_surface_flux', &
+                   axes(1:2), Time, 'moisture tendency from bottom-boundary heat flux', 'kg/kg/s')                                      
+                   
 endif
 
 
@@ -746,6 +754,7 @@ real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 
 real :: delta_t
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv
+real, dimension(size(ug,1), size(ug,2)) :: dtemp_gp_surface_flux, dsphum_gp_surface_flux
 
 
 real, intent(in) , dimension(:,:,:), optional :: mask
@@ -1021,7 +1030,16 @@ endif
 
 if(gp_surface) then
 
+    dtemp_gp_surface_flux = -dt_tg(:,:,num_levels)
+    dsphum_gp_surface_flux = -dt_tracers(:,:,num_levels,nsphum)
+
 	call gp_surface_flux (dt_tg(:,:,:), dt_tracers(:,:,:,nsphum), grid_tracers(:,:,:,previous,nsphum), p_half(:,:,:,current), num_levels)
+	
+	dtemp_gp_surface_flux  = dtemp_gp_surface_flux  + dt_tg(:,:,num_levels)
+	dsphum_gp_surface_flux = dsphum_gp_surface_flux + dt_tracers(:,:,num_levels,nsphum)
+	
+	if(id_gp_surface_flux_dtemp > 0) used  = send_data(id_gp_surface_flux_dtemp,  dtemp_gp_surface_flux,  Time)
+	if(id_gp_surface_flux_dsphum > 0) used = send_data(id_gp_surface_flux_dsphum, dsphum_gp_surface_flux, Time)	
 	
     call compute_rayleigh_bottom_drag( 1,                     ie-is+1, &
                                        1,                     je-js+1, &
