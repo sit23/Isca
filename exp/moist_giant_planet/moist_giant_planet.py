@@ -177,7 +177,7 @@ exp.namelist = namelist = Namelist({
         'vert_coord_option':'uneven_sigma', #Use equally-spaced sigma levels
         'surf_res':1.0, #Parameter for setting vertical distribution of sigma levels
         'scale_heights' : 5.0, #Number of vertical scale-heights to include
-        'exponent':2.0,#Parameter for setting vertical distribution of sigma levels
+        'exponent':7.0,#Parameter for setting vertical distribution of sigma levels
         'robert_coeff':0.03,
         'num_fourier':  85, #Number of Fourier modes
         'num_spherical':  86, #Number of spherical harmonics in triangular truncation
