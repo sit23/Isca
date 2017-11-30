@@ -492,7 +492,7 @@ case(B_SCHNEIDER_LIU)
   
   ! compute optical depths for each model level
   do k = 1, n+1
-    sw_tau(:,:,k) = sw_tau_0_gp * (p_half(:,:,k)/pstd_mks)**sw_tau_exponent_gp
+    sw_tau(:,:,k) = sw_tau_0_gp * (p_half(:,:,k)/3.e5)**sw_tau_exponent_gp
   end do
 
   ! compute downward shortwave flux
@@ -591,7 +591,7 @@ case(B_SCHNEIDER_LIU)
 
   ! compute optical depths for each model level
   do k = 1, n+1
-  lw_tau(:,:,k) = lw_tau_0_gp * (p_half(:,:,k)/pstd_mks)**lw_tau_exponent_gp
+  lw_tau(:,:,k) = lw_tau_0_gp * (p_half(:,:,k)/3.e5)**lw_tau_exponent_gp
   end do
 
   ! longwave differential transmissivity
