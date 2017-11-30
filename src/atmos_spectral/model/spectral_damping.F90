@@ -73,6 +73,7 @@ real,    intent(in), optional :: damping_coeff_r ! linear drag coefficient (unit
 ! end LJJ addition via ST
 
 real, dimension(0:num_fourier, 0:num_spherical) :: eigen, sqrt_eigen
+character(len=4) :: ch1, ch2
 
 if(module_is_initialized) return
 
@@ -134,6 +135,12 @@ else if(trim(damping_option) == 'exponential_cutoff') then
    !  note damping coefficients are further modified in the compute routines below
 
    damping_option_exponential = .true.
+
+  if (cutoff_wn > num_fourier) then
+      write(ch1,'(i4)') cutoff_wn
+      write(ch2,'(i4)') num_fourier
+      call error_mesg('spectral_damping_init','The cutoff wn ='//ch1//' is larger than num_fourier='//ch2, FATAL)
+  end if
 
    where (eigen(:,:)/eigen(0, cutoff_wn) > 1)
      damping    (:,:) = ((sqrt_eigen(:,:) - sqrt_eigen(0, cutoff_wn) ) & 
