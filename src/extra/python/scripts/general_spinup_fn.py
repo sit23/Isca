@@ -10,19 +10,21 @@ from cell_area import cell_area
 import pdb
 import os
 
-def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir):
+def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resolution=42, data_dir_type = 'isca', power=1.):
 
     #personalise
     #model directory
-    model_dir = '/scratch/sit204/FMS2013/GFDLmoistModel/'
+    model_dir = '/scratch/sit204/Isca/'
     #data directory
-    data_dir = '/scratch/sit204/Data_2013/'
+    if data_dir_type=='isca':
+        data_dir = '/scratch/sit204/data_isca/'
+    else:
+        data_dir = '/scratch/sit204/Data_2013/'    
     #file name
     file_name='atmos_monthly.nc'
     #time-resolution of plotting
     group='months'
     scaling=1.
-    t_resolution=42
     nlon=128
     nlat=64
     gravity=9.8
@@ -76,7 +78,7 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir):
     rundata.coords['months'] = time_arr // 30 + 1
     rundata.coords['years'] = ((time_arr // 360) +1)*scaling - 6.
 
-    q_yr = (rundata[var_to_integrate]).groupby(group).mean(('time'))
+    q_yr = (rundata[var_to_integrate]**power).groupby(group).mean(('time'))
 
     #take area mean of q
     q_av = q_yr*area_xr
@@ -111,25 +113,31 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir):
 
 if __name__ == "__main__":
 
-    start_month_offset=[0, 0]
+    start_month_offset=[0, 0, 0]
 
-    exp_list=['no_ice_flux_lhe_exps_fixed_sst_1', 'no_ice_flux_q_exps_qflux_control_1']
+#     exp_list=['moist_giant_planet_1_solar_t85_3bar_fixed_dw_source','giant_planet/runs_for_portland_poster/giant_planet_3_bar_with_dc_scheme', 'moist_giant_planet_1_solar_t85_3bar_fixed_dw_source_no_bbhf']
     
-    label_arr=['fixed DJF sst no ice', 'q-flux control DJF no ice']
-           
+    exp_list = ['moist_giant_planet_1_solar_t85_15bar_fixed_dw_source_hotter_ics', 'moist_giant_planet_1_solar_t85_15bar_fixed_dw_source_hotter_ics_higher_opacity', 'moist_giant_planet_1_solar_t85_15bar_fixed_dw_source_hotter_ics_higher_opacity_dry']
+    label_arr=['t85 15 bar', 't85 15 bar high opacity', 't85 15 bar high opacity dry']
+
+    res_arr = [85, 85, 85]
+
+    data_type_arr = ['isca', 'isca', 'isca']
+
     exp_name=exp_list
 
     #number of years to read
-    start_month_arr=[1, 1]
-    end_month_arr=[360, 292]
+    start_month_arr=[1, 1, 1]
+    end_month_arr=[303, 802, 802]
 
-    len_list=[len(start_month_offset), len(exp_list), len(label_arr), len(start_month_arr), len(end_month_arr)]
+    len_list=[len(start_month_offset), len(exp_list), len(label_arr), len(start_month_arr), len(end_month_arr), len(res_arr), len(data_type_arr)]
 
     if not all(x==len_list[0] for x in len_list):
         raise IndexError("Input arrays to routine are not all the same length")
 
 
     variable_to_integrate='temp'
+    power_to_scale_variable_by=1.
 
     plt.figure()
 
@@ -140,14 +148,14 @@ if __name__ == "__main__":
         if not os.path.exists(plt_dir):
             os.makedirs(plt_dir)
         idx=exp_list.index(exp_number)
-        print(('running ', exp_number))
+        print('running '+ exp_number)
         #return integral of area mean q over stratosphere and whole atmosphere
-        q_strat, q_vint, time = q_spinup(run_fol, variable_to_integrate, start_month_arr[idx]+start_month_offset[idx], end_month_arr[idx]+start_month_offset[idx], plt_dir)
+        q_strat, q_vint, time = q_spinup(run_fol, variable_to_integrate, start_month_arr[idx]+start_month_offset[idx], end_month_arr[idx]+start_month_offset[idx], plt_dir, res_arr[idx], data_type_arr[idx], power_to_scale_variable_by )
         plt.plot(time,q_vint,label=label_arr[idx])
 #         plt.plot(time,q_strat,label='strat '+label_arr[idx])
         
 
     plt.xlabel('time (months)')
-    plt.ylabel('Global average '+variable_to_integrate)
+    plt.ylabel('Global average '+variable_to_integrate+'**'+str(power_to_scale_variable_by))
     plt.legend(loc='upper left')
     plt.show()
