@@ -18,6 +18,8 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
     #data directory
     if data_dir_type=='isca':
         data_dir = '/scratch/sit204/data_isca/'
+    elif data_dir_type == 'isca_cpu':
+        data_dir = '/scratch/sit204/data_from_isca_cpu/'
     else:
         data_dir = '/scratch/sit204/Data_2013/'    
     #file name
@@ -33,34 +35,29 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
 
     #get cell areas and pressure thicknesses
 
-    try:
-        files_temp=[data_dir+'/'+run_fol+'/run%03d/' % m for m in range(start_month, end_month+1)]
+    possible_format_strs = [[data_dir+'/'+run_fol+'/run%03d/' % m for m in range(start_month, end_month+1)],
+                            [data_dir+'/'+run_fol+'/run%04d/' % m for m in range(start_month, end_month+1)],
+                            [data_dir+'/'+run_fol+'/run%d/' % m for m in range(start_month, end_month+1)]]
 
+    for format_str_files in possible_format_strs:
+        files_temp = format_str_files
         names = [s + file_name for s in files_temp]
-
         thd_files_exist=[os.path.isfile(s) for s in names]
-
-        print((names[0]))
-
-        if not(all(thd_files_exist)):
-            raise EOFError('EXITING BECAUSE OF MISSING FILES', [names[elem] for elem in range(len(thd_files_exist)) if not thd_files_exist[elem]])
         
-        rundata = xr.open_dataset(names[0],
-                     decode_times=False)  # no calendar so tell netcdf lib
-    except (RuntimeError, OSError):
-        files_temp=[data_dir+'/'+run_fol+'/run%d/' % m for m in range(start_month, end_month+1)]
+        if thd_files_exist[0]:
+            break
+        
+        if not thd_files_exist[0] and format_str_files==possible_format_strs[-1]:
+            raise EOFError('EXITING BECAUSE NO APPROPRIATE FORMAT STR', [names[elem] for elem in [0] if not thd_files_exist[elem]])
+    
+    print(names[0])
+    
+    if not(all(thd_files_exist)):
+        raise EOFError('EXITING BECAUSE OF MISSING FILES', [names[elem] for elem in range(len(thd_files_exist)) if not thd_files_exist[elem]])
+    
+    rundata = xr.open_dataset(names[0],
+                 decode_times=False)  # no calendar so tell netcdf lib
 
-        names = [s + file_name for s in files_temp]
-
-        thd_files_exist=[os.path.isfile(s) for s in names]
-
-        print((names[0]))
-
-        if not(all(thd_files_exist)):
-            raise EOFError('EXITING BECAUSE OF MISSING FILES', [names[elem] for elem in range(len(thd_files_exist)) if not thd_files_exist[elem]])
-
-        rundata = xr.open_dataset(names[0],
-                     decode_times=False)  # no calendar so tell netcdf lib
 
     area = cell_area(t_resolution, model_dir)
     area_xr = xr.DataArray(area, [('lat', rundata.lat ), ('lon', rundata.lon)])
@@ -113,22 +110,22 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
 
 if __name__ == "__main__":
 
-    start_month_offset=[0, 0, 0]
+    start_month_offset=[0, 0, 0 ]
 
 #     exp_list=['moist_giant_planet_1_solar_t85_3bar_fixed_dw_source','giant_planet/runs_for_portland_poster/giant_planet_3_bar_with_dc_scheme', 'moist_giant_planet_1_solar_t85_3bar_fixed_dw_source_no_bbhf']
     
-    exp_list = ['moist_giant_planet_1_solar_t85_15bar_fixed_dw_source_hotter_ics', 'moist_giant_planet_1_solar_t85_15bar_fixed_dw_source_hotter_ics_higher_opacity', 'moist_giant_planet_1_solar_t85_15bar_fixed_dw_source_hotter_ics_higher_opacity_dry']
-    label_arr=['t85 15 bar', 't85 15 bar high opacity', 't85 15 bar high opacity dry']
+    exp_list = ['moist_giant_planet_1_solar_t85_15bar_fixed_dw_source_hotter_ics_higher_opacity', 'moist_giant_planet_1_solar_t85_15bar_diabatic_ace_20', 'moist_giant_planet_1_solar_t85_15bar_diabatic_ace_20_dc_scheme']
+    label_arr=['t85 15 bar high opacity', 't85 15 bar high op di_acce=20.', 'di_acce=20. dry conv scheme']
 
     res_arr = [85, 85, 85]
 
-    data_type_arr = ['isca', 'isca', 'isca']
+    data_type_arr = ['isca', 'isca_cpu', 'isca_cpu']
 
     exp_name=exp_list
 
     #number of years to read
-    start_month_arr=[1, 1, 1]
-    end_month_arr=[303, 802, 802]
+    start_month_arr=[1, 40, 40]
+    end_month_arr=[802, 57, 57]
 
     len_list=[len(start_month_offset), len(exp_list), len(label_arr), len(start_month_arr), len(end_month_arr), len(res_arr), len(data_type_arr)]
 
