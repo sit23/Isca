@@ -848,6 +848,8 @@ case(DRY_CONV)
 
     tg_tmp = conv_dt_tg*delta_t + tg(:,:,:,previous)
     qg_tmp = grid_tracers(:,:,:,previous,nsphum)
+    
+    conv_dt_qg = 0. !make sure moisture tendency is zero from dry convection.
 
     if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
     if(id_cape  > 0) used = send_data(id_cape, cape, Time)
