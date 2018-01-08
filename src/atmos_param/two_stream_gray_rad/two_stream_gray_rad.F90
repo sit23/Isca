@@ -147,7 +147,7 @@ namelist/two_stream_gray_rad_nml/ solar_constant, del_sol, &
 		   window, carbon_conc, rad_scheme, &
            do_read_co2, co2_file, co2_variable_name, solday, equinox_day, bog_a, bog_b, bog_mu, &           
            use_time_average_coszen, dt_rad_avg,&
-           diabatic_acce !Schneider Liu values           
+           diabatic_acce, lw_tau_0_gp, sw_tau_0_gp, lw_tau_exponent_gp, sw_tau_exponent_gp !Schneider Liu values 
 
 !==================================================================================
 !-------------------- diagnostics fields -------------------------------
