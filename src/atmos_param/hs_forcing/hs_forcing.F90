@@ -96,6 +96,10 @@ private
    character(len=256) :: equilibrium_t_file='temp'  ! Name of file relative to $work/INPUT  Used only when equilibrium_t_option='from_file'
    character(len=256) :: stratosphere_t_option = 'extend_tp'
 
+   logical :: calculate_insolation_from_orbit = .true.
+   real :: del_sol = 1.4
+   real :: del_sw  = 0.0
+
    real :: peri_time=0.25, smaxis=1.5e6, albedo=0.3
    real :: lapse=6.5, h_a=2, tau_s=5
    real :: heat_capacity=4.2e6      ! equivalent to a 1m mixed layer water ocean
@@ -115,7 +119,8 @@ private
                               u_wind_file, v_wind_file, equilibrium_t_option,&
                               equilibrium_t_file, p_trop, alpha, peri_time, smaxis, albedo, &
                               lapse, h_a, tau_s, orbital_period,         &
-                              heat_capacity, ml_depth, spinup_time, stratosphere_t_option
+                              heat_capacity, ml_depth, spinup_time, stratosphere_t_option, &
+                              calculate_insolation_from_orbit 
 
 !-----------------------------------------------------------------------
 
@@ -343,9 +348,16 @@ contains
 		tg_prev = tg
 		dt_integer = dt_integer + 86400*step_days		! step by a day at a time
 		spin_count = spin_count + 1
-		call update_orbit(dt_integer, dec, orb_dist)
-		call calc_hour_angle(lat, dec, hour_angle)
-		s(:,:) = solar_const/pi*(hour_angle*sin(lat)*sin(dec) + cos(lat)*cos(dec)*sin(hour_angle))
+
+        if (calculate_insolation_from_orbit) then
+            call update_orbit(dt_integer, dec, orb_dist)
+            call calc_hour_angle(lat, dec, hour_angle)
+            s(:,:) = solar_const/pi*(hour_angle*sin(lat)*sin(dec) + cos(lat)*cos(dec)*sin(hour_angle))
+        else
+            p2     = (1. - 3.*sin_lat_2)/4.    
+            s(:,:) = 0.25 * solar_const * (1.0 + del_sol*p2 + del_sw * sin_lat)
+        endif            
+        
 		t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
 		t_trop(:,:) = t_radbal(:,:)/(2**0.25)
 
@@ -908,7 +920,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
           real, dimension(size(t,1),size(t,2)) :: &
      sin_lat, sin_lat_2, cos_lat, cos_lat_2, cos_lat_4, &
      tstr, sigma, the, tfactr, rps, p_norm, sin_sublon_2, &
-     coszen, fracday, t_trop, s, hour_angle, t_surf, tg, t_radbal
+     coszen, fracday, t_trop, s, hour_angle, t_surf, tg, t_radbal, p2
 
        real, dimension(size(t,1),size(t,2),size(t,3)) :: tdamp, heights
        real, dimension(size(t,2),size(t,3)) :: tz
@@ -937,12 +949,20 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 !-----------------------------------------------------------------------
 !----------- orbital calculations --------------------------------------
 
-    call update_orbit(dt_integer, dec, orb_dist)
+    if (calculate_insolation_from_orbit) then
+    
+        call update_orbit(dt_integer, dec, orb_dist)
 
 
-    call calc_hour_angle(lat, dec, hour_angle)
+        call calc_hour_angle(lat, dec, hour_angle)
 
-    s(:,:) = solar_const/pi*(hour_angle*sin_lat*sin(dec) + cos_lat*cos(dec)*sin(hour_angle))
+        s(:,:) = solar_const/pi*(hour_angle*sin_lat*sin(dec) + cos_lat*cos(dec)*sin(hour_angle))
+
+    else
+
+        p2     = (1. - 3.*sin_lat_2)/4.    
+        s(:,:) = 0.25 * solar_const * (1.0 + del_sol*p2 + del_sw * sin_lat)
+    endif
 
     t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
 
