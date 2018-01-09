@@ -292,7 +292,7 @@ contains
 !-----------------------------------------------------------------------
    integer  unit, io, ierr
 
-   real, dimension(size(lat,1),size(lat,2)) :: s, t_radbal, t_trop, h_trop, t_surf, hour_angle, tg
+   real, dimension(size(lat,1),size(lat,2)) :: s, t_radbal, t_trop, h_trop, t_surf, hour_angle, tg, p2, sin_lat, sin_lat_2
    integer :: spin_count, seconds, days, dt_integer
    real :: dec, orb_dist, step_days
    integer :: is, ie, js, je
@@ -344,6 +344,10 @@ contains
   	tg = 250        ! starting temperature for surface
 	spin_count = 0
 	step_days = 1
+	
+    sin_lat  (:,:) = sin(lat(:,:))
+    sin_lat_2(:,:) = sin_lat(:,:)*sin_lat(:,:)
+	
 	do
 		tg_prev = tg
 		dt_integer = dt_integer + 86400*step_days		! step by a day at a time
