@@ -120,7 +120,7 @@ private
                               equilibrium_t_file, p_trop, alpha, peri_time, smaxis, albedo, &
                               lapse, h_a, tau_s, orbital_period,         &
                               heat_capacity, ml_depth, spinup_time, stratosphere_t_option, &
-                              calculate_insolation_from_orbit 
+                              calculate_insolation_from_orbit, del_sol 
 
 !-----------------------------------------------------------------------
 
