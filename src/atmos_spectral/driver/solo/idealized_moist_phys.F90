@@ -1008,7 +1008,7 @@ endif
 #endif
 
 if(do_newtonian_cooling_as_rad) then
-   call hs_forcing(1, ie-is+1, 1, je-js+1, delta_t, Time_next, rad_lon_2d, rad_lat_2d, &
+   call hs_forcing(1, ie-is+1, 1, je-js+1, delta_t, Time_next, rad_lon, rad_lat, &
                 p_half(:,:,:,current ),       p_full(:,:,:,current   ), &
                     ug(:,:,:,previous),           vg(:,:,:,previous  ), &
                     tg(:,:,:,previous), grid_tracers(:,:,:,previous,:), &
