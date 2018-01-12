@@ -36,10 +36,11 @@ use  diag_manager_mod, only: register_diag_field, send_data
        do_energy_conserv_ray = .true., & 
              ! convert the energy produced by friction to heat
        variable_drag        = .false. 
+       zero_eq_drag         = .false.
              ! consider latitudinally varying drag produced by magnetic field
              
   namelist/rayleigh_bottom_drag_nml/ sigma_b, rc, H_lambda,             &
-              kf_days, do_energy_conserv_ray, variable_drag,            &
+              kf_days, do_energy_conserv_ray, variable_drag, zero_eq_drag &
               do_drag_at_surface, sigma_bot, sigma_mid, sigma_top
 
   private rayleigh_bottom_drag_nml
@@ -187,6 +188,14 @@ contains
            drag_coeff(j)  = kf * exp(-(cos(lat(1,j)) - rc)*RADIUS/H_lambda)
          endif
       end do
+   else if (zero_eq_drag) then
+      do j = 1, size(ug,2)
+         if (cos(lat(1,j)) .le. rc) then
+            drag_coeff(j) = kf
+         else
+           drag_coeff(j)  = 0.
+         endif
+      end do   
    else
       drag_coeff = kf
    endif
