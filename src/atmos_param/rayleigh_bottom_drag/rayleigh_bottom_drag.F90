@@ -40,7 +40,7 @@ use  diag_manager_mod, only: register_diag_field, send_data
              ! consider latitudinally varying drag produced by magnetic field
              
   namelist/rayleigh_bottom_drag_nml/ sigma_b, rc, H_lambda,             &
-              kf_days, do_energy_conserv_ray, variable_drag, zero_eq_drag &
+              kf_days, do_energy_conserv_ray, variable_drag, zero_eq_drag, &
               do_drag_at_surface, sigma_bot, sigma_mid, sigma_top
 
   private rayleigh_bottom_drag_nml
