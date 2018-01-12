@@ -18,6 +18,8 @@ use           vert_diff_mod, only: vert_diff_init, gcm_vert_diff_down, gcm_vert_
 
 use two_stream_gray_rad_mod, only: two_stream_gray_rad_init, two_stream_gray_rad_down, two_stream_gray_rad_up, two_stream_gray_rad_end
 
+use           hs_forcing_mod, only: hs_forcing_init, hs_forcing, hs_forcing_end
+
 use         mixed_layer_mod, only: mixed_layer_init, mixed_layer, mixed_layer_end, albedo_calc
 
 use         lscale_cond_mod, only: lscale_cond_init, lscale_cond, lscale_cond_end
@@ -104,6 +106,7 @@ logical :: do_ras = .false.
 !s Radiation options
 logical :: two_stream_gray = .true.
 logical :: do_rrtm_radiation = .false.
+logical :: do_newtonian_cooling_as_rad = .false.
 
 !s MiMA uses damping
 logical :: do_damping = .false.
@@ -142,7 +145,8 @@ namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roug
                                       land_roughness_prefactor,               &
                                       gp_surface, convection_scheme,          &
                                       bucket, init_bucket_depth, init_bucket_depth_land, & !RG Add bucket 
-                                      max_bucket_depth_land, robert_bucket, raw_bucket
+                                      max_bucket_depth_land, robert_bucket, raw_bucket, &
+                                      do_newtonian_cooling_as_rad
 
 
 integer, parameter :: num_time_levels = 2 !RG Add bucket - number of time levels added to allow timestepping in this module
@@ -321,6 +325,14 @@ d378 = 1.-d622
 !s need to make sure that gray radiation and rrtm radiation are not both called.
 if(two_stream_gray .and. do_rrtm_radiation) &
    call error_mesg('physics_driver_init','do_grey_radiation and do_rrtm_radiation cannot both be .true.',FATAL)
+
+!s need to make sure that gray radiation and HS are not both called.
+if(two_stream_gray .and. do_newtonian_cooling_as_rad) &
+   call error_mesg('physics_driver_init','do_grey_radiation and do_newtonian_cooling_as_rad cannot both be .true.',FATAL)
+
+!s need to make sure that gray radiation and rrtm radiation are not both called.
+if(do_rrtm_radiation .and. do_newtonian_cooling_as_rad) &
+   call error_mesg('physics_driver_init','do_rrtm_radiation and do_newtonian_cooling_as_rad cannot both be .true.',FATAL)
 
 if(uppercase(trim(convection_scheme)) == 'NONE') then
   r_conv_scheme = NO_CONV
@@ -694,6 +706,10 @@ if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, ge
     endif
 #endif
 
+if (do_newtonian_cooling_as_rad) then
+   call hs_forcing_init(get_axis_id(), Time, rad_lonb_2d, rad_latb_2d, rad_lat_2d)
+endif
+
 if(turb) then
    call vert_turb_driver_init (rad_lonb_2d, rad_latb_2d, ie-is+1,je-js+1, &
                  num_levels,get_axis_id(),Time, doing_edt, doing_entrain)
@@ -714,10 +730,10 @@ endif
 
 end subroutine idealized_moist_phys_init
 !=================================================================================================================================
-subroutine idealized_moist_phys(Time, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, &
+subroutine idealized_moist_phys(Time, Time_next, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, &
                                 previous, current, dt_ug, dt_vg, dt_tg, dt_tracers, mask, kbot)
 
-type(time_type),            intent(in)    :: Time
+type(time_type),            intent(in)    :: Time, Time_next
 real, dimension(:,:,:,:),   intent(in)    :: p_half, p_full, z_half, z_full, ug, vg, tg
 real, dimension(:,:,:,:,:), intent(in)    :: grid_tracers
 integer,                    intent(in)    :: previous, current
@@ -991,6 +1007,18 @@ if(do_rrtm_radiation) then
 endif
 #endif
 
+if(do_newtonian_cooling_as_rad) then
+   call hs_forcing(1, ie-is+1, 1, je-js+1, delta_t, Time_next, rad_lon_2d, rad_lat_2d, &
+                p_half(:,:,:,current ),       p_full(:,:,:,current   ), &
+                    ug(:,:,:,previous),           vg(:,:,:,previous  ), &
+                    tg(:,:,:,previous), grid_tracers(:,:,:,previous,:), &
+                    ug(:,:,:,previous),           vg(:,:,:,previous  ), &
+                    tg(:,:,:,previous), grid_tracers(:,:,:,previous,:), &
+                 dt_ug(:,:,:         ),        dt_vg(:,:,:           ), &
+                 dt_tg(:,:,:         ),   dt_tracers(:,:,:,:), z_full(:,:,:,current))
+endif
+
+
 
 
 if(gp_surface) then
@@ -1206,6 +1234,9 @@ endif
 call lscale_cond_end
 if(mixed_layer_bc)  call mixed_layer_end(t_surf, bucket_depth, bucket)
 if(do_damping) call damping_driver_end
+if(do_newtonian_cooling_as_rad) then
+    call hs_forcing_end
+endif
 
 end subroutine idealized_moist_phys_end
 !=================================================================================================================================
