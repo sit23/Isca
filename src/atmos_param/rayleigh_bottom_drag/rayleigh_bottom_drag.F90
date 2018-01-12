@@ -35,7 +35,7 @@ use  diag_manager_mod, only: register_diag_field, send_data
   logical ::                           &
        do_energy_conserv_ray = .true., & 
              ! convert the energy produced by friction to heat
-       variable_drag        = .false. 
+       variable_drag        = .false., & 
        zero_eq_drag         = .false.
              ! consider latitudinally varying drag produced by magnetic field
              
