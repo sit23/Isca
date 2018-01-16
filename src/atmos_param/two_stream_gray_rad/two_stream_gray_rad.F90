@@ -112,6 +112,8 @@ real    :: sw_tau_exponent_gp = 1.0
 real    :: diabatic_acce = 1.0
 real,save :: gp_albedo, Ga_asym, g_asym
 
+logical :: do_normal_integration_method=.true. !When .false. uses an alternative numerical integration for long-wave up and down. Deals better with large optical depths, and so is useful in the giant-planet context.
+
 ! parameters for Byrne and OGorman radiation scheme
 real :: bog_a = 0.8678
 real :: bog_b = 1997.9
@@ -147,7 +149,8 @@ namelist/two_stream_gray_rad_nml/ solar_constant, del_sol, &
 		   window, carbon_conc, rad_scheme, &
            do_read_co2, co2_file, co2_variable_name, solday, equinox_day, bog_a, bog_b, bog_mu, &           
            use_time_average_coszen, dt_rad_avg,&
-           diabatic_acce, lw_tau_0_gp, sw_tau_0_gp, lw_tau_exponent_gp, sw_tau_exponent_gp !Schneider Liu values 
+           diabatic_acce, lw_tau_0_gp, sw_tau_0_gp, lw_tau_exponent_gp, sw_tau_exponent_gp, & !Schneider Liu values 
+           do_normal_integration_method
 
 !==================================================================================
 !-------------------- diagnostics fields -------------------------------
@@ -605,10 +608,18 @@ case(B_SCHNEIDER_LIU)
 
   ! compute downward longwave flux by integrating downward
   lw_down(:,:,1)      = 0.
-  do k = 1, n
-     lw_down(:,:,k+1) = lw_down(:,:,k)*lw_dtrans(:,:,k) + b(:,:,k)*(1. - lw_dtrans(:,:,k))
-  end do
-
+  
+  if (do_normal_integration_method) then
+      do k = 1, n
+         lw_down(:,:,k+1) = lw_down(:,:,k)*lw_dtrans(:,:,k) + b(:,:,k)*(1. - lw_dtrans(:,:,k))
+      end do
+         
+  else
+      do k = 1, n
+         lw_down(:,:,k+1) = 2.*b(:,:,k) * (lw_tau(:,:,k+1) - lw_tau(:,:,k))/(2.+ (lw_tau(:,:,k+1) - lw_tau(:,:,k))) + &
+                            lw_down(:,:,k) * (2.- (lw_tau(:,:,k+1) - lw_tau(:,:,k)))/(2.+ (lw_tau(:,:,k+1) - lw_tau(:,:,k)))
+      end do
+  endif
 
 case default
  call error_mesg('two_stream_gray_rad','invalid radiation scheme',FATAL)
@@ -696,9 +707,19 @@ case(B_SCHNEIDER_LIU)
   ! compute upward longwave flux by integrating upward
 
   lw_up(:,:,n+1)    = b_surf_gp
-  do k = n, 1, -1
-     lw_up(:,:,k)   = lw_up(:,:,k+1)*lw_dtrans(:,:,k) + b(:,:,k)*(1.0 - lw_dtrans(:,:,k))
-  end do
+  
+  if (do_normal_integration_method) then
+      do k = n, 1, -1
+         lw_up(:,:,k)   = lw_up(:,:,k+1)*lw_dtrans(:,:,k) + b(:,:,k)*(1.0 - lw_dtrans(:,:,k))
+      end do
+         
+  else
+      do k = n, 1, -1
+        lw_up(:,:,k) = 2.*b(:,:,k) * -1.*(lw_tau(:,:,k) - lw_tau(:,:,k+1))/ (2.- (lw_tau(:,:,k) - lw_tau(:,:,k+1))) &
+                        + lw_up(:,:,k+1)* (2. + (lw_tau(:,:,k) - lw_tau(:,:,k+1)))/(2. - (lw_tau(:,:,k) - lw_tau(:,:,k+1)))      
+      end do                        
+  endif
+  
 
 case default
  call error_mesg('two_stream_gray_rad','invalid radiation scheme',FATAL)
