@@ -529,7 +529,7 @@ case(B_GEEN)
   do k = 1, n
     lw_del_tau    = ( ir_tau_co2 + 0.2023 * log(carbon_conc/360.)                  &
                     + ir_tau_wv1*log(ir_tau_wv2*q(:,:,k) + 1) )                    &
-               * ( p_half(:,:,k+1)-p_half(:,:,k) ) / p_half(:,:,n+1)
+               * ( p_half(:,:,k+1)-p_half(:,:,k) ) / pstd_mks_earth
     lw_dtrans(:,:,k) = exp( - lw_del_tau )
     lw_del_tau_win   = ( ir_tau_co2_win + 0.0954 * log(carbon_conc/360.)           &
                                      + ir_tau_wv_win1*q(:,:,k)                 &

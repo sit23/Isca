@@ -36,7 +36,9 @@ module constants_mod
 !   Constants are accessed through the "use" statement.
 ! </DESCRIPTION>
 
-use fms_mod,               only: open_file, check_nml_error, mpp_pe, close_file, write_version_number
+use fms_mod,               only: open_file, check_nml_error, &
+                                 mpp_pe, mpp_root_pe, stdlog, &
+                                 close_file, write_version_number, error_mesg, NOTE
 
 implicit none
 private
@@ -240,7 +242,7 @@ real, public, parameter :: EPSLN   = 1.0e-40
 
 real, public, parameter :: EARTH_OMEGA = 7.2921150e-5
 real, public, parameter :: EARTH_ORBITAL_PERIOD = 365.25*SECONDS_PER_DAY
-real, public, parameter :: PSTD_MKS_EARTH = 1.e5
+real, public, parameter :: PSTD_MKS_EARTH = 101325.0
 
 real, public :: RADIUS = 6376.0e3
 real, public :: GRAV   = EARTH_GRAV
@@ -254,8 +256,9 @@ real, public :: PSTD_MKS    = PSTD_MKS_EARTH
 real, public :: RDGAS  = EARTH_RDGAS
 real, public :: KAPPA = EARTH_KAPPA
 real, public :: CP_AIR = EARTH_CP_AIR
+logical :: earthday_multiple = .false.
 
-namelist/constants_nml/ radius, grav, omega, orbital_period, pstd_mks, rdgas, kappa, solar_const
+namelist/constants_nml/ radius, grav, omega, orbital_period, pstd_mks, rdgas, kappa, solar_const, earthday_multiple
 
 !-----------------------------------------------------------------------
 ! version and tagname published
@@ -285,6 +288,7 @@ subroutine constants_init
     enddo
     10 call close_file (unit)
 
+    if (mpp_pe() == mpp_root_pe()) write (stdlog(),nml=constants_nml)
 
     !> SECONDS_PER_SOL is the exoplanet equivalent of seconds_per_day.
     !! It is the number of seconds between sucessive solar zeniths at longitude 0.
@@ -292,8 +296,14 @@ subroutine constants_init
     !! as this is too integral to the model calendar to change.)
     !! For Earth parameters, SECONDS_PER_SOL == SECONDS_PER_DAY
     orbital_rate = 2*pi / orbital_period
-    seconds_per_sol = abs(2*pi / (orbital_rate - omega))
-
+	if (earthday_multiple) then
+	    call error_mesg( 'constants_init', &
+	              	         'earthday_multiple = True. Using modified seconds_per_sol', NOTE)
+	    seconds_per_sol = 86400. * earth_omega / omega
+	else
+	    seconds_per_sol = abs(2*pi / (orbital_rate - omega))
+	endif
+	
     CP_AIR = RDGAS/KAPPA
 
     constants_initialised = .true.
