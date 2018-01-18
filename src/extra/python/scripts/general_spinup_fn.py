@@ -110,22 +110,21 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
 
 if __name__ == "__main__":
 
-    start_month_offset=[0, 0, 0 ]
-
-#     exp_list=['moist_giant_planet_1_solar_t85_3bar_fixed_dw_source','giant_planet/runs_for_portland_poster/giant_planet_3_bar_with_dc_scheme', 'moist_giant_planet_1_solar_t85_3bar_fixed_dw_source_no_bbhf']
+    start_month_offset=[0,0, 0, 0, 0, 0, 0]
     
-    exp_list = ['moist_giant_planet_1_solar_t85_15bar_fixed_dw_source_hotter_ics_higher_opacity', 'moist_giant_planet_1_solar_t85_15bar_diabatic_ace_20', 'moist_giant_planet_1_solar_t85_15bar_diabatic_ace_20_dc_scheme']
-    label_arr=['t85 15 bar high opacity', 't85 15 bar high op di_acce=20.', 'di_acce=20. dry conv scheme']
+    exp_list = ['bog_fixed_sst_control_experiment_outside', 'bog_qflux_control_experiment_outside', 'annual_mean_ice_post_princeton_fixed_sst_1', 'bog_qflux_control_experiment_outside_1', 'bog_fixed_sst_control_experiment_outside_isca_bog_a', 'bog_qflux_control_experiment_outside_10', 'bog_qflux_control_experiment_outside_8']
 
-    res_arr = [85, 85, 85]
+    label_arr = ['fixed sst bog', 'qflux bog', 'fixed sst rrtm', 'qflux isca bog_a', 'fixed sst isca bog_a', 'qflux isca 0.1', 'qflux isca 0.08']
 
-    data_type_arr = ['isca', 'isca_cpu', 'isca_cpu']
+    res_arr = [42, 42, 42, 42, 42, 42, 42]
+
+    data_type_arr = ['isca_cpu', 'isca_cpu', '2013', 'isca', 'isca_cpu', 'isca', 'isca']
 
     exp_name=exp_list
 
     #number of years to read
-    start_month_arr=[1, 40, 40]
-    end_month_arr=[802, 57, 57]
+    start_month_arr=[1, 1, 1, 1, 1, 1, 1]
+    end_month_arr=[360, 76, 360, 359, 360, 359, 359]
 
     len_list=[len(start_month_offset), len(exp_list), len(label_arr), len(start_month_arr), len(end_month_arr), len(res_arr), len(data_type_arr)]
 
@@ -133,7 +132,7 @@ if __name__ == "__main__":
         raise IndexError("Input arrays to routine are not all the same length")
 
 
-    variable_to_integrate='temp'
+    variable_to_integrate='t_surf'
     power_to_scale_variable_by=1.
 
     plt.figure()
