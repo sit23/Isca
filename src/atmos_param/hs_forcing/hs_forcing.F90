@@ -132,7 +132,7 @@ private
 
    real, allocatable, dimension(:,:) :: tg_prev
 
-   integer :: id_teq, id_h_trop, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping
+   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping
    real    :: missing_value = -1.e10
    real    :: xwidth, ywidth, xcenter, ycenter ! namelist values converted from degrees to radians
    real    :: srfamp ! local_heating_srfamp converted from deg/day to deg/sec
@@ -148,7 +148,7 @@ contains
 
  subroutine hs_forcing ( is, ie, js, je, dt, Time, lon, lat, p_half, p_full, &
                          u, v, t, r, um, vm, tm, rm, udt, vdt, tdt, rdt, zfull,&
-                         mask, kbot )
+                         mask, kbot, t_grnd )
 
 !-----------------------------------------------------------------------
    integer, intent(in)                        :: is, ie, js, je
@@ -163,6 +163,8 @@ contains
 
       real, intent(in),    dimension(:,:,:), optional :: mask
    integer, intent(in),    dimension(:,:)  , optional :: kbot
+   real, intent(out),    dimension(:,:)  , optional :: t_grnd
+   
 !-----------------------------------------------------------------------
    real, dimension(size(t,1),size(t,2))           :: ps, diss_heat, h_trop
    real, dimension(size(t,1),size(t,2),size(t,3)) :: ttnd, utnd, vtnd, teq, pmass
@@ -199,8 +201,7 @@ contains
       if (do_conserve_energy) then
          ttnd = -((um+.5*utnd*dt)*utnd + (vm+.5*vtnd*dt)*vtnd)/CP_AIR
          tdt = tdt + ttnd
-!         if (id_tdt_diss > 0) used = send_data ( id_tdt_diss, ttnd, Time, is, js)
-         if (id_tdt_diss > 0) used = send_data ( id_tdt_diss, ttnd, Time) !st 2013 FMS seems to have paralelisation issues when called with ..., Time, is, js)
+         if (id_tdt_diss > 0) used = send_data ( id_tdt_diss, ttnd, Time)
        ! vertical integral of ke dissipation
          if ( id_diss_heat > 0 ) then
           do k = 1, size(t,3)
@@ -215,34 +216,33 @@ contains
       udt = udt + utnd
       vdt = vdt + vtnd
 
-!     if (id_udt > 0) used = send_data ( id_udt, utnd, Time, is, js)
       if (id_udt > 0) used = send_data ( id_udt, utnd, Time)
-!      if (id_vdt > 0) used = send_data ( id_vdt, vtnd, Time, is, js)
       if (id_vdt > 0) used = send_data ( id_vdt, vtnd, Time)
 
 !-----------------------------------------------------------------------
 !     thermal forcing for held & suarez (1994) benchmark calculation
       if (trim(equilibrium_t_option) == 'top_down') then
-         call top_down_newtonian_damping(Time, lat, ps, p_full, p_half, t, ttnd, teq, dt, h_trop, zfull, mask )
+         call top_down_newtonian_damping(Time, lat, ps, p_full, p_half, t, ttnd, teq, dt, h_trop, t_grnd, zfull, mask )
       else
          call newtonian_damping ( Time, lat, lon, ps, p_full, p_half, t, ttnd, teq, mask )
       endif
       tdt = tdt + ttnd
-!      if (id_newtonian_damping > 0) used = send_data(id_newtonian_damping, ttnd, Time, is, js)
       if (id_newtonian_damping > 0) used = send_data(id_newtonian_damping, ttnd, Time)
 
       if(trim(local_heating_option) /= '') then
         call local_heating ( Time, is, js, lon, lat, ps, p_full, p_half, ttnd )
         tdt = tdt + ttnd
-!        if (id_local_heating > 0) used = send_data ( id_local_heating, ttnd, Time, is, js)
         if (id_local_heating > 0) used = send_data ( id_local_heating, ttnd, Time)
       endif
 
-!      if (id_tdt > 0) used = send_data ( id_tdt, tdt, Time, is, js)
       if (id_tdt > 0) used = send_data ( id_tdt, tdt, Time)
-!      if (id_teq > 0) used = send_data ( id_teq, teq, Time, is, js)
       if (id_teq > 0) used = send_data ( id_teq, teq, Time)
-      if (id_h_trop > 0) used = send_data ( id_h_trop, h_trop, Time) !, is, js)
+
+      if (trim(equilibrium_t_option) == 'top_down') then    
+          if (id_h_trop > 0) used = send_data ( id_h_trop, h_trop, Time)
+          if (id_t_grnd > 0) used = send_data ( id_t_grnd, t_grnd, Time)
+      endif
+      
 !-----------------------------------------------------------------------
 !     -------- tracers -------
 
@@ -431,6 +431,9 @@ contains
       id_h_trop = register_diag_field ( mod_name, 'h_trop', axes(1:2), Time, &
                       'tropopause height (km)', 'km'   , &
                       missing_value=missing_value, range=(/0.,200./) )
+      id_t_grnd = register_diag_field ( mod_name, 't_grnd', axes(1:2), Time, &
+                      'surface temperature from top-down newt-relax', '(deg K)'   , &
+                      missing_value=missing_value, range=(/0.,400./) )                      
       endif
 
       id_newtonian_damping = register_diag_field ( mod_name, 'tdt_ndamp', axes(1:3), Time, &
@@ -903,7 +906,7 @@ end subroutine calc_hour_angle
 
 !###################################################################
 
-subroutine top_down_newtonian_damping ( Time, lat, ps, p_full, p_half, t, tdt, teq, dt, h_trop, zfull, mask )
+subroutine top_down_newtonian_damping ( Time, lat, ps, p_full, p_half, t, tdt, teq, dt, h_trop, t_grnd, zfull, mask )
 
 !-----------------------------------------------------------------------
 !
@@ -917,6 +920,7 @@ real, intent(in),  dimension(:,:)   :: lat, ps
 real, intent(in),  dimension(:,:,:) :: p_full, t, p_half, zfull
 real, intent(out), dimension(:,:,:) :: tdt, teq
 real, intent(out), dimension(:,:)   :: h_trop
+real, intent(out), dimension(:,:)     :: t_grnd
 real, intent(in),  dimension(:,:,:), optional :: mask
 
 !-----------------------------------------------------------------------
@@ -1034,8 +1038,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
          tdt(:,:,k) = -tdamp(:,:,k)*(t(:,:,k)-teq(:,:,k))
       enddo
 
-      !print *, maxval(tdt), maxval(teq), maxval(h_trop)
-
+      t_grnd = tg
+      
       if (present(mask)) then
          tdt = tdt * mask
          teq = teq * mask

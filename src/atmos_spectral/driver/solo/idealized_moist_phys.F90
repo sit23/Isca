@@ -1015,7 +1015,8 @@ if(do_newtonian_cooling_as_rad) then
                     ug(:,:,:,previous),           vg(:,:,:,previous  ), &
                     tg(:,:,:,previous), grid_tracers(:,:,:,previous,:), &
                  dt_ug(:,:,:         ),        dt_vg(:,:,:           ), &
-                 dt_tg(:,:,:         ),   dt_tracers(:,:,:,:), z_full(:,:,:,current))
+                 dt_tg(:,:,:         ),   dt_tracers(:,:,:,:), z_full(:,:,:,current), &
+                 t_grnd=t_surf(:,:))
 endif
 
 
