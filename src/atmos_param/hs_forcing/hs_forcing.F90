@@ -75,6 +75,7 @@ private
 
    real :: ka = -40., ks =  -4., kf = -1. ! negative sign is a flag indicating that the units are days
 
+   logical :: do_rayleigh_damping = .true. !option to turn off rayleigh damping of momentum
    logical :: do_conserve_energy = .true.
 
    real :: trflux = 1.e-5   !  surface flux for optional tracer
@@ -111,6 +112,7 @@ private
 
    namelist /hs_forcing_nml/  no_forcing, t_zero, t_strat, delh, delv, eps,  &
                               sigma_b, ka, ks, kf, do_conserve_energy,       &
+                              do_rayleigh_damping,                           &
                               trflux, trsink, local_heating_srfamp,          &
                               local_heating_xwidth,  local_heating_ywidth,   &
                               local_heating_xcenter, local_heating_ycenter,  &
@@ -196,6 +198,7 @@ contains
 !-----------------------------------------------------------------------
 !     rayleigh damping of wind components near the surface
 
+    if (do_rayleigh_damping) then
       call rayleigh_damping ( Time, ps, p_full, p_half, u, v, utnd, vtnd, mask=mask )
 
       if (do_conserve_energy) then
@@ -218,7 +221,8 @@ contains
 
       if (id_udt > 0) used = send_data ( id_udt, utnd, Time)
       if (id_vdt > 0) used = send_data ( id_vdt, vtnd, Time)
-
+      
+    endif
 !-----------------------------------------------------------------------
 !     thermal forcing for held & suarez (1994) benchmark calculation
       if (trim(equilibrium_t_option) == 'top_down') then
