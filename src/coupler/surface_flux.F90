@@ -46,7 +46,7 @@ implicit none
 private
 
 ! ==== public interface ======================================================
-public  surface_flux, gp_surface_flux
+public  surface_flux, gp_surface_flux, newt_relax_surface_flux
 ! ==== end of public interface ===============================================
 
 ! <INTERFACE NAME="surface_flux">
@@ -266,6 +266,7 @@ real    :: land_evap_prefactor  =  1.0    !s Default is that land makes no diffe
 
 real    :: flux_heat_gp  =  5.7    !s Default value for Jupiter of 5.7 Wm^-2
 real    :: diabatic_acce =  1.0    !s Diabatic acceleration??
+real    :: rh_target =  100.0    !s 
 
 
 namelist /surface_flux_nml/ no_neg_q,             &
@@ -282,7 +283,8 @@ namelist /surface_flux_nml/ no_neg_q,             &
                             land_humidity_prefactor, & !s Added to make land 'dry', i.e. to decrease the evaporative heat flux in areas of land.
                             land_evap_prefactor, & !s Added to make land 'dry', i.e. to decrease the evaporative heat flux in areas of land.
                             flux_heat_gp,         &    !s prescribed lower boundary heat flux on a giant planet
-			    diabatic_acce
+                            diabatic_acce,        &
+                            rh_target
 
 
 
@@ -994,6 +996,43 @@ dt_tg(:,:,num_levels) = dt_tg(:,:,num_levels)                          &
 
 
 end subroutine gp_surface_flux
+
+subroutine newt_relax_surface_flux (bottom_level_atm_temp, dt_sphum, sphum, p_surf, num_levels, delta_t, is, ie, js, je)
+
+real   , intent(inout), dimension(:,:,:) :: dt_sphum
+real   , intent(in), dimension(:,:,:) :: sphum
+real   , intent(in), dimension(:,:) :: bottom_level_atm_temp, p_surf
+integer   , intent(in) :: num_levels, is, ie, js, je
+real, intent(in) :: delta_t
+
+real :: e_sat, sphum_target, q_sat
+integer :: i, j
+
+  if (do_init) call surface_flux_init
+
+  do i=is,ie 
+      do j=js,je
+
+          call escomp ( bottom_level_atm_temp(i,j), e_sat  )  ! saturation vapor pressure
+
+          if(use_mixing_ratio) then
+            ! surface mixing ratio at saturation
+            q_sat   = d622*e_sat /(p_surf(i,j)-e_sat )
+          elseif(do_simple) then                  !rif:(09/02/09)
+            q_sat   = d622*e_sat / p_surf(i,j)
+          else
+            ! surface specific humidity at saturation
+            q_sat   = d622*e_sat /(p_surf(i,j)-d378*e_sat )
+          endif
+
+          sphum_target = (rh_target/100.) * q_sat
+
+          dt_sphum(i,j,num_levels) = dt_sphum(i,j,num_levels) + (sphum_target - sphum(i,j,num_levels))/(delta_t)
+
+       end do
+   end do
+
+end subroutine newt_relax_surface_flux
 
 
 end module surface_flux_mod

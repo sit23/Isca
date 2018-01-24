@@ -38,7 +38,7 @@ use          transforms_mod, only: get_grid_domain
 
 use   spectral_dynamics_mod, only: get_axis_id, get_num_levels, get_surf_geopotential
 
-use        surface_flux_mod, only: surface_flux, gp_surface_flux
+use        surface_flux_mod, only: surface_flux, gp_surface_flux, newt_relax_surface_flux
 
 use      sat_vapor_pres_mod, only: lookup_es !s Have added this to allow relative humdity to be calculated in a consistent way.
 
@@ -114,6 +114,8 @@ logical :: do_damping = .false.
 
 logical :: mixed_layer_bc = .false.
 logical :: gp_surface = .false. !s Use Schneider & Liu 2009's prescription of lower-boundary heat flux
+logical :: newt_relax_surface = .false. !s Use Schneider & Liu 2009's prescription of lower-boundary heat flux
+
 
 logical :: do_simple = .false. !s Have added this to enable relative humidity to be calculated correctly below.
 real :: roughness_heat = 0.05
@@ -143,7 +145,7 @@ namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roug
                                       roughness_moist, roughness_mom, do_virtual,    &
                                       land_option, land_file_name, land_field_name,   & !s options for idealised land
                                       land_roughness_prefactor,               &
-                                      gp_surface, convection_scheme,          &
+                                      gp_surface, newt_relax_surface, convection_scheme,          &
                                       bucket, init_bucket_depth, init_bucket_depth_land, & !RG Add bucket 
                                       max_bucket_depth_land, robert_bucket, raw_bucket, &
                                       do_newtonian_cooling_as_rad
@@ -932,7 +934,7 @@ if(.not.mixed_layer_bc) then
 !!$  t_surf = surface_temperature(tg(:,:,:,previous), p_full(:,:,:,current), p_half(:,:,:,current))
 end if
 
-if(.not.gp_surface) then 
+if(.not.gp_surface .and. .not.newt_relax_surface) then 
 call surface_flux(                                                          &
                   tg(:,:,num_levels,previous),                              &
  grid_tracers(:,:,num_levels,previous,nsphum),                              &
@@ -1038,8 +1040,11 @@ if(gp_surface) then
 	if(id_diss_heat_ray > 0) used = send_data(id_diss_heat_ray, diss_heat_ray, Time)
 endif
 
+if(newt_relax_surface) then
 
+    call newt_relax_surface_flux (tg(:,:,num_levels,previous), dt_tracers(:,:,:,nsphum), grid_tracers(:,:,:,previous,nsphum), p_half(:,:,num_levels+1,current), num_levels, delta_t, is, ie, js, je)
 
+endif
 
 !----------------------------------------------------------------------
 !    Copied from MiMA physics_driver.f90
@@ -1097,7 +1102,7 @@ if(turb) then
 !!$   dhdt_atm   = 0.0
 !!$   dedq_atm   = 0.0
 
-   if(.not.(mixed_layer_bc.or.gp_surface)) then
+   if(.not.((mixed_layer_bc.or.gp_surface).or.newt_relax_surface)) then
      call error_mesg('atmosphere','no diffusion implentation for non-mixed layer b.c.',FATAL)
    endif
 
