@@ -97,7 +97,8 @@ private
    character(len=256) :: equilibrium_t_file='temp'  ! Name of file relative to $work/INPUT  Used only when equilibrium_t_option='from_file'
    character(len=256) :: stratosphere_t_option = 'extend_tp'
 
-   logical :: calculate_insolation_from_orbit = .true.
+   logical :: pure_rad_equil = .false. !When using top-down, do you want radiative convective equil (.true.) or purely radiative equilibrium (.false.)
+   logical :: calculate_insolation_from_orbit = .true. !If true then radaition calculated from orbital position. If false then uses annual average close to distribution for Earth.
    real :: del_sol = 1.4
    real :: del_sw  = 0.0
 
@@ -122,7 +123,8 @@ private
                               equilibrium_t_file, p_trop, alpha, peri_time, smaxis, albedo, &
                               lapse, h_a, tau_s, orbital_period,         &
                               heat_capacity, ml_depth, spinup_time, stratosphere_t_option, &
-                              calculate_insolation_from_orbit, del_sol 
+                              calculate_insolation_from_orbit, del_sol, &
+                              pure_rad_equil
 
 !-----------------------------------------------------------------------
 
@@ -296,7 +298,7 @@ contains
 !-----------------------------------------------------------------------
    integer  unit, io, ierr
 
-   real, dimension(size(lat,1),size(lat,2)) :: s, t_radbal, t_trop, h_trop, t_surf, hour_angle, tg, p2, sin_lat, sin_lat_2
+   real, dimension(size(lat,1),size(lat,2)) :: s, t_radbal, t_trop, h_trop, t_surf, hour_angle, tg, p2, sin_lat, sin_lat_2, olr
    integer :: spin_count, seconds, days, dt_integer
    real :: dec, orb_dist, step_days
    integer :: is, ie, js, je
@@ -366,12 +368,17 @@ contains
             s(:,:) = 0.25 * solar_const * (1.0 + del_sol*p2 + del_sw * sin_lat)
         endif            
         
-		t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
-		t_trop(:,:) = t_radbal(:,:)/(2**0.25)
+        if (pure_rad_equil) then
+            olr = (1-albedo)*s(:,:)
+            t_surf = (olr * (tau_s+1)/(2.*stefan))**0.25
+        else 
+            t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
+            t_trop(:,:) = t_radbal(:,:)/(2**0.25)
 
-		h_trop = 1.0/(16*lapse)*(1.3863*t_trop + sqrt((1.3863*t_trop)**2 + 32*lapse*tau_s*h_a*t_trop))
-		t_surf = t_trop + h_trop*lapse
-
+            h_trop = 1.0/(16*lapse)*(1.3863*t_trop + sqrt((1.3863*t_trop)**2 + 32*lapse*tau_s*h_a*t_trop))
+            t_surf = t_trop + h_trop*lapse
+        endif
+        
 		tg(:,:) =  stefan*86400*step_days/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
 
 		if (spin_count >= spinup_time) then
@@ -932,7 +939,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
           real, dimension(size(t,1),size(t,2)) :: &
      sin_lat, sin_lat_2, cos_lat, cos_lat_2, cos_lat_4, &
      tstr, sigma, the, tfactr, rps, p_norm, sin_sublon_2, &
-     coszen, fracday, t_trop, s, hour_angle, t_surf, tg, t_radbal, p2
+     coszen, fracday, t_trop, s, hour_angle, t_surf, tg, t_radbal, p2, olr
 
        real, dimension(size(t,1),size(t,2),size(t,3)) :: tdamp, heights
        real, dimension(size(t,2),size(t,3)) :: tz
@@ -979,15 +986,21 @@ real, intent(in),  dimension(:,:,:), optional :: mask
     t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
 
 
-    ! --- compute tropopause height (h_trop) and apply heat capacity
-    t_trop(:,:) = t_radbal(:,:)/(2**0.25)
-    h_trop = 1.0/(16*lapse)*(1.3863*t_trop + sqrt((1.3863*t_trop)**2 + 32*lapse*tau_s*h_a*t_trop))
+    if (pure_rad_equil) then
+        olr = (1-albedo)*s(:,:)
+        t_surf = (olr * (tau_s+1)/(2.*stefan))**0.25
+        tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
+        tg_prev = tg
+    else
+        ! --- compute tropopause height (h_trop) and apply heat capacity
+        t_trop(:,:) = t_radbal(:,:)/(2**0.25)
+        h_trop = 1.0/(16*lapse)*(1.3863*t_trop + sqrt((1.3863*t_trop)**2 + 32*lapse*tau_s*h_a*t_trop))
 
-	t_surf = t_trop(:,:) + h_trop*lapse
-	tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
-	tg_prev = tg
-	t_trop(:,:) = tg(:,:) - h_trop*lapse
-
+        t_surf = t_trop(:,:) + h_trop*lapse
+        tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
+        tg_prev = tg
+        t_trop(:,:) = tg(:,:) - h_trop*lapse   
+    endif
 
 	!----- stratosphere temperature ------------
       tstr  (:,:) = t_strat - eps*sin_lat(:,:)
@@ -1003,8 +1016,12 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
 !  ----- compute equilibrium temperature (teq) -----
 
-
-        teq(:,:,k) = t_trop + lapse*(h_trop-zfull(:,:,k)/1000)
+        if (pure_rad_equil) then
+            teq(:,:,k) = (olr * (tau_s*exp(-zfull(:,:,k)/(1000.*h_a))+1)/(2.*stefan))**0.25
+        else
+            teq(:,:,k) = t_trop + lapse*(h_trop-zfull(:,:,k)/1000)
+        endif
+        
         if (stratosphere_t_option == 'c_above_tp') then
             do i=1, size(t,1)
             do j=1, size(t,2)
@@ -1023,6 +1040,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
                 endif
 			enddo
 			enddo
+		elseif (stratosphere_t_option == 'pure_rad_equil') then			
+            teq(:,:,k) = (olr * (tau_s*exp(-zfull(:,:,k)/(1000.*h_a))+1)/(2.*stefan))**0.25	
 		else
 			teq(:,:,k) = max(teq(:,:,k), 0.)
         endif
