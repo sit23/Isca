@@ -98,6 +98,7 @@ private
    character(len=256) :: stratosphere_t_option = 'extend_tp'
 
    logical :: pure_rad_equil = .false. !When using top-down, do you want radiative convective equil (.true.) or purely radiative equilibrium (.false.)
+   logical :: pure_rad_equil_s_temp = .false. !When using top-down, do you want radiative convective equil (.true.) or purely radiative equilibrium (.false.)   
    logical :: calculate_insolation_from_orbit = .true. !If true then radaition calculated from orbital position. If false then uses annual average close to distribution for Earth.
    real :: del_sol = 1.4
    real :: del_sw  = 0.0
@@ -124,7 +125,7 @@ private
                               lapse, h_a, tau_s, orbital_period,         &
                               heat_capacity, ml_depth, spinup_time, stratosphere_t_option, &
                               calculate_insolation_from_orbit, del_sol, &
-                              pure_rad_equil
+                              pure_rad_equil, pure_rad_equil_s_temp
 
 !-----------------------------------------------------------------------
 
@@ -368,7 +369,7 @@ contains
             s(:,:) = 0.25 * solar_const * (1.0 + del_sol*p2 + del_sw * sin_lat)
         endif            
         
-        if (pure_rad_equil) then
+        if (pure_rad_equil_s_temp) then
             olr = (1-albedo)*s(:,:)
             t_surf = (olr * (tau_s+1)/(2.*stefan))**0.25
         else 
@@ -985,9 +986,9 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
     t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
 
+    olr = (1-albedo)*s(:,:)
 
-    if (pure_rad_equil) then
-        olr = (1-albedo)*s(:,:)
+    if (pure_rad_equil_s_temp) then
         t_surf = (olr * (tau_s+1)/(2.*stefan))**0.25
         tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
         tg_prev = tg
