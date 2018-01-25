@@ -267,7 +267,7 @@ real    :: land_evap_prefactor  =  1.0    !s Default is that land makes no diffe
 real    :: flux_heat_gp  =  5.7    !s Default value for Jupiter of 5.7 Wm^-2
 real    :: diabatic_acce =  1.0    !s Diabatic acceleration??
 real    :: rh_target =  100.0    !s 
-
+real    :: delta_t_relax = -1. !When < 0. the atmospheric timestep is used. If positive then the value given to delta_t_relax is used
 
 namelist /surface_flux_nml/ no_neg_q,             &
                             use_virtual_temp,     &
@@ -284,7 +284,8 @@ namelist /surface_flux_nml/ no_neg_q,             &
                             land_evap_prefactor, & !s Added to make land 'dry', i.e. to decrease the evaporative heat flux in areas of land.
                             flux_heat_gp,         &    !s prescribed lower boundary heat flux on a giant planet
                             diabatic_acce,        &
-                            rh_target
+                            rh_target,            &
+                            delta_t_relax
 
 
 
@@ -1005,32 +1006,33 @@ real   , intent(in), dimension(:,:) :: bottom_level_atm_temp, p_surf
 integer   , intent(in) :: num_levels, is, ie, js, je
 real, intent(in) :: delta_t
 
-real :: e_sat, sphum_target, q_sat
-integer :: i, j
+real, dimension(size(sphum,1), size(sphum,2)) :: e_sat, q_sat, sphum_target
+real :: delta_t_relax_use
 
   if (do_init) call surface_flux_init
 
-  do i=is,ie 
-      do j=js,je
 
-          call escomp ( bottom_level_atm_temp(i,j), e_sat  )  ! saturation vapor pressure
+    if(delta_t_relax .lt. 0.) then
+        delta_t_relax_use  = delta_t
+    else
+        delta_t_relax_use = delta_t_relax
+    endif
+
+          call escomp ( bottom_level_atm_temp, e_sat  )  ! saturation vapor pressure
 
           if(use_mixing_ratio) then
             ! surface mixing ratio at saturation
-            q_sat   = d622*e_sat /(p_surf(i,j)-e_sat )
+            q_sat   = d622*e_sat /(p_surf-e_sat )
           elseif(do_simple) then                  !rif:(09/02/09)
-            q_sat   = d622*e_sat / p_surf(i,j)
+            q_sat   = d622*e_sat / p_surf
           else
             ! surface specific humidity at saturation
-            q_sat   = d622*e_sat /(p_surf(i,j)-d378*e_sat )
+            q_sat   = d622*e_sat /(p_surf-d378*e_sat )
           endif
 
           sphum_target = (rh_target/100.) * q_sat
 
-          dt_sphum(i,j,num_levels) = dt_sphum(i,j,num_levels) + (sphum_target - sphum(i,j,num_levels))/(delta_t)
-
-       end do
-   end do
+          dt_sphum(:,:,num_levels) = dt_sphum(:,:,num_levels) + (sphum_target - sphum(:,:,num_levels))/(delta_t_relax_use)
 
 end subroutine newt_relax_surface_flux
 
