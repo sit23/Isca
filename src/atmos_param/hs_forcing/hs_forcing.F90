@@ -986,9 +986,9 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
     t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
 
-    olr = (1-albedo)*s(:,:)
 
     if (pure_rad_equil_s_temp) then
+        olr = (1-albedo)*s(:,:)    
         t_surf = (olr * (tau_s+1)/(2.*stefan))**0.25
         tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
         tg_prev = tg
@@ -1001,6 +1001,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
         tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
         tg_prev = tg
         t_trop(:,:) = tg(:,:) - h_trop*lapse   
+        olr = 2.*stefan * (tg(:,:)**4.) * (1./(tau_s + 1))
     endif
 
 	!----- stratosphere temperature ------------
