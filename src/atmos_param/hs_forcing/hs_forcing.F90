@@ -99,6 +99,7 @@ private
 
    logical :: pure_rad_equil = .false. !When using top-down, do you want radiative convective equil (.true.) or purely radiative equilibrium (.false.)
    logical :: pure_rad_equil_s_temp = .false. !When using top-down, do you want radiative convective equil (.true.) or purely radiative equilibrium (.false.)   
+   logical :: use_olr_from_t_surf = .false.  
    logical :: calculate_insolation_from_orbit = .true. !If true then radaition calculated from orbital position. If false then uses annual average close to distribution for Earth.
    real :: del_sol = 1.4
    real :: del_sw  = 0.0
@@ -125,7 +126,8 @@ private
                               lapse, h_a, tau_s, orbital_period,         &
                               heat_capacity, ml_depth, spinup_time, stratosphere_t_option, &
                               calculate_insolation_from_orbit, del_sol, &
-                              pure_rad_equil, pure_rad_equil_s_temp
+                              pure_rad_equil, pure_rad_equil_s_temp, &
+                              use_olr_from_t_surf
 
 !-----------------------------------------------------------------------
 
@@ -985,10 +987,9 @@ real, intent(in),  dimension(:,:,:), optional :: mask
     endif
 
     t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
-
+    olr = (1-albedo)*s(:,:)
 
     if (pure_rad_equil_s_temp) then
-        olr = (1-albedo)*s(:,:)    
         t_surf = (olr * (tau_s+1)/(2.*stefan))**0.25
         tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
         tg_prev = tg
@@ -1000,8 +1001,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
         t_surf = t_trop(:,:) + h_trop*lapse
         tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
         tg_prev = tg
-        t_trop(:,:) = tg(:,:) - h_trop*lapse   
-        olr = 2.*stefan * (tg(:,:)**4.) * (1./(tau_s + 1))
+        t_trop(:,:) = tg(:,:) - h_trop*lapse
+        if (use_olr_from_t_surf) olr = 2.*stefan * (tg(:,:)**4.) * (1./(tau_s + 1))
     endif
 
 	!----- stratosphere temperature ------------
