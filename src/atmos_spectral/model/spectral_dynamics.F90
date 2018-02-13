@@ -1881,7 +1881,7 @@ if(mpp_pe() == mpp_root_pe()) then
     end if
   endif
 endif
-100 format(' Integration completed through',i6,' days',i6,' seconds')
+100 format(' Integration completed through',i8,' days',i6,' seconds')
 200 format(' Integration completed through',i5,a4,i3,2x,i2,':',i2,':',i2)
 300 format(1x, '{"day":',i6,2x,',"second":', i6, &
     2x,',"max_speed":',e13.6,3x,',"avg_T":',e13.6, 3x '}')
