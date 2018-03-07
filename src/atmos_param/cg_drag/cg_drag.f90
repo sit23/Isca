@@ -658,6 +658,7 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
 !---------------------------------------------------------------------
 !    define processor extents and loop limits.
 !---------------------------------------------------------------------
+
       imax = size(uuu,1)
       jmax = size(uuu,2)
       kmax = size(uuu,3)
@@ -682,7 +683,7 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
         do j=1,jmax
           do i=1,imax
 ! The following index-offsets are needed in case a physics_window is being used.
-            iz0 = source_level(i +is-1,j+js-1)
+            iz0 = source_level(i,j)
             dtdz(i,j,1) = (temp  (i,j,1) - temp  (i,j,2))/    &
                           (zfull(i,j,1) - zfull(i,j,2))
             do k=2,iz0
@@ -730,6 +731,7 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
               zv(i,j,k) = vvv(i,j,k)
             end do
 
+
 !----------------------------------------------------------------------
 !    add an extra level above model top so that the gravity wave forcing
 !    occurring between the topmost model level and the upper boundary
@@ -743,9 +745,11 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
             zv(i,j,0)    = 2.*zv(i,j,1) - zv(i,j,2)
             zden(i,j,0)  = zden(i,j,1)*zden(i,j,1)/zden(i,j,2)
             zbf(i,j,0)   = zbf(i,j,1)
+
           end do
         end do
       
+
 !---------------------------------------------------------------------
 !    pass the vertically-extended input arrays to gwfc. gwfc will cal-
 !    culate the gravity-wave forcing and, if desired, an effective eddy 
@@ -767,8 +771,10 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
 !--------------------------------------------------------------------
 !    store the gravity wave forcing into a processor-global array.
 !-------------------------------------------------------------------
+
           gwd_u(is:ie,js:je,:) = gwfcng_x(:,:,:)
           gwd_v(is:ie,js:je,:) = gwfcng_y(:,:,:)
+
 
 
 #ifdef COL_DIAG
@@ -812,7 +818,6 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
         endif    ! (column_diagnostics_desired)
 #endif
 
-
 !--------------------------------------------------------------------
 !    if activated, store the effective eddy diffusivity into a 
 !    processor-global array, and if desired as a netcdf diagnostic, 
@@ -847,8 +852,6 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
 !          used = send_data (id_gwfy_cgwd, gwfcng_y, Time, is, js, 1)
           used = send_data (id_gwfy_cgwd, gwfcng_y, Time)
         endif
-
-
 
 !--------------------------------------------------------------------
 !    if this is not a timestep on which gravity wave forcing is to be 
@@ -1299,8 +1302,8 @@ real,    dimension(:,:,0:),  intent(out)            :: ked
       do j=1,size(u,2)
         do i=1,size(u,1)  
 ! The following index-offsets are needed in case a physics_window is being used.
-          iz0 = source_level(i+is-1,j+js-1)
-          ampl= source_amp(i+is-1,j+js-1)
+          iz0 = source_level(i,j)
+          ampl= source_amp(i,j)
 
 !--------------------------------------------------------------------
 !    define wave momentum flux (B0) at source level for each phase 
