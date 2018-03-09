@@ -1002,8 +1002,10 @@ real, intent(in),  dimension(:,:,:), optional :: mask
         tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
         tg_prev = tg
         t_trop(:,:) = tg(:,:) - h_trop*lapse
-        if (use_olr_from_t_surf) olr = 2.*stefan * (tg(:,:)**4.) * (1./(tau_s + 1))
     endif
+
+        if (use_olr_from_t_surf) olr = 2.*stefan * (tg(:,:)**4.) * (1./(tau_s +1))
+
 
 	!----- stratosphere temperature ------------
       tstr  (:,:) = t_strat - eps*sin_lat(:,:)
