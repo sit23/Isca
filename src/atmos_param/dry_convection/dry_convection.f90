@@ -33,14 +33,16 @@ module dry_convection_mod
 !                             ---  namelist ---
   real :: tau, &            !< relaxation timescale [seconds]
           gamma             !< prescibed lapse rate [non-dim]
+          
+  integer :: max_height_level_set = -1
 
-  namelist /dry_convection_nml/ tau, gamma
+  namelist /dry_convection_nml/ tau, gamma, max_height_level_set
 
   integer :: i, j, jit, k, num_levels
   real :: cons1 = 0.  !< Potential temperature exponent (R/Cp)
 
   integer :: id_cape, id_cin, id_lzb, id_lcl, id_tp, id_n_tp, &
-       id_dp, id_amb, id_dt
+       id_dp, id_amb, id_dt, max_height_level
 
   character(len=14), parameter :: mod_name='dry_convection'
   real :: missing_value = -1.e-10
@@ -150,9 +152,15 @@ module dry_convection_mod
     logical :: used
 
     num_levels = size(tg,3)
+    
+    if (max_height_level_set < 0) then
+        max_height_level = 1
+    else
+        max_height_level = max_height_level_set
+    end if
 
     ! half-level spacings:
-    do k=1, num_levels
+    do k=max_height_level, num_levels
        dp_half(:,:,k) = p_half(:,:,k+1) - p_half(:,:,k)
     end do
 
@@ -175,7 +183,7 @@ module dry_convection_mod
     do i=1, size(tg,1)
        do j=1, size(tg,2)
 
-          do k=1, num_levels
+          do k=max_height_level, num_levels
              if(k>=lzb(i,j).and. k<=btm(i,j)) then
                 ! in convecting region between ground and LZB
                 ener_int(i,j) = ener_int(i,j) +                               &
@@ -266,14 +274,14 @@ module dry_convection_mod
        do j = 1, size(tg,2)
 
           ! lift parcel with lapse rate given by gamma
-          do k = btm(i,j)-1, 1, -1
+          do k = btm(i,j)-1, max_height_level, -1
              zdpkpk = exp( cons1 * alog(p_full(i,j,k)/p_full(i,j,k+1)))  !< equiv. to (pfull[k]/pfull[k+1])^cons1
              tp(i,j,k) = tp(i,j,k+1) +                                        &
                   gamma * (tp(i,j,k+1)*zdpkpk - tp(i,j,k+1))
           end do
 
           ! find LCL
-          do k = btm(i,j)-1, 1, -1
+          do k = btm(i,j)-1, max_height_level, -1
              if(tp(i,j,k) > tg(i,j,k)) then ! unstable parcel
                 if(lzb(i,j) == btm(i,j)) then ! not above a lower cloud
                    ! calculate CAPE
