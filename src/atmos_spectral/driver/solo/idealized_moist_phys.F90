@@ -96,6 +96,9 @@ integer, parameter :: UNSET = -1,                & !! are NONE, SIMPLE_BETTS_MIL
                       RAS_CONV = 4
                       
 integer :: r_conv_scheme = UNSET  ! the selected convection scheme
+integer :: r_conv_scheme_2 = UNSET  ! the selected convection scheme
+
+integer, dimension(2) :: r_conv_scheme_array
 
 logical :: lwet_convection = .false.
 logical :: do_bm = .false.
@@ -201,6 +204,8 @@ real, allocatable, dimension(:,:,:) ::                                        &
      non_diff_dt_qg,       &   ! moisture tendency except from vertical diffusion
      conv_dt_tg,           &   ! temperature tendency from convection
      conv_dt_qg,           &   ! moisture tendency from convection
+     conv_dt_tg_tot,       &   ! total temperature tendency from convection
+     conv_dt_qg_tot,       &   ! total moisture tendency from convection     
      cond_dt_tg,           &   ! temperature tendency from condensation
      cond_dt_qg                ! moisture tendency from condensation
 
@@ -220,6 +225,8 @@ real, allocatable, dimension(:,:) ::                                          &
      plcls,                &   ! stored lifting condensation level pressure values 
      cape,                 &   ! convectively available potential energy
      cin,                  &   ! convective inhibition (this and the above are before the adjustment)
+     cape_dry,                 &   ! convectively available potential energy
+     cin_dry,                  &   ! convective inhibition (this and the above are before the adjustment)     
      invtau_q_relaxation,  &   ! temperature relaxation time scale
      invtau_t_relaxation,  &   ! humidity relaxation time scale
      rain,                 &   ! Can be resolved or  parameterised
@@ -243,6 +250,8 @@ integer ::           &
      id_cond_rain,   &   ! rain from condensation
      id_precip,      &   ! rain and snow from condensation and convection
      id_conv_dt_tg,  &   ! temperature tendency from convection
+     id_conv_dt_tg_moist,  &   ! temperature tendency from convection
+     id_conv_dt_tg_dry,  &   ! temperature tendency from convection          
      id_conv_dt_qg,  &   ! temperature tendency from convection
      id_cond_dt_tg,  &   ! temperature tendency from condensation
      id_cond_dt_qg,  &   ! temperature tendency from condensation
@@ -257,6 +266,9 @@ integer ::           &
      id_z_tg,        &   ! Relative humidity
      id_cape,        &
      id_cin,         &
+     id_cape_dry,        &
+     id_cin_dry,         &     
+     id_convflag,    &
      id_klzb,        &
      id_plzb,        &
      id_plcl,        &
@@ -289,7 +301,7 @@ type(time_type), intent(in) :: Time, Time_step_in
 integer, intent(in) :: nhum
 real, intent(in), dimension(:,:) :: rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init
 
-integer :: io, nml_unit, stdlog_unit, seconds, days, id, jd, kd
+integer :: io, nml_unit, stdlog_unit, seconds, days, id, jd, kd, i_conv
 real, dimension (size(rad_lonb_2d,1)-1, size(rad_latb_2d,2)-1) :: sgsmtn !s added for damping_driver
 
 !s added for land reading
@@ -368,6 +380,14 @@ else if(uppercase(trim(convection_scheme)) == 'DRY') then
   do_bm           = .false.
   do_ras          = .false.  
 
+else if(uppercase(trim(convection_scheme)) == 'SIMPLE_BETTS_MILLER_AND_DRY') then
+  r_conv_scheme = SIMPLE_BETTS_CONV
+  r_conv_scheme_2 = DRY_CONV
+  call error_mesg('idealized_moist_phys','Using Frierson Quasi-Equilibrium convection scheme and dry convection schemes together.', NOTE)
+  lwet_convection = .true.
+  do_bm           = .false.
+  do_ras          = .false.  
+
 else if(uppercase(trim(convection_scheme)) == 'UNSET') then
   call error_mesg('idealized_moist_phys','determining convection scheme from flags', NOTE)
   if (lwet_convection) then
@@ -395,6 +415,9 @@ if(lwet_convection .and. do_ras) &
 
 if(do_bm .and. do_ras) &
   call error_mesg('idealized_moist_phys','do_bm and do_ras cannot both be .true.',FATAL)  
+
+r_conv_scheme_array(1) = r_conv_scheme
+r_conv_scheme_array(2) = r_conv_scheme_2
 
 nsphum = nhum
 Time_step = Time_step_in
@@ -463,6 +486,8 @@ allocate(net_surf_sw_down        (is:ie, js:je))
 allocate(surf_lw_down            (is:ie, js:je))
 allocate(conv_dt_tg  (is:ie, js:je, num_levels))
 allocate(conv_dt_qg  (is:ie, js:je, num_levels))
+allocate(conv_dt_tg_tot  (is:ie, js:je, num_levels))
+allocate(conv_dt_qg_tot  (is:ie, js:je, num_levels))
 allocate(cond_dt_tg  (is:ie, js:je, num_levels))
 allocate(cond_dt_qg  (is:ie, js:je, num_levels))
 
@@ -472,6 +497,8 @@ allocate(plzbs        (is:ie, js:je))
 allocate(plcls        (is:ie, js:je))
 allocate(cape         (is:ie, js:je))
 allocate(cin          (is:ie, js:je))
+allocate(cape_dry         (is:ie, js:je))
+allocate(cin_dry          (is:ie, js:je))
 allocate(invtau_q_relaxation  (is:ie, js:je))
 allocate(invtau_t_relaxation  (is:ie, js:je))
 allocate(rain         (is:ie, js:je)); rain = 0.0
@@ -615,7 +642,12 @@ id_cape = register_diag_field(mod_name, 'cape',          &
      axes(1:2), Time, 'Convective Available Potential Energy','J/kg')
 id_cin = register_diag_field(mod_name, 'cin',          &
      axes(1:2), Time, 'Convective Inhibition','J/kg')
-
+id_cape_dry = register_diag_field(mod_name, 'cape_dry',          &
+     axes(1:2), Time, 'Convective Available Potential Energy','J/kg')
+id_cin_dry = register_diag_field(mod_name, 'cin_dry',          &
+     axes(1:2), Time, 'Convective Inhibition','J/kg')
+id_convflag = register_diag_field(mod_name, 'convflag',          &
+     axes(1:2), Time, 'Flag showing type of convection','None')
 id_klzb = register_diag_field(mod_name, 'klzb',          &
      axes(1:2), Time, 'Level of zero buoyancy','None')
 id_plzb = register_diag_field(mod_name, 'plzb',          &
@@ -638,66 +670,73 @@ if(bucket) then
        axes(1:2), Time, 'Tendency of bucket depth induced by LH', 'm/s')
 endif
 
-select case(r_conv_scheme)
+do i_conv=1,2
 
-case(SIMPLE_BETTS_CONV)
-  call qe_moist_convection_init()
+    select case(r_conv_scheme_array(i_conv))
 
-case(FULL_BETTS_MILLER_CONV)
-  call betts_miller_init()
+    case(SIMPLE_BETTS_CONV)
+      call qe_moist_convection_init()
 
-case(DRY_CONV)
-  call dry_convection_init(axes, Time)
+    case(FULL_BETTS_MILLER_CONV)
+      call betts_miller_init()
 
-case(RAS_CONV)
+    case(DRY_CONV)
+      call dry_convection_init(axes, Time)
 
-        !run without startiform cloud scheme
+    case(RAS_CONV)
 
-       !---------------------------------------------------------------------
-       !    retrieve the number of registered tracers in order to determine 
-       !    which tracers are to be convectively transported.
-       !---------------------------------------------------------------------
+            !run without startiform cloud scheme
 
-       call get_number_tracers (MODEL_ATMOS, num_tracers= num_tracers)
+           !---------------------------------------------------------------------
+           !    retrieve the number of registered tracers in order to determine 
+           !    which tracers are to be convectively transported.
+           !---------------------------------------------------------------------
 
-       allocate (tracers_in_ras(num_tracers))
-       ! Instead of finding out which of the tracers need to be advected, manually set this to .false.
-       tracers_in_ras = .false.
-       do_strat = .false.
+           call get_number_tracers (MODEL_ATMOS, num_tracers= num_tracers)
 
-       !Commented code not used such that tracers are not advected by RAS. Could implement in future.
+           allocate (tracers_in_ras(num_tracers))
+           ! Instead of finding out which of the tracers need to be advected, manually set this to .false.
+           tracers_in_ras = .false.
+           do_strat = .false.
+
+           !Commented code not used such that tracers are not advected by RAS. Could implement in future.
        
-       ! do n=1, num_tracers
-       !   if (query_method ('convection', MODEL_ATMOS, n, scheme)) then
-       !    num_ras_tracers = num_ras_tracers + 1
-       !    tracers_in_ras(n) = .true.
-       !   endif
-       ! end do
+           ! do n=1, num_tracers
+           !   if (query_method ('convection', MODEL_ATMOS, n, scheme)) then
+           !    num_ras_tracers = num_ras_tracers + 1
+           !    tracers_in_ras(n) = .true.
+           !   endif
+           ! end do
 
-       ! if (num_ras_tracers > 0) then
-       !   do_tracers_in_ras = .true.
-       ! else
-       !   do_tracers_in_ras = .false.
-       ! endif
+           ! if (num_ras_tracers > 0) then
+           !   do_tracers_in_ras = .true.
+           ! else
+           !   do_tracers_in_ras = .false.
+           ! endif
 
-       !----------------------------------------------------------------------
-       !    for each tracer, determine if it is to be transported by convect-
-       !    ion, and the convection schemes that are to transport it. set a 
-       !    logical flag to .true. for each tracer that is to be transported by
-       !    each scheme and increment the count of tracers to be transported
-       !    by that scheme.
-       !----------------------------------------------------------------------
+           !----------------------------------------------------------------------
+           !    for each tracer, determine if it is to be transported by convect-
+           !    ion, and the convection schemes that are to transport it. set a 
+           !    logical flag to .true. for each tracer that is to be transported by
+           !    each scheme and increment the count of tracers to be transported
+           !    by that scheme.
+           !----------------------------------------------------------------------
 
-        call ras_init (do_strat, axes,Time,tracers_in_ras) 
+            call ras_init (do_strat, axes,Time,tracers_in_ras) 
 
-end select
+    end select
+end do
 
 !jp not sure why these diag_fields are fenced when condensation ones above are not...
 !if(lwet_convection .or. do_bm) then
    id_conv_dt_qg = register_diag_field(mod_name, 'dt_qg_convection',          &
         axes(1:3), Time, 'Moisture tendency from convection','kg/kg/s')
    id_conv_dt_tg = register_diag_field(mod_name, 'dt_tg_convection',          &
-        axes(1:3), Time, 'Temperature tendency from convection','K/s')
+        axes(1:3), Time, 'Total Temperature tendency from convection','K/s')
+   id_conv_dt_tg_moist = register_diag_field(mod_name, 'dt_tg_convection_moist',          &
+        axes(1:3), Time, 'Moist Temperature tendency from moist convection','K/s')
+   id_conv_dt_tg_dry = register_diag_field(mod_name, 'dt_tg_convection_dry',          &
+        axes(1:3), Time, 'Temperature tendency from dry convection','K/s')
    id_conv_rain = register_diag_field(mod_name, 'convection_rain',            &
         axes(1:2), Time, 'Rain from convection','kg/m/m/s')
 !endif
@@ -763,6 +802,8 @@ integer, intent(in) , dimension(:,:),   optional :: kbot
 real, dimension(1,1,1):: tracer, tracertnd
 integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
+integer :: i_conv
+
 if(current == previous) then
    delta_t = dt_real
 else
@@ -775,128 +816,132 @@ if (bucket) then
 endif
 
 rain = 0.0; snow = 0.0; precip = 0.0
+conv_dt_qg=0.0; conv_dt_tg=0.0;conv_dt_qg_tot=0.0; conv_dt_tg_tot=0.0
+cape_dry = 0.0; cape=0.0; cin_dry=0.0; cin=0.0
 
-select case(r_conv_scheme)
+tg_tmp = tg(:,:,:,previous)
+qg_tmp = grid_tracers(:,:,:,previous,nsphum)
 
-case(SIMPLE_BETTS_CONV)
+do i_conv=1,2
+    select case(r_conv_scheme_array(i_conv))
 
-   call qe_moist_convection ( delta_t,              tg(:,:,:,previous),      &
-    grid_tracers(:,:,:,previous,nsphum),        p_full(:,:,:,previous),      &
-                          p_half(:,:,:,previous),                coldT,      &
-                                 rain,                            snow,      &
-                           conv_dt_tg,                      conv_dt_qg,      &
-                                q_ref,                        convflag,      &
-                                klzbs,                           plzbs,      &
-                                plcls,                            cape,      &
-                                  cin,             invtau_q_relaxation,      &
-                  invtau_t_relaxation,                           t_ref)
+    case(SIMPLE_BETTS_CONV)
 
-   tg_tmp = conv_dt_tg + tg(:,:,:,previous)
-   qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
-!  note the delta's are returned rather than the time derivatives
+       call qe_moist_convection ( delta_t,              tg_tmp,      &
+        qg_tmp,        p_full(:,:,:,previous),      &
+                              p_half(:,:,:,previous),                coldT,      &
+                                     rain,                            snow,      &
+                               conv_dt_tg,                      conv_dt_qg,      &
+                                    q_ref,                        convflag,      &
+                                    klzbs,                           plzbs,      &
+                                    plcls,                            cape,      &
+                                      cin,             invtau_q_relaxation,      &
+                      invtau_t_relaxation,                           t_ref)
 
-   conv_dt_tg = conv_dt_tg/delta_t
-   conv_dt_qg = conv_dt_qg/delta_t
-   depth_change_conv = rain/dens_h2o     ! RG Add bucket
-   rain       = rain/delta_t
-   precip     = rain
+       tg_tmp = conv_dt_tg + tg_tmp
+       qg_tmp = conv_dt_qg + qg_tmp
+    !  note the delta's are returned rather than the time derivatives
 
-   if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
-   if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
-   if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
-   if(id_cape  > 0) used = send_data(id_cape, cape, Time)
-   if(id_cin  > 0) used = send_data(id_cin, cin, Time)
-   if(id_klzb  > 0) used = send_data(id_klzb, klzbs, Time)
-   if(id_plzb  > 0) used = send_data(id_plzb, plzbs, Time)
-   if(id_plcl  > 0) used = send_data(id_plcl, plcls, Time)
-   if(id_tref  > 0) used = send_data(id_tref, t_ref, Time)
-   if(id_qref  > 0) used = send_data(id_qref, q_ref, Time)
+       conv_dt_tg = conv_dt_tg/delta_t
+       conv_dt_qg = conv_dt_qg/delta_t
+       depth_change_conv = rain/dens_h2o     ! RG Add bucket
+       rain       = rain/delta_t
+       precip     = rain       
 
-case(FULL_BETTS_MILLER_CONV)
+       if(id_conv_dt_tg_moist > 0) used = send_data(id_conv_dt_tg_moist, conv_dt_tg, Time)
+       if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
+       if(id_cape  > 0) used = send_data(id_cape, cape, Time)
+       if(id_cin  > 0) used = send_data(id_cin, cin, Time)       
+       if(id_convflag  > 0) used = send_data(id_convflag, float(convflag), Time)
+       if(id_klzb  > 0) used = send_data(id_klzb, klzbs, Time)
+       if(id_plzb  > 0) used = send_data(id_plzb, plzbs, Time)
+       if(id_plcl  > 0) used = send_data(id_plcl, plcls, Time)
+       if(id_tref  > 0) used = send_data(id_tref, t_ref, Time)
+       if(id_qref  > 0) used = send_data(id_qref, q_ref, Time)
 
-   call betts_miller (          delta_t,           tg(:,:,:,previous),       &
-    grid_tracers(:,:,:,previous,nsphum),       p_full(:,:,:,previous),       &
-                 p_half(:,:,:,previous),                        coldT,       &
-                                   rain,                         snow,       &
-                             conv_dt_tg,                   conv_dt_qg,       &
-                                  q_ref,                     convflag,       &
-                                  klzbs,                         cape,       &
-                                    cin,                        t_ref,       &
-                    invtau_t_relaxation,          invtau_q_relaxation,       &
-                               capeflag)
+    case(FULL_BETTS_MILLER_CONV)
 
-   tg_tmp = conv_dt_tg + tg(:,:,:,previous)
-   qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
-!  note the delta's are returned rather than the time derivatives
+       call betts_miller (          delta_t,           tg_tmp,       &
+        qg_tmp,       p_full(:,:,:,previous),       &
+                     p_half(:,:,:,previous),                        coldT,       &
+                                       rain,                         snow,       &
+                                 conv_dt_tg,                   conv_dt_qg,       &
+                                      q_ref,                     convflag,       &
+                                      klzbs,                         cape,       &
+                                        cin,                        t_ref,       &
+                        invtau_t_relaxation,          invtau_q_relaxation,       &
+                                   capeflag)
 
-   conv_dt_tg = conv_dt_tg/delta_t
-   conv_dt_qg = conv_dt_qg/delta_t
-   depth_change_conv = rain/dens_h2o     ! RG Add bucket
-   rain       = rain/delta_t
-   precip     = rain
+       tg_tmp = conv_dt_tg + tg_tmp
+       qg_tmp = conv_dt_qg + qg_tmp
+    !  note the delta's are returned rather than the time derivatives
 
-   if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
-   if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
-   if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
-   if(id_cape  > 0) used = send_data(id_cape, cape, Time)
-   if(id_cin  > 0) used = send_data(id_cin, cin, Time)
+       conv_dt_tg = conv_dt_tg/delta_t
+       conv_dt_qg = conv_dt_qg/delta_t
+       depth_change_conv = rain/dens_h2o     ! RG Add bucket
+       rain       = rain/delta_t
+       precip     = rain
 
-case(DRY_CONV)
-    call dry_convection(Time, tg(:, :, :, previous),                         &
-                        p_full(:,:,:,previous), p_half(:,:,:,previous),      &
-                        conv_dt_tg, cape, cin)
+       if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
+       if(id_cape  > 0) used = send_data(id_cape, cape, Time)
+       if(id_cin  > 0) used = send_data(id_cin, cin, Time)
+       
+    case(DRY_CONV)
+        call dry_convection(Time, tg_tmp,                         &
+                            p_full(:,:,:,previous), p_half(:,:,:,previous),      &
+                            conv_dt_tg, cape_dry, cin_dry)
 
-    tg_tmp = conv_dt_tg*delta_t + tg(:,:,:,previous)
-    qg_tmp = grid_tracers(:,:,:,previous,nsphum)
+        tg_tmp = conv_dt_tg*delta_t + tg_tmp
+        qg_tmp = qg_tmp
+
+        conv_dt_qg = 0. !make sure moisture tendency is zero from dry convection.
+
+        if(id_cape_dry  > 0) used = send_data(id_cape_dry, cape_dry, Time)
+        if(id_cin_dry  > 0) used = send_data(id_cin_dry, cin_dry, Time)
+        if(id_conv_dt_tg_dry > 0) used = send_data(id_conv_dt_tg_dry, conv_dt_tg, Time)
+
+    case(RAS_CONV)
+
+        call ras   (is,   js,     Time,                                                  &  
+                    tg_tmp,   qg_tmp,           &
+                    ug(:,:,:,previous),  vg(:,:,:,previous),    p_full(:,:,:,previous),  &
+                    p_half(:,:,:,previous), z_half(:,:,:,previous), coldT,  delta_t,     &
+                    conv_dt_tg,   conv_dt_qg, dt_ug_conv,  dt_vg_conv,                   &
+                    rain, snow,   do_strat,                                              &                                              
+                    !OPTIONAL 
+                    mask,  kbot,                                                         &
+                    !OPTIONAL OUT
+                    mc,   tracer(:,:,:), tracer(:,:,:),                          &
+                   tracer(:,:,:),  tracertnd(:,:,:),                             &
+                   tracertnd(:,:,:), tracertnd(:,:,:))
+            
+
+          !update tendencies - dT and dq are done after cases
+          tg_tmp = tg_tmp + conv_dt_tg
+          qg_tmp = qg_tmp + conv_dt_qg
+          dt_ug = dt_ug + dt_ug_conv
+          dt_vg = dt_vg + dt_vg_conv
+
+          precip     = precip + rain + snow
+
+       if(id_conv_rain  > 0) used = send_data(id_conv_rain, precip, Time)
+
+    case default
+      call error_mesg('idealized_moist_phys','Invalid convection scheme.', FATAL)
+
+    end select
+
+    conv_dt_tg_tot = conv_dt_tg_tot + conv_dt_tg
+    conv_dt_qg_tot = conv_dt_qg_tot + conv_dt_qg
     
-    conv_dt_qg = 0. !make sure moisture tendency is zero from dry convection.
+end do
 
-    if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
-    if(id_cape  > 0) used = send_data(id_cape, cape, Time)
-    if(id_cin  > 0) used = send_data(id_cin, cin, Time)
-
-case(RAS_CONV)
-
-    call ras   (is,   js,     Time,                                                  &  
-                tg(:,:,:,previous),   grid_tracers(:,:,:,previous,nsphum),           &
-                ug(:,:,:,previous),  vg(:,:,:,previous),    p_full(:,:,:,previous),  &
-                p_half(:,:,:,previous), z_half(:,:,:,previous), coldT,  delta_t,     &
-                conv_dt_tg,   conv_dt_qg, dt_ug_conv,  dt_vg_conv,                   &
-                rain, snow,   do_strat,                                              &                                              
-                !OPTIONAL 
-                mask,  kbot,                                                         &
-                !OPTIONAL OUT
-                mc,   tracer(:,:,:), tracer(:,:,:),                          &
-               tracer(:,:,:),  tracertnd(:,:,:),                             &
-               tracertnd(:,:,:), tracertnd(:,:,:))
-                
-
-      !update tendencies - dT and dq are done after cases
-      tg_tmp = tg(:,:,:,previous) + conv_dt_tg
-      qg_tmp = grid_tracers(:,:,:,previous,nsphum) + conv_dt_qg
-      dt_ug = dt_ug + dt_ug_conv
-      dt_vg = dt_vg + dt_vg_conv
-
-      precip     = precip + rain + snow
-
-   if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
-   if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
-   if(id_conv_rain  > 0) used = send_data(id_conv_rain, precip, Time)
-
-
-case(NO_CONV)
-   tg_tmp = tg(:,:,:,previous)
-   qg_tmp = grid_tracers(:,:,:,previous,nsphum)
-
-case default
-  call error_mesg('idealized_moist_phys','Invalid convection scheme.', FATAL)
-
-end select
-
+if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg_tot, Time)
+if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg_tot, Time)
 
 ! Add the T and q tendencies due to convection to the timestep
-dt_tg = dt_tg + conv_dt_tg
-dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + conv_dt_qg
+dt_tg = dt_tg + conv_dt_tg_tot
+dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + conv_dt_qg_tot
 
 
 ! Perform large scale convection
