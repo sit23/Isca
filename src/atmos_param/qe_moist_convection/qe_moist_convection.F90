@@ -70,13 +70,14 @@ module qe_moist_convection_mod
   real    :: val_inc = 0.01
   real    :: val_min = -1.  ! calculated in get_lcl_temp_table_size
   real    :: val_max = 1.   ! calculated in get_lcl_temp_table_size
+  integer :: k_surface_set = -1 !so that a non-surface lower level can be specified if k_surface_set>0
 
   real, parameter  :: small = 1.e-10, &  ! to avoid division by 0 in dry limit
                       pref  = 1.e5
 
   real, allocatable, dimension(:) :: lcl_temp_table
 
-  namelist /qe_moist_convection_nml/  tau_bm, rhbm, Tmin, Tmax, val_inc
+  namelist /qe_moist_convection_nml/  tau_bm, rhbm, Tmin, Tmax, val_inc, k_surface_set
 
   !------------------------------------------------------------------
   !           Description of namelist variables
@@ -291,7 +292,12 @@ contains
 
 
     ! Initialization of parameters and variables
-    k_surface = size(Tin, 3)
+    if (k_surface_set < 0) then
+        k_surface = size(Tin, 3)
+    else
+        k_surface = k_surface_set
+    end if
+    
     deltaq    = 0.
     deltaT    = 0.
     Pq        = 0.
@@ -356,11 +362,13 @@ contains
                 ! Else, if Pq <= 0 and Pt > 0
                 if (Pt_parcel .gt. 0) then
                    ! DO shallow convection
+                convflag(i,j) = 3 ! shallow moist convection                   
                    call do_shallow_convection(kLZB, k_surface,qin(i,j,:),   &
                         qref_parcel, deltaq_parcel, Tin(i,j,:), Tref_parcel, &
                         deltaT_parcel, p_half(i,j,:), Pq_parcel,dt)
                 else
                    ! Else, do nothing, and go back to loop over latitude and longitude 
+                convflag(i,j) = 4 ! NOTHING
                    Pq_parcel     = 0.
                    call set_profiles_to_full_model_values (1, k_surface, Tin(i,j,:),&
                         qin(i,j,:), Tref_parcel, deltaT_parcel, qref_parcel, &
@@ -374,6 +382,13 @@ contains
                         qin(i,j,:), Tref_parcel, deltaT_parcel, qref_parcel, &
                         deltaq_parcel)
           end if
+
+        ! Active if k_surface != size(p_full(:))
+        if (k_surface.ne.size(p_full)) then
+             call set_profiles_to_full_model_values (k_surface+1, size(p_full(i,j,:)), Tin(i,j,:),&
+                        qin(i,j,:), Tref_parcel, deltaT_parcel, qref_parcel, &
+                        deltaq_parcel)
+        end if
 
           ! Store diagnostics
           deltaT(i,j,:) = deltaT_parcel
@@ -661,6 +676,7 @@ contains
                    if ( (virtual_temp(Tp(k), rp(k)) .lt. Tin_virtual(k) ) &
                         .and. (.not.nocape) ) then
                       kLZB = k + 1
+                      pLZB = p_full(kLZB)
                       ! Exit the loop over k
                       go to 20
                    else           
@@ -786,7 +802,7 @@ contains
        eref       = rhbm * p_full(k) * rp(k) / (rp(k) + (rdgas/rvgas))
        rp(k) = mixing_ratio(eref, p_full(k))
        qref(k)    = rp(k) / (1 + rp(k))
-    end do
+    end do      
     
     ! Above the LZB
     k = max(kLZB-1, 1)
@@ -817,7 +833,7 @@ contains
          k_zero_precip_found, k_top, deltaT, Tref, qref, Tin, qin)
     
     ! If this level exists   
-    if (k_zero_precip_found) then
+    if (k_zero_precip_found) then   
        ! Change the reference temperature and the LZB
        call change_Tref_LZB_shallowconv(Pq, k_top,k_surface, deltaq, &
             Tref, deltaT, p_half,dt)
