@@ -233,7 +233,7 @@ integer, dimension(:), allocatable :: diag_j, diag_i
 !   variables for netcdf diagnostic fields.
 !---------------------------------------------------------------------
 integer          :: id_kedx_cgwd, id_kedy_cgwd, id_bf_cgwd, &
-                    id_gwfx_cgwd, id_gwfy_cgwd
+                    id_gwfx_cgwd, id_gwfy_cgwd, id_source_level
 real             :: missing_value = -999.
 character(len=7) :: mod_name = 'cg_drag'
 
@@ -480,10 +480,16 @@ type(time_type),         intent(in)      :: Time
                'effective eddy viscosity from cg_drag', 'm^2/s',   &
                missing_value=missing_value)
 
+      id_source_level =  &
+         register_diag_field (mod_name, 'source_level', axes(1:2), Time, &
+               'effective eddy viscosity from cg_drag', 'm^2/s',   &
+               missing_value=missing_value)
+
 !--------------------------------------------------------------------
 !    allocate and define module variables to hold values across 
 !    timesteps, in the event that cg_drag is not called on every step.
 !--------------------------------------------------------------------
+
      allocate ( gwd_u(idf,jdf,kmax) )
      allocate ( gwd_v(idf,jdf,kmax) )
 
@@ -664,7 +670,6 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
       kmax = size(uuu,3)
       ie = is + imax - 1
       je = js + jmax - 1
-
 !---------------------------------------------------------------------
 !    if the convective gravity wave forcing should be calculated on 
 !    this timestep (i.e., the alarm has gone off), proceed with the
@@ -775,49 +780,6 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
           gwd_u(is:ie,js:je,:) = gwfcng_x(:,:,:)
           gwd_v(is:ie,js:je,:) = gwfcng_y(:,:,:)
 
-
-
-#ifdef COL_DIAG
-!--------------------------------------------------------------------
-!  if column diagnostics are desired, determine if any columns are on
-!  this processor. if so, call column_diagnostics_header to write
-!  out location and timestamp information. then output desired 
-!  quantities to the diag_unit file.
-!---------------------------------------------------------------------
-        if (column_diagnostics_desired) then
-          do j=1,jmax
-            if (do_column_diagnostics(j+js-1)) then
-              do nn=1,num_diag_pts
-                if (js + j - 1 == diag_j(nn)) then
-                  call column_diagnostics_header   &
-                       (mod_name, diag_units(nn), Time, nn, diag_lon, &
-                        diag_lat, diag_i, diag_j) 
-                  iz0 = source_level (diag_i(nn), j)
-                  write (diag_units(nn),'(a, i5)')    &
-                                              '  source_level  =', iz0
-                  write (diag_units(nn),'(a)')     &
-                         '   k         u           z        density&
-		         &         bf      gwforcing'
-                  do k=0,iz0 
-                    write (diag_units(nn), '(i5, 2x, 5e12.5)')   &
-                                       k,                         &
-                                       zu       (diag_i(nn),j,k), &
-                                       zzchm    (diag_i(nn),j,k), &
-                                       zden     (diag_i(nn),j,k), &
-                                       zbf      (diag_i(nn),j,k), &
-                                       gwd_xtnd (diag_i(nn),j,k) 
-                  end do
-                  write (diag_units(nn), '(i5, 14x, 2e12.5)')     &
-                                       iz0+1,                       &
-                                       zzchm  (diag_i(nn),j,iz0+1), &
-                                       zden   (diag_i(nn),j,iz0+1)
-                endif
-              end do  ! (nn loop)
-            endif    ! (do_column_diagnostics)
-          end do   ! (j loop)
-        endif    ! (column_diagnostics_desired)
-#endif
-
 !--------------------------------------------------------------------
 !    if activated, store the effective eddy diffusivity into a 
 !    processor-global array, and if desired as a netcdf diagnostic, 
@@ -834,6 +796,9 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
             used = send_data (id_kedy_cgwd, ked_gwfc_y, Time)
           endif
 
+          if (id_source_level > 0) then
+            used = send_data (id_source_level, real(source_level), Time)            
+          endif
 
 
 !--------------------------------------------------------------------
@@ -859,9 +824,12 @@ real, dimension(:,:,:), intent(out)     :: gwfcng_x, gwfcng_y
 !    and return to the calling subroutine.
 !--------------------------------------------------------------------
       else   ! (cgdrag_alarm <= 0)
+      write(6,*) 'cg drag not recalculated'
         gwfcng_x(:,:,:) = gwd_u(is:ie,js:je,:)
         gwfcng_y(:,:,:) = gwd_v(is:ie,js:je,:)
      endif  ! (cgdrag_alarm <= 0)
+
+!     write(6,*) gwfcng_x(1,5,1), 'inside', mpp_pe(), size(gwfcng_x,3)
 
 !--------------------------------------------------------------------
 ! mj now update the alarm clock, for control over how often cg_drag

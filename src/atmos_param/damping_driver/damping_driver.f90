@@ -265,16 +265,19 @@ contains
 !mj updating call to riga version of cg_drag
       !call cg_drag_calc (is, js, lat, pfull, zfull, t, u, Time,    &
       !                  delt, utnd)
+      
       call cg_drag_calc (is, js, lat, pfull, zfull, t, u, v, Time, delt, utnd, vtnd)
      udt =  udt + utnd
      vdt =  vdt + vtnd !mj
 
 !----- diagnostics -----
 
+!     write(6,*) utnd(1,5,1), 'outside', mpp_pe(), size(utnd,3)
+
      if ( id_udt_cgwd > 0 ) then
 !        used = send_data ( id_udt_cgwd, utnd, Time, is, js, 1, &
 !                          rmask=mask )
-        used = send_data ( id_udt_cgwd, utnd, Time, rmask=mask )
+        used = send_data ( id_udt_cgwd, utnd, Time)
      endif
  
    endif
@@ -369,7 +372,7 @@ contains
  subroutine damping_driver_init ( lonb, latb, pref, axes, Time, sgsmtn)
 
  real,            intent(in) :: lonb(:), latb(:), pref(:)
- integer,         intent(in) :: axes(4)
+ integer, dimension(4), intent(in) :: axes
  type(time_type), intent(in) :: Time
  real, dimension(:,:), intent(out) :: sgsmtn
 !-----------------------------------------------------------------------
