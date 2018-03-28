@@ -105,7 +105,7 @@ character(len=128), parameter :: tagname = '$Name: siena_201211 $'
 !===============================================================================================
 ! variables needed for diagnostics
 integer :: id_ps, id_u, id_v, id_t, id_vor, id_div, id_omega, id_wspd, id_slp
-integer :: id_pres_full, id_pres_half, id_zfull, id_zhalf, id_vort_norm, id_EKE
+integer :: id_pres_full, id_pres_half, id_zfull, id_zhalf, id_vort_norm, id_EKE, id_EKE_three
 integer :: id_uu, id_vv, id_tt, id_omega_omega, id_uv, id_omega_t, id_vw, id_uw, id_ut, id_vt, id_v_vor
 integer, allocatable, dimension(:) :: id_tr, id_utr, id_vtr, id_wtr !extra advection diags added by RG
 real :: gamma, expf, expf_inverse
@@ -1693,6 +1693,8 @@ enddo
 
 id_vort_norm = register_diag_field(mod_name, 'vort_norm', Time, 'vorticity norm', '1/(m*sec)')
 id_EKE       = register_diag_field(mod_name, 'EKE', Time, 'eddy kinetic energy', 'J/m^2')
+id_EKE_three       = register_diag_field(mod_name, 'EKE_threed', axes_3d_full, Time, '3d eddy kinetic energy','J/m^2')
+
 
 return
 end subroutine spectral_diagnostics_init
@@ -1705,7 +1707,7 @@ real, intent(in), dimension(is:, js:, :)       :: u_grid, v_grid, t_grid, wg_ful
 real, intent(in), dimension(is:, js:, :, :, :) :: tr_grid
 integer, intent(in) :: time_level
 
-real, dimension(is:ie, js:je, num_levels)    :: ln_p_full, p_full, z_full, worka3d, workb3d
+real, dimension(is:ie, js:je, num_levels)    :: ln_p_full, p_full, z_full, worka3d, workb3d, eke_threed
 real, dimension(is:ie, js:je, num_levels+1)  :: ln_p_half, p_half, z_half
 real, dimension(is:ie, js:je)                :: t_low, slp, worka2d, workb2d
 complex, dimension(ms:me, ns:ne, num_levels) :: vor_spec, div_spec
@@ -1840,6 +1842,17 @@ if(id_EKE > 0) then
   call uv_grid_from_vor_div(vor_spec, div_spec, worka3d, workb3d)
   EKE = mass_weighted_global_integral(.5*(worka3d**2 + workb3d**2), p_surf)
   used = send_data(id_EKE, EKE, Time)
+endif
+
+if(id_EKE_three > 0) then
+  call vor_div_from_uv_grid(u_grid, v_grid, vor_spec, div_spec, triang=triang_trunc)
+  if(ms == 0) then
+    vor_spec(0,:,:) = cmplx(0.0,0.0)
+    div_spec(0,:,:) = cmplx(0.0,0.0)
+  endif
+  call uv_grid_from_vor_div(vor_spec, div_spec, worka3d, workb3d)
+  eke_threed = .5*(worka3d**2 + workb3d**2)
+  used = send_data(id_EKE_three, eke_threed, Time)
 endif
 
 return
