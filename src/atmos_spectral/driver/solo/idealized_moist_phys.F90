@@ -97,6 +97,7 @@ integer, parameter :: UNSET = -1,                & !! are NONE, SIMPLE_BETTS_MIL
                       
 integer :: r_conv_scheme = UNSET  ! the selected convection scheme
 integer :: r_conv_scheme_2 = UNSET  ! the selected convection scheme
+integer :: num_conv_schemes_to_run = 1 ! Number of times the convection scheme part of the code is looped over per timestep. Using 1 means only 1 convection scheme is run. Using 2 will mean both r_conv_scheme and r_conv_scheme_2 are run per timestep. 
 
 integer, dimension(2) :: r_conv_scheme_array
 
@@ -383,6 +384,7 @@ else if(uppercase(trim(convection_scheme)) == 'DRY') then
 else if(uppercase(trim(convection_scheme)) == 'SIMPLE_BETTS_MILLER_AND_DRY') then
   r_conv_scheme = SIMPLE_BETTS_CONV
   r_conv_scheme_2 = DRY_CONV
+  num_conv_schemes_to_run = 2
   call error_mesg('idealized_moist_phys','Using Frierson Quasi-Equilibrium convection scheme and dry convection schemes together.', NOTE)
   lwet_convection = .true.
   do_bm           = .false.
@@ -822,7 +824,8 @@ cape_dry = 0.0; cape=0.0; cin_dry=0.0; cin=0.0
 tg_tmp = tg(:,:,:,previous)
 qg_tmp = grid_tracers(:,:,:,previous,nsphum)
 
-do i_conv=1,2
+do i_conv=1, num_conv_schemes_to_run
+
     select case(r_conv_scheme_array(i_conv))
 
     case(SIMPLE_BETTS_CONV)
