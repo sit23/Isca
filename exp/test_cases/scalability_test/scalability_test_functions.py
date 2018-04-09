@@ -1,8 +1,9 @@
 import xarray as xar
 import sys
 import os
-from isca import Experiment, IscaCodeBase, FailedRunError, GFDL_BASE, DiagTable
+from isca import Experiment, IscaCodeBase, GreyCodeBase, FailedRunError, GFDL_BASE, DiagTable
 from isca.util import exp_progress
+import matplotlib.pyplot as plt
 import time
 import pdb
 
@@ -10,13 +11,20 @@ sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/trip_test/'))
 from trip_test_functions import get_nml_diag, define_simple_diag_table
 
 test_case_name='frierson'
-list_of_num_procs = [8,16,32]
+list_of_num_procs = [4, 8,16,32]
 num_months=2
 repo_to_use='git@github.com:execlim/Isca'
 resolutions_to_check = ['T42', 'T85']
+do_output = True
 
 nml_use, input_files_use  = get_nml_diag(test_case_name)
-diag_use = define_simple_diag_table()
+if do_output:
+    diag_use = define_simple_diag_table()
+    exp_name_diag=''
+else:
+    diag_use = DiagTable()
+    exp_name_diag='_no_output'
+    
 test_pass = True
 run_complete = True
 
@@ -31,7 +39,7 @@ for resolution in resolutions_to_check:
     delta_t_arr={}
 
     for num_procs in list_of_num_procs:
-        exp_name = test_case_name+'_scalability_test_'+str(num_procs)+'_'+resolution
+        exp_name = test_case_name+'_scalability_test_'+str(num_procs)+'_'+resolution+exp_name_diag
         exp = Experiment(exp_name, codebase=cb)
         exp.namelist = nml_use.copy()
         exp.diag_table = diag_use
@@ -59,5 +67,17 @@ for resolution in resolutions_to_check:
             test_pass = False
             continue
         end_time = time.time()
-        delta_t_arr[num_procs] = end_time-start_time
+        delta_t_arr[num_procs] = (end_time-start_time)/(((num_months+1)-2)* exp.namelist['main_nml']['days'])
     res_dict[resolution] = delta_t_arr
+    
+    
+for resolution in resolutions_to_check:
+    time_dict = res_dict[resolution]
+    x_values = list(time_dict.keys())
+    y_values = list(time_dict.values())
+    
+    y_values_scaled = [y_values[0]/entry for entry in y_values]
+    
+    plt.plot(x_values, y_values_scaled, label=resolution)
+
+plt.legend()
