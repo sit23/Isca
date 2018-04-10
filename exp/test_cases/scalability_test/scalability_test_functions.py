@@ -10,74 +10,140 @@ import pdb
 sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/trip_test/'))
 from trip_test_functions import get_nml_diag, define_simple_diag_table
 
-test_case_name='frierson'
-list_of_num_procs = [4, 8,16,32]
-num_months=2
-repo_to_use='git@github.com:execlim/Isca'
-resolutions_to_check = ['T42', 'T85']
-do_output = True
+def     run_scalability_test(test_case_name='frierson', list_of_num_procs=[4,8], resolutions_to_check=['T42', 'T85'], num_days=3, repo_to_use='git@github.com:execlim/Isca', commit_id ='5868cfd'):
 
-nml_use, input_files_use  = get_nml_diag(test_case_name)
-if do_output:
+    nml_use, input_files_use  = get_nml_diag(test_case_name)
     diag_use = define_simple_diag_table()
-    exp_name_diag=''
-else:
-    diag_use = DiagTable()
-    exp_name_diag='_no_output'
     
-test_pass = True
-run_complete = True
+    test_pass = True
+    run_complete = True
 
-#Do the run for each of the commits in turn
-s='5868cfd'
-cb = GreyCodeBase(repo=repo_to_use, commit=s)
-cb.compile()
+    #Do the run for each of the commits in turn
+    cb = GreyCodeBase(repo=repo_to_use, commit=commit_id)
+    cb.compile()
 
-res_dict={}
+    res_dict_per_day={}
+    restart_file_write_time = {}
+    total_time_arr = {}
 
-for resolution in resolutions_to_check:
-    delta_t_arr={}
+    for resolution in resolutions_to_check:
+        delta_t_arr_1={}
+        delta_t_arr_2={}    
+        compute_time_per_day_arr={}
+        other_time = {}
+        total_time = {}
+    
 
-    for num_procs in list_of_num_procs:
-        exp_name = test_case_name+'_scalability_test_'+str(num_procs)+'_'+resolution+exp_name_diag
-        exp = Experiment(exp_name, codebase=cb)
-        exp.namelist = nml_use.copy()
-        exp.diag_table = diag_use
-        exp.inputfiles = input_files_use
 
-        exp.set_resolution(resolution)
+        for num_procs in list_of_num_procs:
+            exp_name = test_case_name+'_scalability_test_'+str(num_procs)+'_'+resolution
+            exp = Experiment(exp_name, codebase=cb)
+            exp.namelist = nml_use.copy()
+            exp.diag_table = diag_use
+            exp.inputfiles = input_files_use
 
-        #Only run for 3 days to keep things short.
-        exp.update_namelist({
-        'main_nml': {
-        'days': 3,
-        }})
+            exp.set_resolution(resolution)
 
-        try:
-            # run with a progress bar
-            with exp_progress(exp, description=str(num_procs)) as pbar:
-                exp.run(1, use_restart=False, num_cores=num_procs, overwrite_data=True)
-            start_time = time.time()
-            for i in range(2,num_months+1):
+            #Only run for 3 days to keep things short.
+            exp.update_namelist({
+            'main_nml': {
+            'days':num_days,
+            }})
+
+            try:
+                # run with a progress bar
+                with exp_progress(exp, description=str(num_procs)) as pbar:
+                    exp.run(1, use_restart=False, num_cores=num_procs, overwrite_data=True)
+                start_time = time.time()
                 with exp_progress(exp, description=str(num_procs)) as pbar:        
-                    ste = exp.run(i, num_cores=num_procs, overwrite_data=True)                                    
-        except FailedRunError as e:
-            #If run fails then test automatically fails
-            run_complete = False
-            test_pass = False
-            continue
-        end_time = time.time()
-        delta_t_arr[num_procs] = (end_time-start_time)/(((num_months+1)-2)* exp.namelist['main_nml']['days'])
-    res_dict[resolution] = delta_t_arr
-    
-    
-for resolution in resolutions_to_check:
-    time_dict = res_dict[resolution]
-    x_values = list(time_dict.keys())
-    y_values = list(time_dict.values())
-    
-    y_values_scaled = [y_values[0]/entry for entry in y_values]
-    
-    plt.plot(x_values, y_values_scaled, label=resolution)
+                    ste = exp.run(2, num_cores=num_procs, overwrite_data=True)                                    
+                end_time_1_iteration = time.time()
+                exp.update_namelist({
+                'main_nml': {
+                'days': num_days*2,
+                }})
+                start_time_2_iteration = time.time()
+                with exp_progress(exp, description=str(num_procs)) as pbar:        
+                    ste = exp.run(3, num_cores=num_procs, overwrite_data=True)                                                
+                end_time_2_iteration = time.time()
+            
+            except FailedRunError as e:
+                #If run fails then test automatically fails
+                run_complete = False
+                test_pass = False
+                continue
+            delta_t_arr_1[num_procs] = (end_time_1_iteration-start_time)
+            delta_t_arr_2[num_procs] = (end_time_2_iteration-start_time_2_iteration)
+        
+            compute_time_per_day_arr[num_procs] = (delta_t_arr_2[num_procs]-delta_t_arr_1[num_procs]) / (0.5 * exp.namelist['main_nml']['days'])
+        
+            other_time[num_procs] = delta_t_arr_1[num_procs] - (compute_time_per_day_arr[num_procs] * (0.5 * exp.namelist['main_nml']['days']))
+        
+            total_time[num_procs] = delta_t_arr_2[num_procs]/ exp.namelist['main_nml']['days']
+                
+        res_dict_per_day[resolution] = compute_time_per_day_arr
+        restart_file_write_time[resolution] = other_time
+        total_time_arr[resolution] = total_time
 
-plt.legend()
+    return res_dict_per_day, restart_file_write_time, total_time_arr
+
+def create_output(linr_compute_time, linr_write_time, total_time):
+    
+    for resolution in resolutions_to_check:
+        time_dict = res_dict_per_day[resolution]
+        x_values = list(time_dict.keys())
+        y_values = list(time_dict.values())
+    
+        y_values_scaled = [y_values[0]/entry for entry in y_values]
+    
+        plt.plot(x_values, y_values_scaled, label=resolution)
+
+    theoretical_perfect = [entry/x_values[0] for entry in x_values]
+    plt.plot(x_values, theoretical_perfect, label='Perfect scaling')
+    plt.title('Time per iteration, including output writing but excluding restart-file time (linr calc)')
+    plt.xlabel('# of cores')
+    plt.ylabel('Number of times faster than case with fewest number of cores')
+
+    plt.legend()
+
+    plt.figure()
+    for resolution in resolutions_to_check:
+        time_dict = total_time_arr[resolution]
+        x_values = list(time_dict.keys())
+        y_values = list(time_dict.values())
+    
+        y_values_scaled = [y_values[0]/entry for entry in y_values]
+    
+        plt.plot(x_values, y_values_scaled, label=resolution)
+
+    theoretical_perfect = [entry/x_values[0] for entry in x_values]
+    plt.plot(x_values, theoretical_perfect, label='Perfect scaling')
+    plt.title('Total Time per iteration, including output writing and restart-file time')
+    plt.xlabel('# of cores')
+    plt.ylabel('Number of times faster than case with fewest number of cores')
+
+    plt.legend()
+
+    plt.figure()
+    for resolution in resolutions_to_check:
+        time_dict = restart_file_write_time[resolution]
+        x_values = list(time_dict.keys())
+        y_values = list(time_dict.values())
+    
+        y_values_scaled = [y_values[0]/entry for entry in y_values]
+    
+        plt.plot(x_values, y_values_scaled, label=resolution)
+    plt.legend()
+    plt.title('Day-number independent part of run time (linr calc)')
+    plt.xlabel('# of cores')
+    plt.ylabel('Number of times faster than case with fewest number of cores')
+
+
+if __name__=="__main__":
+    test_case_name='held_suarez'
+    list_of_num_procs = [4, 8, 16,32]
+    num_days=3
+    resolutions_to_check = ['T42', 'T85']
+
+    linr_compute_time, linr_write_time, total_time = run_scalability_test(test_case_name, list_of_num_procs, resolutions_to_check, num_days)
+    create_output(linr_compute_time, linr_write_time, total_time)
