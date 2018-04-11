@@ -139,7 +139,7 @@ private
 
    real, allocatable, dimension(:,:) :: tg_prev
 
-   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping, id_mars_solar_long
+   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping, id_mars_solar_long, id_incoming_sw
    real    :: missing_value = -1.e10
    real    :: xwidth, ywidth, xcenter, ycenter ! namelist values converted from degrees to radians
    real    :: srfamp ! local_heating_srfamp converted from deg/day to deg/sec
@@ -447,7 +447,14 @@ contains
                       missing_value=missing_value, range=(/0.,200./) )
       id_t_grnd = register_diag_field ( mod_name, 't_grnd', axes(1:2), Time, &
                       'surface temperature from top-down newt-relax', '(deg K)'   , &
-                      missing_value=missing_value, range=(/0.,400./) )                      
+                      missing_value=missing_value, range=(/0.,400./) )           
+                      
+      id_mars_solar_long = register_diag_field ( mod_name, 'mars_solar_long', &
+                   Time, 'Martian solar longitude', 'deg')                                 
+
+      id_incoming_sw = register_diag_field ( mod_name, 'incoming_sw', axes(1:2), &
+                   Time, 'Incoming short-wave flux', 'deg')
+                   
       endif
 
       id_newtonian_damping = register_diag_field ( mod_name, 'tdt_ndamp', axes(1:3), Time, &
@@ -480,10 +487,6 @@ contains
          id_diss_heat = register_diag_field ( mod_name, 'diss_heat_rdamp', axes(1:2), &
                    Time, 'Vertically integrated dissipative heating from Rayleigh damping (W/m2)', 'W/m2')
       endif
-
-     id_mars_solar_long = register_diag_field ( mod_name, 'mars_solar_long', &
-                   Time, 'Martian solar longitude', 'deg')
-
 
      if(trim(local_heating_option) == 'from_file') then
        call interpolator_init(heating_source_interp, trim(local_heating_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
@@ -984,6 +987,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
         call calc_hour_angle(lat, dec, hour_angle)
 
         s(:,:) = solar_const/pi*(hour_angle*sin_lat*sin(dec) + cos_lat*cos(dec)*sin(hour_angle))
+
+        if (id_incoming_sw > 0) used = send_data ( id_incoming_sw, s, Time)
 
     else
 
