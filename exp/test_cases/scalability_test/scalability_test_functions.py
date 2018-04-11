@@ -85,58 +85,84 @@ def     run_scalability_test(test_case_name='frierson', list_of_num_procs=[4,8],
         restart_file_write_time[resolution] = other_time
         total_time_arr[resolution] = total_time
 
-    return res_dict_per_day, restart_file_write_time, total_time_arr
+    return res_dict_per_day, restart_file_write_time, total_time_arr, commit_id
 
-def create_output(linr_compute_time, linr_write_time, total_time):
+def create_output_folder(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used):
+
+    GFDL_BASE_DIR = os.environ['GFDL_BASE']
+    
+    list_procs_str=[str(num) for num in list_of_num_procs]
+    num_procs_str = '_'.join(list_procs_str)
+    num_days=str(num_days)+'_days'
+    res_str = '_'.join(resolutions_to_check)
+    
+    
+    extra_dir = 'output_plots/'+test_case_name+'/'+'procs_'+num_procs_str+'_'+res_str+'_'+num_days+'_commit_'+commit_id_used
+    directory = GFDL_BASE_DIR + '/exp/test_cases/scalability_test/'+extra_dir
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    return directory
+
+def create_output(linr_compute_time, linr_write_time, total_time, test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used):
+    
+    out_dir = create_output_folder(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used)
     
     for resolution in resolutions_to_check:
-        time_dict = res_dict_per_day[resolution]
+        time_dict = linr_compute_time[resolution]
         x_values = list(time_dict.keys())
         y_values = list(time_dict.values())
     
         y_values_scaled = [y_values[0]/entry for entry in y_values]
     
-        plt.plot(x_values, y_values_scaled, label=resolution)
+        plt.plot(x_values, y_values_scaled, label=resolution, marker='x')
 
     theoretical_perfect = [entry/x_values[0] for entry in x_values]
-    plt.plot(x_values, theoretical_perfect, label='Perfect scaling')
-    plt.title('Time per iteration, including output writing but excluding restart-file time (linr calc)')
+    plt.plot(x_values, theoretical_perfect, label='Perfect scaling', marker='x')
+    plt.title('Time per iteration, including output writing\nbut excluding restart-file time (linr calc)')
     plt.xlabel('# of cores')
-    plt.ylabel('Number of times faster than case with fewest number of cores')
+    plt.ylabel('Number of times faster than case with\nfewest number of cores')
 
     plt.legend()
 
+    plt.savefig(out_dir+'/linr_times_per_iteration.pdf')
+
     plt.figure()
     for resolution in resolutions_to_check:
-        time_dict = total_time_arr[resolution]
+        time_dict = total_time[resolution]
         x_values = list(time_dict.keys())
         y_values = list(time_dict.values())
     
         y_values_scaled = [y_values[0]/entry for entry in y_values]
     
-        plt.plot(x_values, y_values_scaled, label=resolution)
+        plt.plot(x_values, y_values_scaled, label=resolution, marker='x')
 
     theoretical_perfect = [entry/x_values[0] for entry in x_values]
-    plt.plot(x_values, theoretical_perfect, label='Perfect scaling')
+    plt.plot(x_values, theoretical_perfect, label='Perfect scaling', marker='x')
     plt.title('Total Time per iteration, including output writing and restart-file time')
     plt.xlabel('# of cores')
-    plt.ylabel('Number of times faster than case with fewest number of cores')
+    plt.ylabel('Number of times faster than case with\nfewest number of cores')
 
     plt.legend()
 
+    plt.savefig(out_dir+'/total_times_per_iteration.pdf')
+
     plt.figure()
     for resolution in resolutions_to_check:
-        time_dict = restart_file_write_time[resolution]
+        time_dict = linr_write_time[resolution]
         x_values = list(time_dict.keys())
         y_values = list(time_dict.values())
     
         y_values_scaled = [y_values[0]/entry for entry in y_values]
     
-        plt.plot(x_values, y_values_scaled, label=resolution)
+        plt.plot(x_values, y_values_scaled, label=resolution, marker='x')
     plt.legend()
     plt.title('Day-number independent part of run time (linr calc)')
     plt.xlabel('# of cores')
-    plt.ylabel('Number of times faster than case with fewest number of cores')
+    plt.ylabel('Number of times faster than case with\nfewest number of cores')
+
+    plt.savefig(out_dir+'/linr_times_that_dont_scale_with_day_number.pdf')
 
 
 if __name__=="__main__":
@@ -145,5 +171,5 @@ if __name__=="__main__":
     num_days=3
     resolutions_to_check = ['T42', 'T85']
 
-    linr_compute_time, linr_write_time, total_time = run_scalability_test(test_case_name, list_of_num_procs, resolutions_to_check, num_days)
-    create_output(linr_compute_time, linr_write_time, total_time)
+    linr_compute_time, linr_write_time, total_time, commit_id_used= run_scalability_test(test_case_name, list_of_num_procs, resolutions_to_check, num_days)
+    create_output(linr_compute_time, linr_write_time, total_time, test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used)
