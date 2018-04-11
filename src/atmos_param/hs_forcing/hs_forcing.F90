@@ -139,7 +139,7 @@ private
 
    real, allocatable, dimension(:,:) :: tg_prev
 
-   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping
+   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping, id_mars_solar_long
    real    :: missing_value = -1.e10
    real    :: xwidth, ywidth, xcenter, ycenter ! namelist values converted from degrees to radians
    real    :: srfamp ! local_heating_srfamp converted from deg/day to deg/sec
@@ -303,7 +303,7 @@ contains
 
    real, dimension(size(lat,1),size(lat,2)) :: s, t_radbal, t_trop, h_trop, t_surf, hour_angle, tg, p2, sin_lat, sin_lat_2, olr
    integer :: spin_count, seconds, days, dt_integer
-   real :: dec, orb_dist, step_days
+   real :: dec, orb_dist, step_days, true_anomaly
    integer :: is, ie, js, je
 
 
@@ -363,7 +363,7 @@ contains
 		spin_count = spin_count + 1
 
         if (calculate_insolation_from_orbit) then
-            call update_orbit(dt_integer, dec, orb_dist)
+            call update_orbit(dt_integer, dec, orb_dist, true_anomaly)
             call calc_hour_angle(lat, dec, hour_angle)
             s(:,:) = solar_const/pi*(hour_angle*sin(lat)*sin(dec) + cos(lat)*cos(dec)*sin(hour_angle))
         else
@@ -480,6 +480,10 @@ contains
          id_diss_heat = register_diag_field ( mod_name, 'diss_heat_rdamp', axes(1:2), &
                    Time, 'Vertically integrated dissipative heating from Rayleigh damping (W/m2)', 'W/m2')
       endif
+
+     id_mars_solar_long = register_diag_field ( mod_name, 'mars_solar_long', &
+                   Time, 'Martian solar longitude', 'deg')
+
 
      if(trim(local_heating_option) == 'from_file') then
        call interpolator_init(heating_source_interp, trim(local_heating_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
@@ -849,12 +853,12 @@ end subroutine get_zonal_mean_temp
 !#######################################################################
 !#######################################################################
 
-subroutine update_orbit(current_time, dec, orb_dist)
+subroutine update_orbit(current_time, dec, orb_dist, true_anomaly)
 
 integer, intent(in)					:: current_time
-real, intent(out)					:: dec, orb_dist
+real, intent(out)					:: dec, orb_dist, true_anomaly
 
-real :: theta, mean_anomaly, ecc_anomaly, true_anomaly
+real :: theta, mean_anomaly, ecc_anomaly
 
 
 	mean_anomaly = 2*pi/(orbital_period*86400)*(current_time-peri_time*orbital_period*86400)
@@ -949,7 +953,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
        real :: rrsun
 
        integer :: k, i, j
-       real    :: tcoeff, pref,  dec, orb_dist
+       real    :: tcoeff, pref,  dec, orb_dist, true_anomaly
        integer :: days, seconds, dt_integer
 
 
@@ -973,9 +977,10 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
     if (calculate_insolation_from_orbit) then
     
-        call update_orbit(dt_integer, dec, orb_dist)
-
-
+        call update_orbit(dt_integer, dec, orb_dist, true_anomaly)
+        
+        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo(true_anomaly-((180./pi)*1.905637),360.), Time)
+        
         call calc_hour_angle(lat, dec, hour_angle)
 
         s(:,:) = solar_const/pi*(hour_angle*sin_lat*sin(dec) + cos_lat*cos(dec)*sin(hour_angle))
