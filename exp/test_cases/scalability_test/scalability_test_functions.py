@@ -44,20 +44,33 @@ def     run_scalability_test(test_case_name='frierson', list_of_num_procs=[4,8],
 
             exp.set_resolution(resolution)
 
-            #Only run for 3 days to keep things short.
+            exp.update_namelist({
+            'fms_nml': {
+            'domains_stack_size':2000000,
+            }})
+
+            #Run first 'month' for one day, to make sure run that has its time measured has restarting involved.
             exp.update_namelist({
             'main_nml': {
-            'days':num_days,
+            'days':1,
             }})
+
 
             try:
                 # run with a progress bar
                 with exp_progress(exp, description=str(num_procs)) as pbar:
                     exp.run(1, use_restart=False, num_cores=num_procs, overwrite_data=True)
+                    
+                exp.update_namelist({
+                'main_nml': {
+                'days':num_days,
+                }})                    
+                
                 start_time = time.time()
                 with exp_progress(exp, description=str(num_procs)) as pbar:        
                     ste = exp.run(2, num_cores=num_procs, overwrite_data=True)                                    
                 end_time_1_iteration = time.time()
+                
                 exp.update_namelist({
                 'main_nml': {
                 'days': num_days*2,
@@ -120,7 +133,7 @@ def create_output(linr_compute_time, linr_write_time, total_time, test_case_name
 
     theoretical_perfect = [entry/x_values[0] for entry in x_values]
     plt.plot(x_values, theoretical_perfect, label='Perfect scaling', marker='x')
-    plt.title('Time per iteration, including output writing\nbut excluding restart-file time (linr calc)')
+    plt.title('Time per iteration for '+test_case_name+' including output writing\nbut excluding restart-file time (linr calc)')
     plt.xlabel('# of cores')
     plt.ylabel('Number of times faster than case with\nfewest number of cores')
 
@@ -140,7 +153,7 @@ def create_output(linr_compute_time, linr_write_time, total_time, test_case_name
 
     theoretical_perfect = [entry/x_values[0] for entry in x_values]
     plt.plot(x_values, theoretical_perfect, label='Perfect scaling', marker='x')
-    plt.title('Total Time per iteration, including output writing and restart-file time')
+    plt.title('Time per iteration for '+test_case_name+'\nincluding output writing and restart-file time')
     plt.xlabel('# of cores')
     plt.ylabel('Number of times faster than case with\nfewest number of cores')
 
@@ -158,7 +171,7 @@ def create_output(linr_compute_time, linr_write_time, total_time, test_case_name
     
         plt.plot(x_values, y_values_scaled, label=resolution, marker='x')
     plt.legend()
-    plt.title('Day-number independent part of run time (linr calc)')
+    plt.title('Day-number independent part of run time for '+test_case_name+' (linr calc)')
     plt.xlabel('# of cores')
     plt.ylabel('Number of times faster than case with\nfewest number of cores')
 
@@ -167,9 +180,9 @@ def create_output(linr_compute_time, linr_write_time, total_time, test_case_name
 
 if __name__=="__main__":
     test_case_name='held_suarez'
-    list_of_num_procs = [4, 8, 16,32]
-    num_days=3
-    resolutions_to_check = ['T42', 'T85']
+    list_of_num_procs = [4,8,16,32]
+    num_days=15
+    resolutions_to_check = ['T42', 'T85', 'T170']
 
     linr_compute_time, linr_write_time, total_time, commit_id_used= run_scalability_test(test_case_name, list_of_num_procs, resolutions_to_check, num_days)
     create_output(linr_compute_time, linr_write_time, total_time, test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used)
