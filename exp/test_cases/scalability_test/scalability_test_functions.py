@@ -22,7 +22,7 @@ def     run_scalability_test(test_case_name='frierson', list_of_num_procs=[4,8],
     run_complete = True
 
     #Do the run for each of the commits in turn
-    cb = GreyCodeBase(repo=repo_to_use, commit=commit_id)
+    cb = IscaCodeBase(repo=repo_to_use, commit=commit_id)
     cb.compile()
 
     res_dict_per_day={}
