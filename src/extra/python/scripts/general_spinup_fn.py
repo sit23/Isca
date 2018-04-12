@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
-from cell_area import cell_area
+from cell_area import cell_area_from_xar
 import pdb
 import os
 
@@ -14,16 +14,16 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
 
     #personalise
     #model directory
-    model_dir = '/scratch/sit204/Isca/'
+    model_dir = os.environ['GFDL_BASE']
     #data directory
     if data_dir_type=='isca':
-        data_dir = '/scratch/sit204/data_isca/'
+        data_dir = os.environ['GFDL_DATA']
     elif data_dir_type == 'isca_cpu':
         data_dir = '/scratch/sit204/data_from_isca_cpu/'
     else:
         data_dir = '/scratch/sit204/Data_2013/'    
     #file name
-    file_name='atmos_monthly.nc'
+    file_name='atmos_9monthly.nc'
     #time-resolution of plotting
     group='months'
     scaling=1.
@@ -58,8 +58,7 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
     rundata = xr.open_dataset(names[0],
                  decode_times=False)  # no calendar so tell netcdf lib
 
-
-    area = cell_area(t_resolution, model_dir)
+    area, x, y = cell_area_from_xar(rundata)
     area_xr = xr.DataArray(area, [('lat', rundata.lat ), ('lon', rundata.lon)])
     dp = xr.DataArray( np.diff(rundata.phalf), [('pfull',rundata.pfull) ])
 
@@ -74,6 +73,8 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
 
     rundata.coords['months'] = time_arr // 30 + 1
     rundata.coords['years'] = ((time_arr // 360) +1)*scaling - 6.
+
+    pdb.set_trace()
 
     q_yr = (rundata[var_to_integrate]**power).groupby(group).mean(('time'))
 
@@ -110,21 +111,21 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
 
 if __name__ == "__main__":
 
-    start_month_offset=[0,0, 0, 0, 0, 0, 0]
+    start_month_offset=[0,]
     
-    exp_list = ['bog_fixed_sst_control_experiment_outside', 'bog_qflux_control_experiment_outside', 'annual_mean_ice_post_princeton_fixed_sst_1', 'bog_qflux_control_experiment_outside_1', 'bog_fixed_sst_control_experiment_outside_isca_bog_a', 'bog_qflux_control_experiment_outside_10', 'bog_qflux_control_experiment_outside_8']
+    exp_list = ['schneider_liu_repro_schn_liu_zero_drag']
 
-    label_arr = ['fixed sst bog', 'qflux bog', 'fixed sst rrtm', 'qflux isca bog_a', 'fixed sst isca bog_a', 'qflux isca 0.1', 'qflux isca 0.08']
+    label_arr = ['zero_eq_drag',]
 
-    res_arr = [42, 42, 42, 42, 42, 42, 42]
+    res_arr = [213, ]
 
-    data_type_arr = ['isca_cpu', 'isca_cpu', '2013', 'isca', 'isca_cpu', 'isca', 'isca']
+    data_type_arr = ['isca']
 
     exp_name=exp_list
 
     #number of years to read
-    start_month_arr=[1, 1, 1, 1, 1, 1, 1]
-    end_month_arr=[360, 76, 360, 359, 360, 359, 359]
+    start_month_arr=[1, ]
+    end_month_arr=[34, ]
 
     len_list=[len(start_month_offset), len(exp_list), len(label_arr), len(start_month_arr), len(end_month_arr), len(res_arr), len(data_type_arr)]
 
@@ -132,15 +133,15 @@ if __name__ == "__main__":
         raise IndexError("Input arrays to routine are not all the same length")
 
 
-    variable_to_integrate='t_surf'
-    power_to_scale_variable_by=1.
+    variable_to_integrate='ucomp'
+    power_to_scale_variable_by=2.
 
     plt.figure()
 
     for exp_number in exp_list:
         #set run name
         run_fol = str(exp_number)
-        plt_dir = '/scratch/sit204/plots/exps/'+run_fol
+        plt_dir = os.environ['GFDL_BASE'].replace('/Isca/', '/plots/exps/')+run_fol
         if not os.path.exists(plt_dir):
             os.makedirs(plt_dir)
         idx=exp_list.index(exp_number)

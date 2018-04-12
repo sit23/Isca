@@ -12,6 +12,7 @@ import copy_netcdf_attrs as cna
 import tempfile
 import shutil
 import os
+import tarfile
 
 def linear_interpolate_for_regrid(lon_list_in_grid, lat_list_in_grid, lon_list_out_grid, lat_list_out_grid, input_array):
 
@@ -152,6 +153,33 @@ def join_into_cpio(atmosphere_file_name='./atmosphere.res.nc', spectral_dynamics
     shutil.move(temp_folder_name+'/spectral_dynamics.res.nc', spectral_dynamics_file_name)    
 
     shutil.rmtree(temp_folder_name)
+
+def join_into_tar(atmosphere_file_name='./atmosphere.res.nc', spectral_dynamics_file_name='./spectral_dynamics.res.nc', atmos_model_file_name='./atmos_model.res', restart_file_out_name='./res_mod'):
+
+    temp_folder_name = tempfile.mkdtemp()    
+    
+    shutil.move(atmosphere_file_name, temp_folder_name+'/atmosphere.res.nc')
+    shutil.move(spectral_dynamics_file_name, temp_folder_name+'/spectral_dynamics.res.nc')    
+    shutil.copyfile(atmos_model_file_name, temp_folder_name+'/atmos_model.res')
+
+    state_files_out = ['atmosphere.res.nc', 'spectral_dynamics.res.nc', 'atmos_model.res']
+
+    cwd = os.getcwd()
+    
+    os.chdir(temp_folder_name) #s have to move to temporary folder as cpio cannot cope with absolute file references, as otherwise when you delete the temporary folder, cpio will go looking for the temporary folder when it's extracted.
+  
+    with tarfile.open(restart_file_out_name, 'w:gz') as tar:
+        tar.add(temp_folder_name, arcname='.')      
+#     sh.cpio('-ov', _in='\n'.join(state_files_out), _out=restart_file_out_name)
+
+    shutil.move(restart_file_out_name, cwd)    
+
+    os.chdir(cwd)
+
+    shutil.move(temp_folder_name+'/atmosphere.res.nc', atmosphere_file_name)
+    shutil.move(temp_folder_name+'/spectral_dynamics.res.nc', spectral_dynamics_file_name)    
+
+    shutil.rmtree(temp_folder_name)
     
 def remove_fill_value_attribute(in_file_name, out_file_name):
 
@@ -163,17 +191,18 @@ def remove_fill_value_attribute(in_file_name, out_file_name):
 if __name__=="__main__":
 
     #Specify the number of fourier modes and lon and lat dimensions for the output
-    num_fourier_out = 85
-    num_x_out = 256
-    num_y_out = 128
+    num_fourier_out = 213
+    num_x_out = 640
+    num_y_out = 320
 
+    base_dir = ''
     #Specify the name of the input files that you want to regrid
-    atmosphere_file_name = 'atmosphere_old'
-    spectral_dynamics_file_name = 'spectral_dynamics_old'
-    atmos_model_file_name = 'atmos_model.res'
+    atmosphere_file_name = base_dir + 'atmosphere'
+    spectral_dynamics_file_name = base_dir + 'spectral_dynamics'
+    atmos_model_file_name = base_dir + 'atmos_model.res'
     
     #Specify the name of the output cpio archive    
-    restart_file_out_name = 'res_85_onescript'
+    restart_file_out_name = 'res_t213_moist_no_drag'
     
     #Regridding atmosphere file
     atmosphere_out_file_name = process_input_file(atmosphere_file_name,        'atmosphere',        num_fourier_out, num_x_out, num_y_out)
@@ -181,5 +210,5 @@ if __name__=="__main__":
     spectral_out_file_name   = process_input_file(spectral_dynamics_file_name, 'spectral_dynamics', num_fourier_out, num_x_out, num_y_out)
     
     #merging into a single archive
-    join_into_cpio(atmosphere_out_file_name, spectral_out_file_name, atmos_model_file_name, restart_file_out_name=restart_file_out_name)
+    join_into_tar(atmosphere_out_file_name, spectral_out_file_name, atmos_model_file_name, restart_file_out_name=restart_file_out_name)
     
