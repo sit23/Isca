@@ -251,11 +251,12 @@ def scalability_control(test_case_name, list_of_num_procs, num_days, resolutions
 
 
 if __name__=="__main__":
-    test_case_name='held_suarez'
+    test_case_name_list=['held_suarez', 'realistic_continents_variable_qflux']
     list_of_num_procs = [4, 8, 16,32]
     num_days=15
     resolutions_to_check = ['T42', 'T85', 'T170']
     commit_id = '5868cfd'
     force_rerun = False
 
-    scalability_control(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id=commit_id, force_rerun=force_rerun)
+    for test_case_name in test_case_name_list:
+        scalability_control(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id=commit_id, force_rerun=force_rerun)
