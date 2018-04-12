@@ -3,14 +3,17 @@ import sys
 import os
 from isca import Experiment, IscaCodeBase, GreyCodeBase, FailedRunError, GFDL_BASE, DiagTable
 from isca.util import exp_progress
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 import time
+import json
 import pdb
 
 sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/trip_test/'))
 from trip_test_functions import get_nml_diag, define_simple_diag_table
 
-def     run_scalability_test(test_case_name='frierson', list_of_num_procs=[4,8], resolutions_to_check=['T42', 'T85'], num_days=3, repo_to_use='git@github.com:execlim/Isca', commit_id ='5868cfd'):
+def     run_scalability_test(test_case_name='frierson', list_of_num_procs=[4,8], resolutions_to_check=['T42', 'T85'], num_days=3, repo_to_use='git@github.com:execlim/Isca', commit_id ='HEAD'):
 
     nml_use, input_files_use  = get_nml_diag(test_case_name)
     diag_use = define_simple_diag_table()
@@ -25,6 +28,7 @@ def     run_scalability_test(test_case_name='frierson', list_of_num_procs=[4,8],
     res_dict_per_day={}
     restart_file_write_time = {}
     total_time_arr = {}
+    total_time_short_arr = {}
 
     for resolution in resolutions_to_check:
         delta_t_arr_1={}
@@ -32,8 +36,7 @@ def     run_scalability_test(test_case_name='frierson', list_of_num_procs=[4,8],
         compute_time_per_day_arr={}
         other_time = {}
         total_time = {}
-    
-
+        total_time_short = {}        
 
         for num_procs in list_of_num_procs:
             exp_name = test_case_name+'_scalability_test_'+str(num_procs)+'_'+resolution
@@ -93,12 +96,14 @@ def     run_scalability_test(test_case_name='frierson', list_of_num_procs=[4,8],
             other_time[num_procs] = delta_t_arr_1[num_procs] - (compute_time_per_day_arr[num_procs] * (0.5 * exp.namelist['main_nml']['days']))
         
             total_time[num_procs] = delta_t_arr_2[num_procs]/ exp.namelist['main_nml']['days']
+            total_time_short[num_procs] = delta_t_arr_1[num_procs]/ exp.namelist['main_nml']['days']
                 
         res_dict_per_day[resolution] = compute_time_per_day_arr
         restart_file_write_time[resolution] = other_time
         total_time_arr[resolution] = total_time
+        total_time_short_arr[resolution] = total_time_short
 
-    return res_dict_per_day, restart_file_write_time, total_time_arr, commit_id
+    return res_dict_per_day, restart_file_write_time, total_time_arr, total_time_short_arr, commit_id
 
 def create_output_folder(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used):
 
@@ -118,9 +123,40 @@ def create_output_folder(test_case_name, list_of_num_procs, num_days, resolution
 
     return directory
 
-def create_output(linr_compute_time, linr_write_time, total_time, test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used):
+def output_to_file(out_dir,linr_compute_time, linr_write_time, total_time, total_time_half_length):
+    
+    with open(out_dir+'/values_linr_compute_time.json', 'w') as f:  json.dump(linr_compute_time, f)
+    with open(out_dir+'/values_linr_write_time.json', 'w') as f: json.dump(linr_write_time, f)    
+    with open(out_dir+'/values_total_time.json', 'w') as f: json.dump(total_time, f)    
+    with open(out_dir+'/values_total_time_half_length.json', 'w') as f: json.dump(total_time_half_length, f) 
+
+def attempt_read_in(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used):  
+
+    out_dir = create_output_folder(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used)
+
+    with open(out_dir+'/values_linr_compute_time.json', 'r') as f: linr_compute_time=json.load(f)
+    with open(out_dir+'/values_linr_write_time.json', 'r') as f: linr_write_time=json.load(f)
+    with open(out_dir+'/values_total_time.json', 'r') as f: total_time = json.load(f)
+    with open(out_dir+'/values_total_time_half_length.json', 'r') as f: total_time_half_length = json.load(f)
+    
+    make_keys_numbers(linr_compute_time)
+    make_keys_numbers(linr_write_time)
+    make_keys_numbers(total_time)
+    make_keys_numbers(total_time_half_length)
+    
+    return linr_compute_time, linr_write_time, total_time, total_time_half_length, commit_id_used
+
+def make_keys_numbers(input_dict):
+    for res in input_dict.keys():
+        input_dict[res] = {int(key):input_dict[res][key] for key in input_dict[res].keys()}
+
+def create_output(linr_compute_time, linr_write_time, total_time, total_time_half_length, test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used):
     
     out_dir = create_output_folder(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used)
+
+    output_to_file(out_dir,linr_compute_time, linr_write_time, total_time, total_time_half_length)
+    
+    print('Creating plots')
     
     for resolution in resolutions_to_check:
         time_dict = linr_compute_time[resolution]
@@ -163,6 +199,26 @@ def create_output(linr_compute_time, linr_write_time, total_time, test_case_name
 
     plt.figure()
     for resolution in resolutions_to_check:
+        time_dict = total_time_half_length[resolution]
+        x_values = list(time_dict.keys())
+        y_values = list(time_dict.values())
+    
+        y_values_scaled = [y_values[0]/entry for entry in y_values]
+    
+        plt.plot(x_values, y_values_scaled, label=resolution, marker='x')
+
+    theoretical_perfect = [entry/x_values[0] for entry in x_values]
+    plt.plot(x_values, theoretical_perfect, label='Perfect scaling', marker='x')
+    plt.title('Time per iteration for '+test_case_name+'\nincluding output writing and restart-file time')
+    plt.xlabel('# of cores')
+    plt.ylabel('Number of times faster than case with\nfewest number of cores')
+
+    plt.legend()
+
+    plt.savefig(out_dir+'/total_times_short_per_iteration.pdf')
+
+    plt.figure()
+    for resolution in resolutions_to_check:
         time_dict = linr_write_time[resolution]
         x_values = list(time_dict.keys())
         y_values = list(time_dict.values())
@@ -177,12 +233,29 @@ def create_output(linr_compute_time, linr_write_time, total_time, test_case_name
 
     plt.savefig(out_dir+'/linr_times_that_dont_scale_with_day_number.pdf')
 
+def scalability_control(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id='HEAD', force_rerun=False):
+
+    if force_rerun:
+        linr_compute_time, linr_write_time, total_time, total_time_half_length, commit_id_used= run_scalability_test(test_case_name, list_of_num_procs, resolutions_to_check, num_days, commit_id=commit_id)    
+    else:    
+        try:
+            print('Attempting to read previous values')
+            linr_compute_time, linr_write_time, total_time, total_time_half_length, commit_id_used = attempt_read_in(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id)
+            print('Successfully read previous values')        
+
+        except:
+            print('Cannot read previous values - running tests')    
+            linr_compute_time, linr_write_time, total_time, total_time_half_length, commit_id_used= run_scalability_test(test_case_name, list_of_num_procs, resolutions_to_check, num_days, commit_id=commit_id)
+
+    create_output(linr_compute_time, linr_write_time, total_time, total_time_half_length, test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used)
+
 
 if __name__=="__main__":
     test_case_name='held_suarez'
-    list_of_num_procs = [4,8,16,32]
-    num_days=15
-    resolutions_to_check = ['T42', 'T85', 'T170']
+    list_of_num_procs = [16,32]
+    num_days=1
+    resolutions_to_check = ['T42']
+    commit_id = '5868cfd'
+    force_rerun = False
 
-    linr_compute_time, linr_write_time, total_time, commit_id_used= run_scalability_test(test_case_name, list_of_num_procs, resolutions_to_check, num_days)
-    create_output(linr_compute_time, linr_write_time, total_time, test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id_used)
+    scalability_control(test_case_name, list_of_num_procs, num_days, resolutions_to_check, commit_id=commit_id, force_rerun=force_rerun)
