@@ -139,7 +139,7 @@ private
 
    real, allocatable, dimension(:,:) :: tg_prev
 
-   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping, id_mars_solar_long, id_incoming_sw
+   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping, id_mars_solar_long, id_incoming_sw, id_true_anom
    real    :: missing_value = -1.e10
    real    :: xwidth, ywidth, xcenter, ycenter ! namelist values converted from degrees to radians
    real    :: srfamp ! local_heating_srfamp converted from deg/day to deg/sec
@@ -452,8 +452,11 @@ contains
       id_mars_solar_long = register_diag_field ( mod_name, 'mars_solar_long', &
                    Time, 'Martian solar longitude', 'deg')                                 
 
+      id_true_anom = register_diag_field ( mod_name, 'true_anomaly', &
+                   Time, 'True anomaly (orbit)', 'deg')    
+
       id_incoming_sw = register_diag_field ( mod_name, 'incoming_sw', axes(1:2), &
-                   Time, 'Incoming short-wave flux', 'deg')
+                   Time, 'Incoming short-wave flux', 'W/m**2')
                    
       endif
 
@@ -984,7 +987,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
     
         call update_orbit(dt_integer, dec, orb_dist, true_anomaly)
         
-        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo(true_anomaly-((180./pi)*1.905637),360.), Time)
+        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly-1.905637),360.), Time)
+        if (id_true_anom > 0) used = send_data ( id_true_anom, (180./pi)*(true_anomaly), Time)
         
         call calc_hour_angle(lat, dec, hour_angle)
 
