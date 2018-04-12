@@ -958,6 +958,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
        integer :: k, i, j
        real    :: tcoeff, pref,  dec, orb_dist, true_anomaly
        integer :: days, seconds, dt_integer
+       logical :: used
+
 
 
 !-----------------------------------------------------------------------
