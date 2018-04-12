@@ -252,9 +252,9 @@ def scalability_control(test_case_name, list_of_num_procs, num_days, resolutions
 
 if __name__=="__main__":
     test_case_name='held_suarez'
-    list_of_num_procs = [16,32]
-    num_days=1
-    resolutions_to_check = ['T42']
+    list_of_num_procs = [4, 8, 16,32]
+    num_days=15
+    resolutions_to_check = ['T42', 'T85', 'T170']
     commit_id = '5868cfd'
     force_rerun = False
 
