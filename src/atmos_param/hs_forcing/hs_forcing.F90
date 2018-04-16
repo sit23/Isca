@@ -452,7 +452,7 @@ contains
       id_mars_solar_long = register_diag_field ( mod_name, 'mars_solar_long', &
                    Time, 'Martian solar longitude', 'deg')                                 
 
-      id_true_anom = register_diag_field ( mod_name, 'true_anomaly', &
+      id_true_anom = register_diag_field ( mod_name, 'true_anom', &
                    Time, 'True anomaly (orbit)', 'deg')    
 
       id_incoming_sw = register_diag_field ( mod_name, 'incoming_sw', axes(1:2), &
@@ -987,7 +987,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
     
         call update_orbit(dt_integer, dec, orb_dist, true_anomaly)
         
-        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly-1.905637),360.), Time)
+!        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly-1.905637),360.), Time)
+        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly),360.), Time)
         if (id_true_anom > 0) used = send_data ( id_true_anom, (180./pi)*(true_anomaly), Time)
         
         call calc_hour_angle(lat, dec, hour_angle)
