@@ -23,5 +23,7 @@ postprocessing/plevel_interpolation/scripts/archived/*
 *land_world_mountains.nc
 *output.txt
 src/extra/python/scripts/*.nc
+src/extra/python/scripts/*.pdf
 src/extra/python/scripts/archived/
 mima_pz.txt
+exp/test_cases/scalability_test/output_plots/
