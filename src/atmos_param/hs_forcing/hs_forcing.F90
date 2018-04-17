@@ -987,8 +987,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
     
         call update_orbit(dt_integer, dec, orb_dist, true_anomaly,inv_rsun_sqd)
         
-!        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly-1.905637),360.), Time)
-        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly),360.), Time)
+        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly-1.905637),360.), Time)
+!        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly),360.), Time)
         if (id_true_anom > 0) used = send_data ( id_true_anom, (180./pi)*(true_anomaly), Time)
         
         call calc_hour_angle(lat, dec, hour_angle)
