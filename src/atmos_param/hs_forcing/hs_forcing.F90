@@ -303,7 +303,7 @@ contains
 
    real, dimension(size(lat,1),size(lat,2)) :: s, t_radbal, t_trop, h_trop, t_surf, hour_angle, tg, p2, sin_lat, sin_lat_2, olr
    integer :: spin_count, seconds, days, dt_integer
-   real :: dec, orb_dist, step_days, true_anomaly
+   real :: dec, orb_dist, step_days, true_anomaly, inv_rsun_sqd
    integer :: is, ie, js, je
 
 
@@ -363,9 +363,9 @@ contains
 		spin_count = spin_count + 1
 
         if (calculate_insolation_from_orbit) then
-            call update_orbit(dt_integer, dec, orb_dist, true_anomaly)
+            call update_orbit(dt_integer, dec, orb_dist, true_anomaly,inv_rsun_sqd)
             call calc_hour_angle(lat, dec, hour_angle)
-            s(:,:) = solar_const/pi*(hour_angle*sin(lat)*sin(dec) + cos(lat)*cos(dec)*sin(hour_angle))
+            s(:,:) = (solar_const/pi)*inv_rsun_sqd*(hour_angle*sin(lat)*sin(dec) + cos(lat)*cos(dec)*sin(hour_angle))
         else
             p2     = (1. - 3.*sin_lat_2)/4.    
             s(:,:) = 0.25 * solar_const * (1.0 + del_sol*p2 + del_sw * sin_lat)
@@ -859,18 +859,18 @@ end subroutine get_zonal_mean_temp
 !#######################################################################
 !#######################################################################
 
-subroutine update_orbit(current_time, dec, orb_dist, true_anomaly)
+subroutine update_orbit(current_time, dec, orb_dist, true_anomaly, inv_rsun_sqd)
 
-integer, intent(in)					:: current_time
-real, intent(out)					:: dec, orb_dist, true_anomaly
+integer, intent(in) :: current_time
+real, intent(out)   :: dec, orb_dist, true_anomaly, inv_rsun_sqd
 
 real :: theta, mean_anomaly, ecc_anomaly
 
-
-	mean_anomaly = 2*pi/(orbital_period*86400)*(current_time-peri_time*orbital_period*86400)
+    mean_anomaly = 2*pi/(orbital_period*86400)*(current_time-peri_time*orbital_period*86400)
     call calc_ecc_anomaly(mean_anomaly, ecc, ecc_anomaly)
     true_anomaly = 2*atan(((1 + ecc)/(1 - ecc))**0.5 * tan(ecc_anomaly/2))
     orb_dist = smaxis * (1 - ecc**2)/(1 + ecc*cos(true_anomaly))
+    inv_rsun_sqd = (smaxis/orb_dist)**2.
     theta = 2*pi*current_time/(orbital_period*86400)
     dec = asin(sin(obliq*pi/180)*sin(theta))
 
@@ -959,7 +959,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
        real :: rrsun
 
        integer :: k, i, j
-       real    :: tcoeff, pref,  dec, orb_dist, true_anomaly
+       real    :: tcoeff, pref,  dec, orb_dist, true_anomaly, inv_rsun_sqd
        integer :: days, seconds, dt_integer
        logical :: used
 
@@ -985,7 +985,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
     if (calculate_insolation_from_orbit) then
     
-        call update_orbit(dt_integer, dec, orb_dist, true_anomaly)
+        call update_orbit(dt_integer, dec, orb_dist, true_anomaly,inv_rsun_sqd)
         
 !        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly-1.905637),360.), Time)
         if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly),360.), Time)
@@ -993,7 +993,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
         
         call calc_hour_angle(lat, dec, hour_angle)
 
-        s(:,:) = solar_const/pi*(hour_angle*sin_lat*sin(dec) + cos_lat*cos(dec)*sin(hour_angle))
+        s(:,:) = (solar_const/pi)*inv_rsun_sqd*(hour_angle*sin_lat*sin(dec) + cos_lat*cos(dec)*sin(hour_angle))
 
         if (id_incoming_sw > 0) used = send_data ( id_incoming_sw, s, Time)
 
