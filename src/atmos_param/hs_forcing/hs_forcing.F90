@@ -104,7 +104,7 @@ private
    real :: del_sol = 1.4
    real :: del_sw  = 0.0
 
-   real :: peri_time=0.25, smaxis=1.5e6, albedo=0.3
+   real :: peri_time=0.25, smaxis=1.5e6, albedo=0.3, frac_of_year_ae=0.0
    real :: lapse=6.5, h_a=2, tau_s=5
    real :: heat_capacity=4.2e6      ! equivalent to a 1m mixed layer water ocean
    real :: ml_depth=1               ! depth for heat capacity calculation
@@ -127,7 +127,7 @@ private
                               heat_capacity, ml_depth, spinup_time, stratosphere_t_option, &
                               calculate_insolation_from_orbit, del_sol, &
                               pure_rad_equil, pure_rad_equil_s_temp, &
-                              use_olr_from_t_surf
+                              use_olr_from_t_surf, frac_of_year_ae
 
 !-----------------------------------------------------------------------
 
@@ -139,7 +139,7 @@ private
 
    real, allocatable, dimension(:,:) :: tg_prev
 
-   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping, id_mars_solar_long, id_incoming_sw, id_true_anom
+   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping, id_mars_solar_long, id_incoming_sw, id_true_anom, id_dec
    real    :: missing_value = -1.e10
    real    :: xwidth, ywidth, xcenter, ycenter ! namelist values converted from degrees to radians
    real    :: srfamp ! local_heating_srfamp converted from deg/day to deg/sec
@@ -454,6 +454,9 @@ contains
 
       id_true_anom = register_diag_field ( mod_name, 'true_anom', &
                    Time, 'True anomaly (orbit)', 'deg')    
+
+      id_dec = register_diag_field ( mod_name, 'dec', &
+                   Time, 'Declination (orbit)', 'deg')    
 
       id_incoming_sw = register_diag_field ( mod_name, 'incoming_sw', axes(1:2), &
                    Time, 'Incoming short-wave flux', 'W/m**2')
@@ -871,7 +874,7 @@ real :: theta, mean_anomaly, ecc_anomaly
     true_anomaly = 2*atan(((1 + ecc)/(1 - ecc))**0.5 * tan(ecc_anomaly/2))
     orb_dist = smaxis * (1 - ecc**2)/(1 + ecc*cos(true_anomaly))
     inv_rsun_sqd = (smaxis/orb_dist)**2.
-    theta = 2*pi*current_time/(orbital_period*86400)
+    theta = 2*pi*(current_time/(orbital_period*86400) - frac_of_year_ae)
     dec = asin(sin(obliq*pi/180)*sin(theta))
 
 end subroutine update_orbit
@@ -988,8 +991,8 @@ real, intent(in),  dimension(:,:,:), optional :: mask
         call update_orbit(dt_integer, dec, orb_dist, true_anomaly,inv_rsun_sqd)
         
         if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly-1.905637),360.), Time)
-!        if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly),360.), Time)
         if (id_true_anom > 0) used = send_data ( id_true_anom, (180./pi)*(true_anomaly), Time)
+        if (id_dec > 0) used = send_data ( id_dec, dec, Time)
         
         call calc_hour_angle(lat, dec, hour_angle)
 
