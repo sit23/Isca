@@ -1343,7 +1343,7 @@ subroutine rh_calc(pfull,T,qv,RH) !s subroutine copied from 2006 FMS MoistModel 
         !limit denominator to esat, and thus qs to epsilon
         !this is done to avoid blow up in the upper stratosphere
         !where pfull ~ esat
-        RH(:,:,:) = MAX(RH(:,:,:),esat(:,:,:))
+!        RH(:,:,:) = MAX(RH(:,:,:),esat(:,:,:))
 
         !calculate RH
         RH(:,:,:)=qv(:,:,:)/(d622*esat(:,:,:)/RH(:,:,:))
