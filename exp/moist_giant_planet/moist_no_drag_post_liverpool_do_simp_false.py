@@ -8,7 +8,7 @@ import datetime
 
 # notify('Job running __'+str(os.path.basename(__file__))+'__ on Isca started at '+str(datetime.datetime.now().time()), 'Isca cpu update')
 
-NCORES = 16
+NCORES = 32
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -257,6 +257,6 @@ exp.namelist = namelist = Namelist({
 
 
 #exp.run(1441, multi_node=False, use_restart=True, restart_file = base_dir+'/input/moist_no_drag_sbm_res1440.tar.gz', num_cores=NCORES)
-exp.run(1, multi_node=False, use_restart=False, num_cores=NCORES)
+exp.run(1, multi_node=True, use_restart=False, num_cores=NCORES)
 for i in range(2,1800):
-   exp.run(i, num_cores=NCORES, multi_node=False)
+   exp.run(i, num_cores=NCORES, multi_node=True)
