@@ -15,7 +15,7 @@ base_dir = os.path.dirname(os.path.realpath(__file__))
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
 #cb = GreyCodeBase.from_directory(GFDL_BASE)
-cb = GreyCodeBase.from_repo(repo='git@github.com:sit23/Isca.git', commit='767b5f9')
+cb = GreyCodeBase.from_repo(repo='git@github.com:sit23/Isca.git', commit='c73439f')
 
 # or it can point to a specific git repo and commit id.
 # This method should ensure future, independent, reproducibility of results.
