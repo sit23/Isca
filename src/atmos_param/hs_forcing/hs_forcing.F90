@@ -869,12 +869,12 @@ real, intent(out)   :: dec, orb_dist, true_anomaly, inv_rsun_sqd
 
 real :: theta, mean_anomaly, ecc_anomaly
 
-    mean_anomaly = 2*pi/(orbital_period*86400)*(current_time-peri_time*orbital_period*86400)
+    mean_anomaly = 2*pi/(orbital_period)*(current_time-peri_time*orbital_period)
     call calc_ecc_anomaly(mean_anomaly, ecc, ecc_anomaly)
     true_anomaly = 2*atan(((1 + ecc)/(1 - ecc))**0.5 * tan(ecc_anomaly/2))
     orb_dist = smaxis * (1 - ecc**2)/(1 + ecc*cos(true_anomaly))
     inv_rsun_sqd = (smaxis/orb_dist)**2.
-    theta = 2*pi*(current_time/(orbital_period*86400) - frac_of_year_ae)
+    theta = 2*pi*(current_time/(orbital_period) - frac_of_year_ae)
     dec = asin(sin(obliq*pi/180)*sin(theta))
 
 end subroutine update_orbit
