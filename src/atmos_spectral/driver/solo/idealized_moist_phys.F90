@@ -101,6 +101,8 @@ integer :: num_conv_schemes_to_run = 1 ! Number of times the convection scheme p
 
 integer, dimension(2) :: r_conv_scheme_array
 
+logical :: remove_negative_sphum = .false. !Option for passing only positive tracer values to physics modules
+
 logical :: lwet_convection = .false.
 logical :: do_bm = .false.
 logical :: do_ras = .false.
@@ -146,7 +148,8 @@ namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roug
                                       land_roughness_prefactor,               &
                                       gp_surface, convection_scheme,          &
                                       bucket, init_bucket_depth, init_bucket_depth_land, & !RG Add bucket 
-                                      max_bucket_depth_land, robert_bucket, raw_bucket
+                                      max_bucket_depth_land, robert_bucket, raw_bucket, &
+                                      remove_negative_sphum
 
 
 integer, parameter :: num_time_levels = 2 !RG Add bucket - number of time levels added to allow timestepping in this module
@@ -250,6 +253,7 @@ integer ::           &
      id_conv_rain,   &   ! rain from convection
      id_cond_rain,   &   ! rain from condensation
      id_precip,      &   ! rain and snow from condensation and convection
+     id_snow,      &     ! snow from condensation and convection     
      id_conv_dt_tg,  &   ! temperature tendency from convection
      id_conv_dt_tg_moist,  &   ! temperature tendency from convection
      id_conv_dt_tg_dry,  &   ! temperature tendency from convection          
@@ -640,6 +644,8 @@ id_cond_rain = register_diag_field(mod_name, 'condensation_rain',          &
      axes(1:2), Time, 'Rain from condensation','kg/m/m/s')
 id_precip = register_diag_field(mod_name, 'precipitation',          &
      axes(1:2), Time, 'Precipitation from resolved, parameterised and snow','kg/m/m/s')
+id_snow = register_diag_field(mod_name, 'snow',          &
+     axes(1:2), Time, 'Snow from resolved, parameterised convection','kg/m/m/s')     
 id_cape = register_diag_field(mod_name, 'cape',          &
      axes(1:2), Time, 'Convective Available Potential Energy','J/kg')
 id_cin = register_diag_field(mod_name, 'cin',          &
@@ -802,6 +808,7 @@ real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
 
 real, dimension(1,1,1):: tracer, tracertnd
+real, dimension(size(snow,1), size(snow,2)) :: snow_total
 integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 integer :: i_conv
@@ -819,10 +826,15 @@ endif
 
 rain = 0.0; snow = 0.0; precip = 0.0
 conv_dt_qg=0.0; conv_dt_tg=0.0;conv_dt_qg_tot=0.0; conv_dt_tg_tot=0.0
-cape_dry = 0.0; cape=0.0; cin_dry=0.0; cin=0.0
+cape_dry = 0.0; cape=0.0; cin_dry=0.0; cin=0.0 ; snow_total=0.0
 
 tg_tmp = tg(:,:,:,previous)
-qg_tmp = grid_tracers(:,:,:,previous,nsphum)
+
+if (remove_negative_sphum .eq. .true.) then
+    call remove_neg_sphum(grid_tracers(:,:,:,previous,nsphum), qg_tmp)
+else
+    qg_tmp = grid_tracers(:,:,:,previous,nsphum)
+endif
 
 do i_conv=1, num_conv_schemes_to_run
 
@@ -926,6 +938,8 @@ do i_conv=1, num_conv_schemes_to_run
           dt_vg = dt_vg + dt_vg_conv
 
           precip     = precip + rain + snow
+          snow_total = snow_total + snow
+
 
        if(id_conv_rain  > 0) used = send_data(id_conv_rain, precip, Time)
 
@@ -964,6 +978,7 @@ if (r_conv_scheme .ne. DRY_CONV) then
   rain       = rain/delta_t
   snow       = snow/delta_t
   precip     = precip + rain + snow
+  snow_total = snow_total + snow
 
   dt_tg = dt_tg + cond_dt_tg
   dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + cond_dt_qg
@@ -974,6 +989,8 @@ if (r_conv_scheme .ne. DRY_CONV) then
   if(id_precip     > 0) used = send_data(id_precip, precip, Time)
 
 endif
+
+  if(id_snow     > 0) used = send_data(id_snow, snow_total, Time)
 
 
 ! Begin the radiation calculation by computing downward fluxes.
@@ -1354,5 +1371,27 @@ subroutine rh_calc(pfull,T,qv,RH) !s subroutine copied from 2006 FMS MoistModel 
 END SUBROUTINE rh_calc
 
 !=================================================================================================================================
+
+subroutine remove_neg_sphum(qin, qout)
+
+    real, intent(in), dimension(:,:,:) :: qin
+    real, intent(out), dimension(:,:,:) :: qout
+
+    integer :: i, j, k, ni, nj, nk
+  
+    ni = size(qin,1)
+    nj = size(qin,2)
+    nk = size(qin,3)
+
+
+    do k=1,nk
+        do j=1, nj
+            do i=1,ni
+                qout(i,j,k) = max(qin(i,j,k), 0.)
+            enddo
+        enddo
+    enddo
+
+end subroutine remove_neg_sphum
 
 end module idealized_moist_phys_mod

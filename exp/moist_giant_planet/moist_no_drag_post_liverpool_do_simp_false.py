@@ -14,8 +14,8 @@ base_dir = os.path.dirname(os.path.realpath(__file__))
 
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
-#cb = GreyCodeBase.from_directory(GFDL_BASE)
-cb = GreyCodeBase.from_repo(repo='git@github.com:sit23/Isca.git', commit='c73439f')
+cb = GreyCodeBase.from_directory(GFDL_BASE)
+#cb = GreyCodeBase.from_repo(repo='git@github.com:sit23/Isca.git', commit='c73439f')
 
 # or it can point to a specific git repo and commit id.
 # This method should ensure future, independent, reproducibility of results.
@@ -30,7 +30,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('moist_no_drag_do_simple_false', codebase=cb)
+exp = Experiment('moist_no_drag_do_simple_false_water_conserve_on_no_neg_sphum_phys_mk3_virt_temp', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/jupiter_ics_test_t85_pm_1_noise_conv.nc')]
 
@@ -61,6 +61,8 @@ diag.add_field('atmosphere', 'convection_rain', time_avg=True)
 #diag.add_field('atmosphere', 'dt_qg_condensation', time_avg=True)
 #diag.add_field('atmosphere', 'dt_tg_condensation', time_avg=True)
 diag.add_field('atmosphere', 'condensation_rain', time_avg=True)
+diag.add_field('atmosphere', 'precipitation', time_avg=True)
+diag.add_field('atmosphere', 'snow', time_avg=True)
 diag.add_field('atmosphere', 'klzb', time_avg=True)
 diag.add_field('atmosphere', 'plzb', time_avg=True)
 diag.add_field('atmosphere', 'plcl', time_avg=True)
@@ -75,6 +77,7 @@ diag.add_field('atmosphere', 'cin_dry', time_avg=True)
 diag.add_field('atmosphere', 'cape_dry', time_avg=True)
 #diag.add_field('two_stream', 'tdt_rad', time_avg=True)
 #diag.add_field('two_stream', 'tdt_solar', time_avg=True)
+diag.add_field('atmosphere', 'snow', time_avg=True)
 
 exp.diag_table = diag
 
@@ -98,7 +101,7 @@ exp.namelist = namelist = Namelist({
         'do_damping': True,
         'turb':True,
         'mixed_layer_bc':True,
-        'do_virtual' :False,
+        'do_virtual' :True,
         'do_simple': False,
         'roughness_mom':3.21e-05,
         'roughness_heat':3.21e-05,
@@ -108,7 +111,7 @@ exp.namelist = namelist = Namelist({
         'convection_scheme':  'simple_betts_miller_and_dry', #Use the dry convection scheme of Schneider & Walker
         'gp_surface':  True, #Use the giant-planet option for the surface, meaning it's not a mixed layer, and applies energy conservation and a bottom-boundary heat flux
         'mixed_layer_bc':  False, #Don't use the mixed-layer surface
-                   
+        'remove_negative_sphum':True,  
     },
 
     'vert_turb_driver_nml': {
@@ -125,7 +128,7 @@ exp.namelist = namelist = Namelist({
     },
 
     'surface_flux_nml': {
-        'use_virtual_temp': False,
+        'use_virtual_temp': True,
         'do_simple': False,
         'old_dtaudv': True, 
         'diabatic_acce':  1.0, #Parameter to artificially accelerate the diabatic processes during spinup. 1.0 performs no such acceleration, >1.0 performs acceleration        
@@ -211,7 +214,8 @@ exp.namelist = namelist = Namelist({
         'cutoff_wn':  40,
         'initial_sphum':  0.0001, #No initial specific humidity   
         'reference_sea_level_press':  15.0e5,
-        'initial_state_option':'input'
+        'initial_state_option':'input',
+        'use_virtual_temperature':True,
     },
 
     'ic_from_external_file_nml': {
@@ -257,6 +261,6 @@ exp.namelist = namelist = Namelist({
 
 
 #exp.run(1441, multi_node=False, use_restart=True, restart_file = base_dir+'/input/moist_no_drag_sbm_res1440.tar.gz', num_cores=NCORES)
-exp.run(1, multi_node=True, use_restart=False, num_cores=NCORES)
+exp.run(1, multi_node=False, use_restart=False, num_cores=NCORES)
 for i in range(2,1800):
-   exp.run(i, num_cores=NCORES, multi_node=True)
+   exp.run(i, num_cores=NCORES, multi_node=False)
