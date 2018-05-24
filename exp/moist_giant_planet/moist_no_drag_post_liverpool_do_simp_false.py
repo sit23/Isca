@@ -77,7 +77,6 @@ diag.add_field('atmosphere', 'cin_dry', time_avg=True)
 diag.add_field('atmosphere', 'cape_dry', time_avg=True)
 #diag.add_field('two_stream', 'tdt_rad', time_avg=True)
 #diag.add_field('two_stream', 'tdt_solar', time_avg=True)
-diag.add_field('atmosphere', 'snow', time_avg=True)
 
 exp.diag_table = diag
 
