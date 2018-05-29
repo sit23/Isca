@@ -1170,8 +1170,10 @@ if(turb) then
 endif ! if(turb) then
 
 !s Adding relative humidity calculation so as to allow comparison with Frierson's thesis.
+if (id_rh>0) then
    call rh_calc (p_full(:,:,:,previous),tg_tmp,qg_tmp,RH)
-   if(id_rh >0) used = send_data(id_rh, RH*100., Time)
+   used = send_data(id_rh, RH*100., Time)
+endif
 
 
 ! RG Add bucket
