@@ -8,7 +8,7 @@ import datetime
 
 # notify('Job running __'+str(os.path.basename(__file__))+'__ on Isca started at '+str(datetime.datetime.now().time()), 'Isca cpu update')
 
-NCORES = 32
+NCORES = 16
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -30,7 +30,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('moist_no_drag_do_simple_false_water_conserve_on_no_neg_sphum_phys_mk3_virt_temp', codebase=cb)
+exp = Experiment('moist_no_drag_do_simple_false_water_conserve_on_no_neg_sphum_phys_mk4_virt_temp_larger_deep_abundance', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/jupiter_ics_test_t85_pm_1_noise_conv.nc')]
 
@@ -132,8 +132,9 @@ exp.namelist = namelist = Namelist({
         'old_dtaudv': True, 
         'diabatic_acce':  1.0, #Parameter to artificially accelerate the diabatic processes during spinup. 1.0 performs no such acceleration, >1.0 performs acceleration        
         'gp_deep_water_source': True,
-        'q_deep_sphum': 6.1e-3,
+        'q_deep_sphum': 0.0909,
     },
+#         'q_deep_sphum': 6.1e-3,
 
     'atmosphere_nml': {
         'idealized_moist_model': True
