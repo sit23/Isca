@@ -8,8 +8,8 @@ NCORES = 16
 
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
-#cb = GreyCodeBase.from_directory(GFDL_BASE)
-cb = GreyCodeBase.from_repo(repo='git@github.com:sit23/Isca.git', commit='fa26ea1')
+cb = GreyCodeBase.from_directory(GFDL_BASE)
+#cb = GreyCodeBase.from_repo(repo='git@github.com:sit23/Isca.git', commit='fa26ea1')
 
 # or it can point to a specific git repo and commit id.
 # This method should ensure future, independent, reproducibility of results.
@@ -75,8 +75,9 @@ namelist = Namelist({
         'roughness_moist':0.,                
         'two_stream_gray': False,     #Use grey radiation
         'do_newtonian_cooling_as_rad': True,     #Use grey radiation        
-        'convection_scheme': 'dry', #Use the simple Betts Miller convection scheme from Frierson
+        'convection_scheme': 'none', #Use the simple Betts Miller convection scheme from Frierson
         'newt_relax_surface': False,
+        'do_lscale_cond': False,
     },
 
     'vert_turb_driver_nml': {
@@ -98,6 +99,7 @@ namelist = Namelist({
         'old_dtaudv': True, 
         'rh_target': 50.,
         'delta_t_relax': 7200.,
+        'use_actual_surface_temperatures':False,
     },
 
     'atmosphere_nml': {
@@ -144,30 +146,34 @@ namelist = Namelist({
     },
 
     'spectral_dynamics_nml': {
-        'num_levels': 30,
+        'num_levels': 25,
         'exponent': 2.5,
         'scale_heights': 4,
         'surf_res': 0.1,
         'robert_coeff': 4e-2,
         'do_water_correction': False,
-        'vert_coord_option': 'even_sigma',
+        'vert_coord_option': 'input',
         'initial_sphum': 0.,
         'valid_range_T': [0, 700]
     },
 
+    'vert_coordinate_nml': {
+        'bk': [  0.00000000e+00,   1.53008955e-04,   4.63790800e-04,   1.10977640e-03,   2.37044150e-03,   4.74479200e-03,         9.12245300e-03,   1.70677050e-02,   3.12516100e-02,         5.59939500e-02,   9.76165000e-02,   1.63754900e-01,         2.60315150e-01,   3.85974250e-01,   5.28084800e-01,         6.65956600e-01,   7.81088000e-01,   8.65400050e-01,         9.21109250e-01,   9.55343500e-01,   9.75416950e-01,         9.86856800e-01,   9.93269300e-01,   9.96830200e-01,         9.98799150e-01,   1.00000000e+00], 
+        'pk': [0.]*26,
+    },
 
 
     # configure the relaxation profile
     'hs_forcing_nml': {
         'equilibrium_t_option' : 'top_down',
-        'ml_depth': 10.,
+        'ml_depth': 2.,
         'spinup_time': 108000,
         'ka': -2.,
         'ks': -2.,
         'tau_s': 0.2,
         'calculate_insolation_from_orbit' : True,
         'do_rayleigh_damping':False,
-        'albedo':0.25,
+        'albedo':0.3,
         'pure_rad_equil':True,
         'stratosphere_t_option':'pure_rad_equil',
         'peri_time': 0.,
@@ -195,13 +201,13 @@ namelist = Namelist({
 
 if __name__=="__main__":
 
-    conv_schemes = ['dry']
+    conv_schemes = ['none']
 
     scales = [ 1.]
 
     for conv in conv_schemes:
         for scale in scales:
-            exp = Experiment('radiaitive_eq_mars_mk16_thinner', codebase=cb)
+            exp = Experiment('radiaitive_eq_mars_mk17_macda_levels_no_conv_scheme', codebase=cb)
             exp.clear_rundir()
 
             exp.diag_table = diag
