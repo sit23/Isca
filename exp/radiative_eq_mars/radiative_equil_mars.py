@@ -45,7 +45,7 @@ diag.add_field('atmosphere', 'precipitation', time_avg=True, files=['atmos_month
 diag.add_field('atmosphere', 'rh', time_avg=True, files=['atmos_monthly'])
 
 diag.add_field('mixed_layer', 't_surf', time_avg=True, files=['atmos_monthly'])
-diag.add_field('mixed_layer', 'flux_lhe', time_avg=True)
+#diag.add_field('mixed_layer', 'flux_lhe', time_avg=True)
 diag.add_field('mixed_layer', 'flux_t', time_avg=True)
 
 diag.add_field('hs_forcing', 'teq', time_avg=True, files=['atmos_monthly'])
@@ -166,7 +166,7 @@ namelist = Namelist({
     # configure the relaxation profile
     'hs_forcing_nml': {
         'equilibrium_t_option' : 'top_down',
-        'ml_depth': 2.,
+        'ml_depth': 5.,
         'spinup_time': 108000,
         'ka': -2.,
         'ks': -2.,
@@ -207,7 +207,7 @@ if __name__=="__main__":
 
     for conv in conv_schemes:
         for scale in scales:
-            exp = Experiment('radiaitive_eq_mars_mk17_macda_levels_no_conv_scheme', codebase=cb)
+            exp = Experiment('radiaitive_eq_mars_mk19_macda_levels_no_conv_scheme', codebase=cb)
             exp.clear_rundir()
 
             exp.diag_table = diag
