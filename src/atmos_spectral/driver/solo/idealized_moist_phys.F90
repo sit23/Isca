@@ -751,7 +751,7 @@ end do
 !endif
 
 if (r_conv_scheme .eq. DRY_CONV .and. do_lscale_cond .eq. .true.) then
-        call error_mesg('idealized_moist_phys','do_lscale_cond is .true. but r_conv_scheme is dry. These options may not be consistent.', WARNING)
+        call error_mesg('idealized_moist_phys','do_lscale_cond is .true. but r_conv_scheme is dry. These options may not be consistent.', NOTE)
 endif
 
 if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, get_axis_id(), Time, rad_lonb_2d, rad_latb_2d, dt_real)
