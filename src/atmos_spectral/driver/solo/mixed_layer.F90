@@ -121,6 +121,9 @@ real    :: ice_albedo_value = 0.7
 real    :: ice_concentration_threshold = 0.5
 logical :: update_albedo_from_ice = .false.
 
+logical :: ice_albedo_feedback = .false.
+real    :: ice_albedo_feedback_width = 5.0
+
 logical :: add_latent_heat_flux_anom = .false.
 character(len=256) :: flux_lhe_anom_file_name  = 'INPUT/flux_lhe_anom.nc'
 character(len=256) :: flux_lhe_anom_field_name = 'flux_lhe_anom'
@@ -142,7 +145,8 @@ namelist/mixed_layer_nml/ evaporation, depth, qflux_amp, qflux_width, tconst,&
                               ice_albedo_value, specify_sst_over_ocean_only, &
                               ice_concentration_threshold,                   &
                               add_latent_heat_flux_anom,flux_lhe_anom_file_name,&
-                              flux_lhe_anom_field_name
+                              flux_lhe_anom_field_name, ice_albedo_feedback, &
+                              ice_albedo_feedback_width
 
 !=================================================================================================================================
 
@@ -354,7 +358,7 @@ id_heat_cap = register_static_field(mod_name, 'ml_heat_cap',        &
                                  axes(1:2), 'mixed layer heat capacity','joules/m^2/deg C')
 id_delta_t_surf = register_diag_field(mod_name, 'delta_t_surf',        &
                                  axes(1:2), Time, 'change in sst','K')
-if (update_albedo_from_ice) then
+if (update_albedo_from_ice .or. ice_albedo_feedback) then
 	id_albedo = register_diag_field(mod_name, 'albedo',    &
                                  axes(1:2), Time, 'surface albedo', 'none')
 	id_ice_conc = register_diag_field(mod_name, 'ice_conc',    &
@@ -472,6 +476,9 @@ if (update_albedo_from_ice) then
 	call interpolator_init( ice_interp, trim(ice_file_name)//'.nc', rad_lonb_2d, rad_latb_2d, data_out_of_bounds=(/CONSTANT/) )
         call read_ice_conc(Time)
 	call albedo_calc(albedo,Time)
+
+elseif(ice_albedo_feedback) then
+    call ice_albedo_calc(albedo, t_surf, Time)
 else
 	if ( id_albedo > 0 ) used = send_data ( id_albedo, albedo )
 endif
@@ -577,11 +584,17 @@ if(update_albedo_from_ice) then
 	where(land_mask.or.(ice_concentration.gt.ice_concentration_threshold))
 		land_ice_mask=.true.
 	end where
+	
+    call albedo_calc(albedo_out,Time_next)	
+
+elseif(ice_albedo_feedback) then
+
+    call ice_albedo_calc(albedo_out, t_surf, Time_next)
+
 else
 	land_ice_mask=land_mask
 endif
 
-call albedo_calc(albedo_out,Time_next)
 
 !s Add latent heat flux anomalies before any of the calculations take place
 
@@ -719,6 +732,24 @@ if(update_albedo_from_ice) then
 endif
 
 end subroutine albedo_calc
+
+!=================================================================================================================================
+
+subroutine ice_albedo_calc(albedo_inout, t_surf, Time)
+
+real, intent(inout), dimension(:,:) :: albedo_inout
+real, intent(in), dimension(:,:) :: t_surf
+type(time_type), intent(in)       :: Time
+
+    ice_concentration = 0.5*(tanh(-1.*(t_surf-273.)/ice_albedo_feedback_width)+1.0)
+
+    albedo_inout = albedo_value + ice_concentration*(ice_albedo_value - albedo_value)
+
+	if ( id_ice_conc > 0 ) used = send_data ( id_ice_conc, ice_concentration, Time )
+	if ( id_albedo > 0 ) used = send_data ( id_albedo, albedo_inout, Time )
+
+
+end subroutine ice_albedo_calc
 !=================================================================================================================================
 
 subroutine read_ice_conc(Time)
