@@ -6,14 +6,13 @@ use               fms_mod, only: mpp_pe, mpp_root_pe, error_mesg, FATAL, write_v
                                  stdlog, close_file, open_namelist_file, check_nml_error, file_exist, field_size, &
                                  read_data, write_data
 
-use    physics_driver_mod, only: do_moist_in_phys_up
+! use    physics_driver_mod, only: do_moist_in_phys_up
 
 use     field_manager_mod, only: MODEL_ATMOS
 
 use    tracer_manager_mod, only: get_number_tracers, get_tracer_index
 
-use  spectral_physics_mod, only: spectral_physics_init, spectral_physics_down, spectral_physics_up, &
-                                 spectral_physics_end, spectral_physics_moist
+use idealized_moist_phys_mod, only: idealized_moist_phys_init , idealized_moist_phys , idealized_moist_phys_end
 
 use         vert_diff_mod, only: surf_diff_type
 
@@ -34,6 +33,7 @@ use spectral_dynamics_mod, only: spectral_dynamics_init, spectral_dynamics, spec
 use       mpp_domains_mod, only: domain2d
 
 use       tracer_type_mod, only: tracer_type
+use         constants_mod, only: pi
 
 implicit none
 private
@@ -53,7 +53,9 @@ logical :: dry_model
 integer, parameter :: num_time_levels=2
 integer :: phyclock, dynclock
 
-real, allocatable, dimension(:,:,:) :: p_half, p_full, z_half, z_full, wg_full
+real, allocatable, dimension(:,:,:,:) :: p_half, p_full, z_half, z_full
+real, allocatable, dimension(:,:,:) :: wg_full
+
 type(tracer_type), allocatable, dimension(:) :: tracer_attributes
 real,    allocatable, dimension(:,:,:,:,:) :: grid_tracers
 real,    allocatable, dimension(:,:,:    ) :: psg
@@ -62,7 +64,12 @@ real,    allocatable, dimension(:,:,:,:  ) :: ug, vg, tg
 real, allocatable, dimension(:,:    ) :: dt_psg, z_bot
 real, allocatable, dimension(:,:,:  ) :: dt_ug, dt_vg, dt_tg
 real, allocatable, dimension(:,:,:,:) :: dt_tracers
+
+real, allocatable, dimension(:)   :: deg_lon, deg_lat
+real, allocatable, dimension(:,:) :: rad_lon_2d, rad_lat_2d
 real, allocatable, dimension(:,:) :: surf_geopotential
+real, allocatable, dimension(:,:) :: rad_lonb_2d, rad_latb_2d
+real, allocatable, dimension(:)   :: rad_lonb, rad_latb
 
 ! dt_real is the atmospheric time step, converted to a real number.
 ! delta_t is passed to physics. It is twice dt_real, except for
@@ -77,6 +84,8 @@ type(time_type) :: Time_step, Time_prev, Time_next
 
 logical :: do_mcm_moist_processes = .false.
 
+logical :: do_moist_in_phys_up=.true.
+
 namelist / atmosphere_nml / do_mcm_moist_processes
 
 !------------------------------------------------------------------------------------------------
@@ -90,7 +99,7 @@ subroutine atmosphere_init(Time_init, Time, Time_step_in, Surf_diff)
 type(time_type),      intent(in)    :: Time_init, Time, Time_step_in
 type(surf_diff_type), intent(inout) :: Surf_diff
 
-integer :: ierr, io, unit, lon_max, lat_max, ntr, nt
+integer :: ierr, io, unit, lon_max, lat_max, ntr, nt, i, j
 integer, dimension(4) :: siz
 character(len=64) :: file, tr_name
 character(len=4) :: ch1,ch2,ch3,ch4
@@ -127,10 +136,10 @@ atmos_domain_is_computed = .true.
 call get_grid_domain(is, ie, js, je)
 call get_num_levels(num_levels)
 
-allocate (p_half       (is:ie, js:je, num_levels+1))
-allocate (z_half       (is:ie, js:je, num_levels+1))
-allocate (p_full       (is:ie, js:je, num_levels))
-allocate (z_full       (is:ie, js:je, num_levels))
+allocate (p_half       (is:ie, js:je, num_levels+1, num_time_levels))
+allocate (z_half       (is:ie, js:je, num_levels+1, num_time_levels))
+allocate (p_full       (is:ie, js:je, num_levels, num_time_levels))
+allocate (z_full       (is:ie, js:je, num_levels, num_time_levels))
 allocate (wg_full      (is:ie, js:je, num_levels))
 allocate (psg          (is:ie, js:je, num_time_levels))
 allocate (ug           (is:ie, js:je, num_levels, num_time_levels))
@@ -143,6 +152,15 @@ allocate (dt_vg        (is:ie, js:je, num_levels))
 allocate (dt_tg        (is:ie, js:je, num_levels))
 allocate (dt_tracers   (is:ie, js:je, num_levels, num_tracers ))
 allocate (z_bot        (is:ie, js:je))
+
+allocate (deg_lon    (is:ie       ))
+allocate (rad_lon_2d (is:ie, js:je))
+allocate (deg_lat    (       js:je))
+allocate (rad_lat_2d (is:ie, js:je))
+allocate (rad_lonb_2d(is:ie+1, js:je+1))
+allocate (rad_latb_2d(is:ie+1, js:je+1))
+allocate (rad_lonb (is:ie+1))
+allocate (rad_latb (js:je+1))
 
 p_half=0.; z_half=0.; p_full=0.; z_full=0.; wg_full=0.
 psg=0.; ug=0.; vg=0.; tg=0.; grid_tracers=0.
@@ -185,13 +203,42 @@ else
   call get_initial_fields(ug(:,:,:,1), vg(:,:,:,1), tg(:,:,:,1), psg(:,:,1), grid_tracers(:,:,:,1,:))
 endif
 
-call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes)
+
+call get_deg_lon(deg_lon)
+do i=is,ie
+  rad_lon_2d(i,:) = deg_lon(i)*pi/180.
+enddo
+
+call get_deg_lat(deg_lat)
+do j=js,je
+  rad_lat_2d(:,j) = deg_lat(j)*pi/180.
+enddo
+
+call get_grid_boundaries(rad_lonb, rad_latb)
+
+do i = is,ie+1
+  rad_lonb_2d(i,:) = rad_lonb(i)
+enddo
+
+do j = js,je+1
+  rad_latb_2d(:,j) = rad_latb(j)
+enddo
+
+   call idealized_moist_phys_init(Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current))
+
+! call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes)
 
 if(dry_model) then
-  call compute_pressures_and_heights(tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full, z_half, p_full, p_half)
+  call compute_pressures_and_heights(tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full(:,:,:,current), z_half(:,:,:,current), p_full(:,:,:,current), p_half(:,:,:,current))
+  call compute_pressures_and_heights(tg(:,:,:,previous), psg(:,:,previous), surf_geopotential, &
+       z_full(:,:,:,previous), z_half(:,:,:,previous), p_full(:,:,:,previous), p_half(:,:,:,previous))  
 else
-  call compute_pressures_and_heights( &
-       tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full, z_half, p_full, p_half, grid_tracers(:,:,:,current,nhum))
+  call compute_pressures_and_heights(tg(:,:,:,current), psg(:,:,current), surf_geopotential, &
+       z_full(:,:,:,current), z_half(:,:,:,current), p_full(:,:,:,current), p_half(:,:,:,current), &
+       grid_tracers(:,:,:,current,nhum))
+  call compute_pressures_and_heights(tg(:,:,:,previous), psg(:,:,previous), surf_geopotential, &
+       z_full(:,:,:,previous), z_half(:,:,:,previous), p_full(:,:,:,previous), p_half(:,:,:,previous), &
+       grid_tracers(:,:,:,previous,nhum))
 endif
 
 call compute_z_bot(psg(:,:,current), tg(:,:,num_levels,current), z_bot, grid_tracers(:,:,num_levels,current,nhum))
@@ -239,12 +286,16 @@ endif
 Time_next = Time + Time_step
 
 call mpp_clock_begin(phyclock)
-call spectral_physics_down(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, psg,      &
-                        ug, vg, tg, grid_tracers, frac_land, rough_mom, albedo, t_surf, u_star, b_star, q_star,     &
-                        dtau_du, dtau_dv, tau_x, tau_y, albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif, &
-                        dt_ug, dt_vg, dt_tg, dt_tracers, flux_sw, flux_sw_dir, flux_sw_dif,                         &
-                        flux_sw_down_vis_dir, flux_sw_down_vis_dif, flux_sw_down_total_dir, flux_sw_down_total_dif, &
-                        flux_sw_vis, flux_sw_vis_dir, flux_sw_vis_dif, flux_lw, coszen,gust, Surf_diff)
+
+   call idealized_moist_phys(Time, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, &
+                             previous, current, dt_ug, dt_vg, dt_tg, dt_tracers)
+
+! call spectral_physics_down(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, psg,      &
+!                         ug, vg, tg, grid_tracers, frac_land, rough_mom, albedo, t_surf, u_star, b_star, q_star,     &
+!                         dtau_du, dtau_dv, tau_x, tau_y, albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif, &
+!                         dt_ug, dt_vg, dt_tg, dt_tracers, flux_sw, flux_sw_dir, flux_sw_dif,                         &
+!                         flux_sw_down_vis_dir, flux_sw_down_vis_dif, flux_sw_down_total_dir, flux_sw_down_total_dif, &
+!                         flux_sw_vis, flux_sw_vis_dir, flux_sw_vis_dif, flux_lw, coszen,gust, Surf_diff)
 call mpp_clock_end(phyclock)
 
 return
@@ -266,8 +317,8 @@ if(.not.module_is_initialized) then
 endif
 
 call mpp_clock_begin(phyclock)
-call spectral_physics_up(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, wg_full, ug, vg, tg, &
-                         grid_tracers, frac_land, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
+! call spectral_physics_up(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, wg_full, ug, vg, tg, &
+!                          grid_tracers, frac_land, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
 call mpp_clock_end(phyclock)
 
 if(previous == current) then
@@ -279,19 +330,19 @@ endif
 call mpp_clock_begin(dynclock)
 call spectral_dynamics(Time, psg(:,:,future), ug(:,:,:,future), vg(:,:,:,future), &
                        tg(:,:,:,future), tracer_attributes, grid_tracers(:,:,:,:,:), future, &
-                       dt_psg, dt_ug, dt_vg, dt_tg, dt_tracers, wg_full, p_full, p_half, z_full)
+                       dt_psg, dt_ug, dt_vg, dt_tg, dt_tracers, wg_full, p_full(:,:,:,current), p_half(:,:,:,current), z_full(:,:,:,current))
 call mpp_clock_end(dynclock)
 
-if(do_moist_in_phys_up()) then
+if(do_moist_in_phys_up) then
   if ( do_mcm_moist_processes ) then
     call error_mesg('atmosphere_up','do_mcm_moist_processes cannot be .true. when moist_processes'// &
                     ' is called by physics_driver_up', FATAL)
   endif
 else
-  call pressure_variables(p_half, ln_p_half, p_full, ln_p_full, psg(:,:,future))
-  call spectral_physics_moist(Time_next, delta_t, frac_land, p_half, p_full, z_half, z_full, wg_full, &
-                              tg(:,:,:,future), grid_tracers(:,:,:,future,nhum), ug(:,:,:,future), vg(:,:,:,future), &
-                              grid_tracers(:,:,:,future,:), lprec, fprec, gust)
+  call pressure_variables(p_half(:,:,:,current), ln_p_half, p_full(:,:,:,current), ln_p_full, psg(:,:,future))
+!   call spectral_physics_moist(Time_next, delta_t, frac_land, p_half, p_full, z_half, z_full, wg_full, &
+!                               tg(:,:,:,future), grid_tracers(:,:,:,future,nhum), ug(:,:,:,future), vg(:,:,:,future), &
+!                               grid_tracers(:,:,:,future,:), lprec, fprec, gust)
   call complete_update_of_future(psg(:,:,future), ug(:,:,:,future), vg(:,:,:,future), tg(:,:,:,future), &
                               tracer_attributes, grid_tracers(:,:,:,future,:))
 endif
@@ -300,11 +351,16 @@ endif
 call spectral_diagnostics(Time_next, psg(:,:,future), ug(:,:,:,future), vg(:,:,:,future), &
                           tg(:,:,:,future), wg_full, grid_tracers(:,:,:,:,:), future)
 
+call compute_pressures_and_heights(tg(:,:,:,future), psg(:,:,future), surf_geopotential, &
+       z_full(:,:,:,future), z_half(:,:,:,future), p_full(:,:,:,future), p_half(:,:,:,future), &
+                                     grid_tracers(:,:,:,future,nhum))
+
 previous = current
 current  = future
 
-call compute_pressures_and_heights( &
-            tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full, z_half, p_full, p_half, grid_tracers(:,:,:,current,nhum))
+! call compute_pressures_and_heights( &
+!             tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full, z_half, p_full, p_half, grid_tracers(:,:,:,current,nhum))
+
 call compute_z_bot(psg(:,:,current), tg(:,:,num_levels,current), z_bot, grid_tracers(:,:,num_levels,current,nhum))
 
 return
@@ -322,7 +378,7 @@ endif
 
 t_bot     = tg(:,:,num_levels, previous)
 tr_bot    = grid_tracers(:,:,num_levels, previous,:)
-p_bot     = p_full(:,:,num_levels)
+p_bot     = p_full(:,:,num_levels, previous)
 p_surf    = psg(:,:,previous)
 z_bot_out = z_bot
 
@@ -444,7 +500,8 @@ call write_data(trim(file), 'wg_full', wg_full, grid_domain)
 deallocate(dt_psg, dt_ug, dt_vg, dt_tg, dt_tracers)
 
 call set_domain(grid_domain)
-call spectral_physics_end(Time)
+call idealized_moist_phys_end
+! call spectral_physics_end(Time)
 call spectral_dynamics_end(tracer_attributes, Time)
 
 module_is_initialized = .false.
