@@ -29,7 +29,7 @@ use      time_manager_mod, only: time_type, set_time, get_time, operator(+), ope
 
 use spectral_dynamics_mod, only: spectral_dynamics_init, spectral_dynamics, spectral_dynamics_end, get_num_levels, &
                                  complete_robert_filter, complete_update_of_future, &
-                                 get_axis_id, spectral_diagnostics, get_initial_fields
+                                 get_axis_id, spectral_diagnostics, get_initial_fields, get_surf_geopotential
 
 use       mpp_domains_mod, only: domain2d
 
@@ -62,6 +62,7 @@ real,    allocatable, dimension(:,:,:,:  ) :: ug, vg, tg
 real, allocatable, dimension(:,:    ) :: dt_psg, z_bot
 real, allocatable, dimension(:,:,:  ) :: dt_ug, dt_vg, dt_tg
 real, allocatable, dimension(:,:,:,:) :: dt_tracers
+real, allocatable, dimension(:,:) :: surf_geopotential
 
 ! dt_real is the atmospheric time step, converted to a real number.
 ! delta_t is passed to physics. It is twice dt_real, except for
@@ -147,6 +148,9 @@ p_half=0.; z_half=0.; p_full=0.; z_full=0.; wg_full=0.
 psg=0.; ug=0.; vg=0.; tg=0.; grid_tracers=0.
 dt_psg=0.; dt_ug=0.; dt_vg=0.; dt_tg=0.; dt_tracers=0.
 
+allocate (surf_geopotential(is:ie, js:je))
+call get_surf_geopotential(surf_geopotential)
+
 file = 'INPUT/atmosphere.res.nc'
 if(file_exist(trim(file))) then
   call get_lon_max(lon_max)
@@ -184,10 +188,10 @@ endif
 call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes)
 
 if(dry_model) then
-  call compute_pressures_and_heights(tg(:,:,:,current), psg(:,:,current), z_full, z_half, p_full, p_half)
+  call compute_pressures_and_heights(tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full, z_half, p_full, p_half)
 else
   call compute_pressures_and_heights( &
-       tg(:,:,:,current), psg(:,:,current), z_full, z_half, p_full, p_half, grid_tracers(:,:,:,current,nhum))
+       tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full, z_half, p_full, p_half, grid_tracers(:,:,:,current,nhum))
 endif
 
 call compute_z_bot(psg(:,:,current), tg(:,:,num_levels,current), z_bot, grid_tracers(:,:,num_levels,current,nhum))
@@ -291,7 +295,7 @@ else
   call complete_update_of_future(psg(:,:,future), ug(:,:,:,future), vg(:,:,:,future), tg(:,:,:,future), &
                               tracer_attributes, grid_tracers(:,:,:,future,:))
 endif
-call complete_robert_filter(tracer_attributes)
+! call complete_robert_filter(tracer_attributes) #Commenting out as this was moved to spectral_dynamics.
 
 call spectral_diagnostics(Time_next, psg(:,:,future), ug(:,:,:,future), vg(:,:,:,future), &
                           tg(:,:,:,future), wg_full, grid_tracers(:,:,:,:,:), future)
@@ -300,7 +304,7 @@ previous = current
 current  = future
 
 call compute_pressures_and_heights( &
-            tg(:,:,:,current), psg(:,:,current), z_full, z_half, p_full, p_half, grid_tracers(:,:,:,current,nhum))
+            tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full, z_half, p_full, p_half, grid_tracers(:,:,:,current,nhum))
 call compute_z_bot(psg(:,:,current), tg(:,:,num_levels,current), z_bot, grid_tracers(:,:,num_levels,current,nhum))
 
 return
