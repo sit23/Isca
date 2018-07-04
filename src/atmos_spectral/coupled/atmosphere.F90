@@ -13,7 +13,9 @@ use     field_manager_mod, only: MODEL_ATMOS
 use    tracer_manager_mod, only: get_number_tracers, get_tracer_index
 
 use  spectral_physics_mod, only: spectral_physics_init, spectral_physics_down, spectral_physics_up, &
-                                 spectral_physics_end, surf_diff_type, spectral_physics_moist
+                                 spectral_physics_end, spectral_physics_moist
+
+use         vert_diff_mod, only: surf_diff_type
 
 use         constants_mod, only: grav
 
