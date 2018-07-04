@@ -54,7 +54,7 @@ use atmosphere_mod,     only: atmosphere_up, atmosphere_down, atmosphere_init
 use atmosphere_mod,     only: atmosphere_end, get_bottom_mass, get_bottom_wind
 use atmosphere_mod,     only: atmosphere_resolution, atmosphere_domain
 use atmosphere_mod,     only: atmosphere_boundary, get_atmosphere_axes
-use atmosphere_mod,     only: get_stock_pe
+use atmosphere_mod,     only: get_stock_pe !This looks very set up for the fv dycore. Will give up on this and try fv core instead.
 use atmosphere_mod,     only: surf_diff_type
 use atmosphere_mod,     only: atmosphere_restart
 use coupler_types_mod,  only: coupler_2d_bc_type
