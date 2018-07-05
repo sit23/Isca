@@ -370,14 +370,14 @@ end subroutine atmosphere_up
 subroutine get_bottom_mass (t_bot, tr_bot, p_bot, z_bot_out, p_surf)
 
 real, intent(out), dimension(:,:) :: t_bot, p_bot, z_bot_out, p_surf
-real, intent(out), dimension(:,:,:) :: tr_bot
+real, intent(out), dimension(:,:) :: tr_bot
 
 if(.not.module_is_initialized) then
   call error_mesg('get_bottom_mass','atmosphere module has not been initialized.', FATAL)
 endif
 
 t_bot     = tg(:,:,num_levels, previous)
-tr_bot    = grid_tracers(:,:,num_levels, previous,:)
+tr_bot    = grid_tracers(:,:,num_levels, previous, nhum)
 p_bot     = p_full(:,:,num_levels, previous)
 p_surf    = psg(:,:,previous)
 z_bot_out = z_bot
