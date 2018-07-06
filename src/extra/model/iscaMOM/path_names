@@ -146,6 +146,17 @@ shared/diag_manager/diag_manager.F90
 shared/diag_manager/diag_output.F90
 shared/diag_manager/diag_table.F90
 shared/diag_manager/diag_util.F90
+shared/drifters/cloud_interpolator.F90
+shared/drifters/drifters_comm.F90
+shared/drifters/drifters_compute_k.h
+shared/drifters/drifters_core.F90
+shared/drifters/drifters.F90
+shared/drifters/drifters_input.F90
+shared/drifters/drifters_io.F90
+shared/drifters/drifters_push.h
+shared/drifters/drifters_set_field.h
+shared/drifters/fms_switches.h
+shared/drifters/quicksort.F90
 shared/fft/fft99.F90
 shared/fft/fft.F90
 shared/field_manager/field_manager.F90
