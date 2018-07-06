@@ -1271,6 +1271,7 @@ module ocean_types_mod
                                                          ! This need not be assigned if all logical
                                                          ! processors are used.
      integer, pointer, dimension(:) :: pelist  =>NULL()  ! Used for flux-exchange.
+     logical                        :: pe                ! current pe.     
      integer                        :: avg_kount         ! Used for accumulating averages - can be omitted?
      logical                        :: is_ocean_pe       ! .true. on processors that run the ocean model.
      integer, dimension(3)          :: axes              ! for diagnostics     

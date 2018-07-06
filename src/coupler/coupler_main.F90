@@ -219,7 +219,7 @@ use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
   type (atmos_data_type) :: Atm
 ! type  (land_data_type) :: Land
 ! type   (ice_data_type) :: Ice
-! type (ocean_public_type) :: Ocean
+type (ocean_public_type) :: Ocean
 
 ! type(atmos_land_boundary_type)     :: Atmos_land_boundary
 ! type(atmos_ice_boundary_type)      :: Atmos_ice_boundary
@@ -233,14 +233,13 @@ use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
 
   type (time_type) :: Time, Time_init, Time_end, Time_step_atmos
   type(time_type) :: Time_atmos
-! integer :: num_ocean_calls, num_atmos_calls, no, na
-  integer ::                  num_atmos_calls,     na
-! integer :: num_cpld_calls, nc
+  integer :: num_ocean_calls, num_atmos_calls, no, na
+  integer :: num_cpld_calls, nc
 
 ! ----- coupled model initial date -----
 
-! logical :: ocean_seg_start
-! logical :: ocean_seg_end
+  logical :: ocean_seg_start
+  logical :: ocean_seg_end
   integer :: date_init(6)
   integer :: calendar_type = -99
 
@@ -337,16 +336,17 @@ use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
   logical :: force_date_from_namelist = .false.  ! override restart values for date
   integer :: months=0, days=0, hours=0, minutes=0, seconds=0
 !mj exported dt_atmos into coupler_mod
-!  integer :: dt_atmos = 0  ! fluxes passed between atmosphere & ice/land
-! integer :: dt_ocean = 0  ! ocean tracer timestep
-! integer :: dt_cpld  = 0  ! fluxes passed between ice & ocean
+!   integer :: dt_atmos = 0  ! fluxes passed between atmosphere & ice/land
+  integer :: dt_ocean = 0  ! ocean tracer timestep
+  integer :: dt_cpld  = 0  ! fluxes passed between ice & ocean
   integer,dimension (3)           :: locmax, locmin
 
   integer ::atmos_npes=0
+  integer ::ocean_npes=0  
   logical :: do_atmos =.true.
   logical :: do_flux =.true.
-! logical :: concurrent=.FALSE.
-! logical :: use_lag_fluxes=.TRUE.
+  logical :: concurrent=.FALSE.
+  logical :: use_lag_fluxes=.TRUE.
   namelist /coupler_nml/ current_date, calendar, force_date_from_namelist, months, days, hours, &
                          minutes, seconds, dt_atmos, do_atmos, do_flux, atmos_npes
 
@@ -548,8 +548,8 @@ contains
     type (time_type) :: Run_length
     character(len=9) :: month
     integer :: pe, npes
-    integer :: atmos_pe_start=0, atmos_pe_end=0
-!              ocean_pe_start=0, ocean_pe_end=0, &
+    integer :: atmos_pe_start=0, atmos_pe_end=0, &
+             ocean_pe_start=0, ocean_pe_end=0
 !              ice_pe_start=0, ice_pe_end=0, &
 !              land_pe_start=0, land_pe_end=0
     integer :: atm1_pe_start=0, atm1_pe_end, &
@@ -652,42 +652,42 @@ contains
 !   if( land_npes.NE.0 ) &
 !        call mpp_error( WARNING, 'coupler_init: pelists not yet implemented for land.' )
 
-!   if( concurrent )then
+  if( concurrent )then
 !atmos_npes + ocean_npes must equal npes
-!       if( atmos_npes.EQ.0 )atmos_npes = npes - ocean_npes
-!       if( ocean_npes.EQ.0 )ocean_npes = npes - atmos_npes
+      if( atmos_npes.EQ.0 )atmos_npes = npes - ocean_npes
+      if( ocean_npes.EQ.0 )ocean_npes = npes - atmos_npes
 !both must now be non-zero
-!       if( atmos_npes.EQ.0 .OR. ocean_npes.EQ.0 ) &
-!            call mpp_error( FATAL, 'coupler_init: atmos_npes or ocean_npes must be specified for concurrent coupling.' )
-!       if( atmos_npes+ocean_npes.NE.npes ) &
-!            call mpp_error( FATAL, 'coupler_init: atmos_npes+ocean_npes must equal npes for concurrent coupling.' )
-!       atmos_pe_start = 0
-!       atmos_pe_end = atmos_npes-1
-!       ocean_pe_start = atmos_npes
-!       ocean_pe_end = atmos_npes+ocean_npes-1
-!       if( .NOT.use_lag_fluxes )call mpp_error( WARNING, &
-!            'coupler_init: you have set both concurrent and use_lag_fluxes &
-!           & to TRUE in coupler_nml. When not using lag fluxes, components &
-!           & will synchronize at two points, and thus run serially.' )
-!   else                        !serial timestepping
+      if( atmos_npes.EQ.0 .OR. ocean_npes.EQ.0 ) &
+           call mpp_error( FATAL, 'coupler_init: atmos_npes or ocean_npes must be specified for concurrent coupling.' )
+      if( atmos_npes+ocean_npes.NE.npes ) &
+           call mpp_error( FATAL, 'coupler_init: atmos_npes+ocean_npes must equal npes for concurrent coupling.' )
+      atmos_pe_start = 0
+      atmos_pe_end = atmos_npes-1
+      ocean_pe_start = atmos_npes
+      ocean_pe_end = atmos_npes+ocean_npes-1
+      if( .NOT.use_lag_fluxes )call mpp_error( WARNING, &
+           'coupler_init: you have set both concurrent and use_lag_fluxes &
+          & to TRUE in coupler_nml. When not using lag fluxes, components &
+          & will synchronize at two points, and thus run serially.' )
+  else                        !serial timestepping
         if( atmos_npes.EQ.0 )atmos_npes = npes
             atmos_pe_start = 0
             atmos_pe_end = atmos_npes-1
-!       if( ocean_npes.EQ.0 )ocean_npes = npes
-!       if( max(atmos_npes,ocean_npes).EQ.npes )then !overlapping pelists
-!           atmos_pe_start = 0
-!           atmos_pe_end = atmos_npes-1
-!           ocean_pe_start = 0
-!           ocean_pe_end = ocean_npes-1
-!       else                    !disjoint pelists
-!           if( atmos_npes+ocean_npes.NE.npes ) call mpp_error( FATAL,  &
-!                'coupler_init: atmos_npes+ocean_npes must equal npes for serial coupling on disjoint pelists.' )
-!           atmos_pe_start = 0
-!           atmos_pe_end = atmos_npes-1
-!           ocean_pe_start = atmos_npes
-!           ocean_pe_end = atmos_npes+ocean_npes-1
-!       end if
-!   end if
+      if( ocean_npes.EQ.0 )ocean_npes = npes
+      if( max(atmos_npes,ocean_npes).EQ.npes )then !overlapping pelists
+          atmos_pe_start = 0
+          atmos_pe_end = atmos_npes-1
+          ocean_pe_start = 0
+          ocean_pe_end = ocean_npes-1
+      else                    !disjoint pelists
+          if( atmos_npes+ocean_npes.NE.npes ) call mpp_error( FATAL,  &
+               'coupler_init: atmos_npes+ocean_npes must equal npes for serial coupling on disjoint pelists.' )
+          atmos_pe_start = 0
+          atmos_pe_end = atmos_npes-1
+          ocean_pe_start = atmos_npes
+          ocean_pe_end = atmos_npes+ocean_npes-1
+      end if
+  end if
 !messages
     write( text,'(a,2i6)' )'Atmos PE range: ', atmos_pe_start, atmos_pe_end
     call mpp_error( NOTE, 'coupler_init: '//trim(text) )
@@ -704,19 +704,19 @@ contains
 !       call mpp_error( NOTE, 'coupler_init: Sending most recent fluxes to ocean.' )
 !   end if
     allocate( Atm%pelist  (atmos_npes) )
-!   allocate( Ocean%pelist(ocean_npes) )
+    allocate( Ocean%pelist(ocean_npes) )
     Atm%pelist   = (/(i,i=atmos_pe_start,atmos_pe_end)/)
-!   Ocean%pelist = (/(i,i=ocean_pe_start,ocean_pe_end)/)
+    Ocean%pelist = (/(i,i=ocean_pe_start,ocean_pe_end)/)
     Atm%pe = atmos_pe_start.LE.pe .AND. pe.LE.atmos_pe_end
-!   Ocean%pe = ocean_pe_start.LE.pe .AND. pe.LE.ocean_pe_end
+    Ocean%pe = ocean_pe_start.LE.pe .AND. pe.LE.ocean_pe_end
     call mpp_declare_pelist( Atm%pelist,   '_atm' )
-!   call mpp_declare_pelist( Ocean%pelist, '_ocn' )
-!   if( concurrent .AND. pe.EQ.mpp_root_pe() )then
-!       write( stdlog(),'(a)' )'Using concurrent coupling...'
-!       write( stdlog(),'(a,4i4)' ) &
-!        'atmos_pe_start, atmos_pe_end, ocean_pe_start, ocean_pe_end=', &
-!         atmos_pe_start, atmos_pe_end, ocean_pe_start, ocean_pe_end
-!   end if
+   call mpp_declare_pelist( Ocean%pelist, '_ocn' )
+   if( concurrent .AND. pe.EQ.mpp_root_pe() )then
+       write( stdlog(),'(a)' )'Using concurrent coupling...'
+       write( stdlog(),'(a,4i4)' ) &
+        'atmos_pe_start, atmos_pe_end, ocean_pe_start, ocean_pe_end=', &
+         atmos_pe_start, atmos_pe_end, ocean_pe_start, ocean_pe_end
+   end if
 
 !-----------------------------------------------------------------------
 !------ initialize diagnostics manager ------
@@ -731,9 +731,9 @@ contains
     if( Atm%pe )then
         call mpp_set_current_pelist(Atm%pelist)
         if(atmos_npes /= npes)diag_model_subset = DIAG_OTHER  ! change diag_model_subset from DIAG_ALL
-!   elseif( Ocean%pe )then  ! Error check above for disjoint pelists should catch any problem
-!       call mpp_set_current_pelist(Ocean%pelist)
-!       if(ocean_npes /= npes)diag_model_subset = DIAG_OCEAN  ! change diag_model_subset from DIAG_ALL
+    elseif( Ocean%pe )then  ! Error check above for disjoint pelists should catch any problem
+        call mpp_set_current_pelist(Ocean%pelist)
+        if(ocean_npes /= npes)diag_model_subset = DIAG_OCEAN  ! change diag_model_subset from DIAG_ALL
     end if
    call field_manager_init(nfields)
    call diag_manager_init(DIAG_MODEL_SUBSET=diag_model_subset)   ! initialize diag_manager for processor subset output
@@ -788,14 +788,14 @@ contains
 !-----------------------------------------------------------------------
 !----- compute the time steps ------
 
-!   Time_step_cpld  = set_time (dt_cpld ,0)
-!   Time_step_ocean = set_time (dt_ocean,0)
+  Time_step_cpld  = set_time (dt_cpld ,0)
+  Time_step_ocean = set_time (dt_ocean,0)
     Time_step_atmos = set_time (dt_atmos,0)
 
 !----- determine maximum number of iterations per loop ------
 
-!   num_cpld_calls  = Run_length      / Time_step_cpld
-!   num_ocean_calls = Time_step_cpld  / Time_step_ocean
+  num_cpld_calls  = Run_length      / Time_step_cpld
+  num_ocean_calls = Time_step_cpld  / Time_step_ocean
 !   num_atmos_calls = Time_step_cpld  / Time_step_atmos
     num_atmos_calls = Run_length      / Time_step_atmos
 
@@ -809,21 +809,21 @@ contains
 
 !----- make sure run length is a multiple of ocean time step ------
 
-!   if ( num_cpld_calls * num_ocean_calls * Time_step_ocean /= Run_length )  &
-!        call error_mesg ('program coupler',  &
-!        'run length must be multiple of ocean time step', FATAL)
+  if ( num_cpld_calls * num_ocean_calls * Time_step_ocean /= Run_length )  &
+       call error_mesg ('program coupler',  &
+       'run length must be multiple of ocean time step', FATAL)
 
 ! ---- make sure cpld time step is a multiple of atmos time step ----
 
-!   if ( num_atmos_calls * Time_step_atmos /= Time_step_cpld )  &
-!        call error_mesg ('program coupler',   &
-!        'atmos time step is not a multiple of the cpld time step', FATAL)
+  if ( num_atmos_calls * Time_step_atmos /= Time_step_cpld )  &
+       call error_mesg ('program coupler',   &
+       'atmos time step is not a multiple of the cpld time step', FATAL)
 
 ! ---- make sure cpld time step is a multiple of ocean time step ----
 
-!   if ( num_ocean_calls * Time_step_ocean /= Time_step_cpld )  &
-!        call error_mesg ('program coupler',   &
-!        'cpld time step is not a multiple of the ocean time step', FATAL)
+  if ( num_ocean_calls * Time_step_ocean /= Time_step_cpld )  &
+       call error_mesg ('program coupler',   &
+       'cpld time step is not a multiple of the ocean time step', FATAL)
 
 !-----------------------------------------------------------------------
 !------ initialize component models ------
@@ -879,13 +879,13 @@ contains
 !       call print_memuse_stats( 'ice_model_init' )
 !       call data_override_init(Atm_domain_in = Atm%domain, Ice_domain_in = Ice%domain, Land_domain_in=Land%domain)
     end if
-!   if( Ocean%pe )then
-!       call mpp_set_current_pelist(Ocean%pelist)
+  if( Ocean%pe )then
+      call mpp_set_current_pelist(Ocean%pelist)
 !---- ocean ---------
-!       call ocean_model_init( Ocean, Time_init, Time, Time_step_ocean )
-!       call print_memuse_stats( 'ocean_model_init' )
-!       call data_override_init(Ocean_domain_in = Ocean%domain )
-!   end if
+      call ocean_model_init( Ocean, Time_init, Time, Time_step_ocean )
+      call print_memuse_stats( 'ocean_model_init' )
+      call data_override_init(Ocean_domain_in = Ocean%domain )
+  end if
     call mpp_set_current_pelist()
 
 !   call mpp_broadcast_domain(Ice%domain)
