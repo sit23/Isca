@@ -175,6 +175,8 @@ class Experiment(Logger, EventEmitter):
         Returns a string name of calendar, or None if not set in namelist.'"""
         if 'main_nml' in self.namelist:
             return self.namelist['main_nml'].get('calendar')
+        elif 'coupler_nml' in self.namelist:
+            return self.namelist['coupler_nml'].get('calendar')            
         else:
             return None
 

@@ -91,9 +91,9 @@ exp.namelist = namelist = Namelist({
         'old_dtaudv': True    
     },
 
-    'atmosphere_nml': {
-        'idealized_moist_model': True
-    },
+#     'atmosphere_nml': {
+#         'idealized_moist_model': True
+#     },
 
     #Use a large mixed-layer depth, and the Albedo of the CTRL case in Jucker & Gerber, 2017
     'mixed_layer_nml': {
