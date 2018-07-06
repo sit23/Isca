@@ -32,7 +32,7 @@
 #############################################################################
 # Users need not change anything below this line except the namelists values.
 #############################################################################
-  set name         = "atmos_grid_bgrid"                           # name of the grid file will be generated
+  set name         = "atmos_grid_t42"                           # name of the grid file will be generated
   set tooldir      = $cwd                                   # directory of the tool
   set sharedir     = $root/src/shared                       # directory of the shared code.
   set includedir   = $sharedir/include                      # fms include directory  
@@ -75,8 +75,9 @@
      &atmos_grid_generator_nml
        output_file = '$name.nc'  /    
     &atmos_grid_nml
-       grid_type = 'bgrid'
-       num_lon=144, num_lat=90   /
+       grid_type = 'spectral'
+       num_lon=128, num_lat=64,
+       num_fourier=42, num_spherical=43   /
 !
 
 #  run the executable
