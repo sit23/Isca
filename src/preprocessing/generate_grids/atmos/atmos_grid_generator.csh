@@ -18,21 +18,21 @@
 #######################################################################
 
   set echo
-  set platform     = "ncrc.intel"                       # A unique identifier for your platform
+  set platform     = "emps-gv"                       # A unique identifier for your platform
 #
-  set root         = $cwd:h:h:h:h                       # The directory that contains src/ and bin/
+  set root         = $GFDL_BASE                      # The directory that contains src/ and bin/
   set npes         = 1
 #
 # Users must ensure the following  files exist for their platform.
 #
-  source $root/bin/environs.$platform                   # environment variables and compiler options
+  source $root/src/extra/env/$platform                   # environment variables and compiler options
 
-  set mkmfTemplate = $root/bin/mkmf.template.$platform  # path to mkmf template 
+  set mkmfTemplate = $root/src/extra/python/isca/templates/mkmf.template.ia64  # path to mkmf template 
 
 #############################################################################
 # Users need not change anything below this line except the namelists values.
 #############################################################################
-  set name         = "atmos_grid"                           # name of the grid file will be generated
+  set name         = "atmos_grid_bgrid"                           # name of the grid file will be generated
   set tooldir      = $cwd                                   # directory of the tool
   set sharedir     = $root/src/shared                       # directory of the shared code.
   set includedir   = $sharedir/include                      # fms include directory  
@@ -44,7 +44,7 @@
     set mkmfTemplate  = $root/bin/mkmf.debugtemplate.$platform         
   endif
   set mkmf         = $root/bin/mkmf                         # path to executable mkmf
-  set cppDefs      = ( "-Duse_netCDF -Duse_netCDF3 -Duse_libMPI -DOVERLOAD_C8" )        # list of cpp #defines to be passed to the source files
+  set cppDefs      = ( "-Duse_libMPI -Duse_netCDF -Duse_LARGEFILE -DINTERNAL_FILE_NML -DOVERLOAD_C8" )        # list of cpp #defines to be passed to the source files
 
 # list the source code
   set CORE         = " $tooldir/{atmos_grid.f90,atmos_grid_generator.f90} "
@@ -52,8 +52,8 @@
   set UTILITIES    = "$root/src/shared/{axis_utils,constants,fms,mpp,fft,platform,memutils,mosaic}"
   set UTILITIES    = " $UTILITIES $sharedir/mpp/include $includedir "
   set srclist      =  ( $CORE $UTILITIES )
-
-   
+     
+  module list 
 # compile the model code and create executable
   if( ! -d $executable:h ) mkdir $executable:h
   cd $executable:h
