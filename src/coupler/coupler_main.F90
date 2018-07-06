@@ -173,9 +173,10 @@ program coupler_main
 !                             ocean_ice_boundary_type, atmos_ice_boundary_type
 
 use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
-                            ocean_model_end, ocean_data_type, ice_ocean_boundary_type, &
-                            read_ice_ocean_boundary, write_ice_ocean_boundary, &
-                            init_default_ice_ocean_boundary
+                            ocean_model_end, ocean_public_type, ice_ocean_boundary_type
+!                             , &
+!                             read_ice_ocean_boundary, write_ice_ocean_boundary, &
+!                             init_default_ice_ocean_boundary
 !
 ! flux_ calls translate information between model grids - see flux_exchange.f90
 !
@@ -218,7 +219,7 @@ use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
   type (atmos_data_type) :: Atm
 ! type  (land_data_type) :: Land
 ! type   (ice_data_type) :: Ice
-! type (ocean_data_type) :: Ocean
+! type (ocean_public_type) :: Ocean
 
 ! type(atmos_land_boundary_type)     :: Atmos_land_boundary
 ! type(atmos_ice_boundary_type)      :: Atmos_ice_boundary
