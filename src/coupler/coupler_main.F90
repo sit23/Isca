@@ -150,7 +150,7 @@ program coupler_main
   use  field_manager_mod, only : field_manager_init
   use  diag_manager_mod, only: diag_manager_init, diag_manager_end, &
                                DIAG_OTHER, DIAG_ALL, get_base_date
-  use  data_override_mod, only: data_override_init
+!   use  data_override_mod, only: data_override_init
 !
 ! model interfaces used to couple the component models:
 !               atmosphere, land, ice, and ocean
@@ -188,10 +188,10 @@ program coupler_main
 !                              flux_ice_to_ocean,    &
 !                              flux_ocean_to_ice
 
-  use simple_surface_mod, only: simple_surface_init,   &
-                                compute_flux,          &
-                                update_simple_surface, &
-                                simple_surface_end
+!   use simple_surface_mod, only: simple_surface_init,   &
+!                                 compute_flux,          &
+!                                 update_simple_surface, &
+!                                 simple_surface_end
 
   use mpp_mod, only: mpp_clock_id, mpp_clock_begin, mpp_clock_end
   use mpp_mod, only: mpp_init, mpp_pe, mpp_npes, mpp_root_pe, &
@@ -406,20 +406,20 @@ program coupler_main
 
             Time_atmos = Time_atmos + Time_step_atmos
 
-            call compute_flux (float(dt_atmos), Time_atmos, Atm,       &
-!                              land_frac_atm,                          &
-!                              t_surf_atm, albedo_atm, rough_mom_atm,  &
-!                              flux_u_atm, flux_v_atm, dtaudv_atm,     &
-!                              u_star_atm, b_star_atm                  )
-                               Land_ice_atmos_boundary%land_frac, &
-                               Land_ice_atmos_boundary%t,         &
-                               Land_ice_atmos_boundary%albedo,    &
-                               Land_ice_atmos_boundary%rough_mom, &
-                               Land_ice_atmos_boundary%u_flux,    &
-                               Land_ice_atmos_boundary%v_flux,    &
-                               Land_ice_atmos_boundary%dtaudv,    &
-                               Land_ice_atmos_boundary%u_star,    &
-                               Land_ice_atmos_boundary%b_star     )
+!             call compute_flux (float(dt_atmos), Time_atmos, Atm,       &
+! !                              land_frac_atm,                          &
+! !                              t_surf_atm, albedo_atm, rough_mom_atm,  &
+! !                              flux_u_atm, flux_v_atm, dtaudv_atm,     &
+! !                              u_star_atm, b_star_atm                  )
+!                                Land_ice_atmos_boundary%land_frac, &
+!                                Land_ice_atmos_boundary%t,         &
+!                                Land_ice_atmos_boundary%albedo,    &
+!                                Land_ice_atmos_boundary%rough_mom, &
+!                                Land_ice_atmos_boundary%u_flux,    &
+!                                Land_ice_atmos_boundary%v_flux,    &
+!                                Land_ice_atmos_boundary%dtaudv,    &
+!                                Land_ice_atmos_boundary%u_star,    &
+!                                Land_ice_atmos_boundary%b_star     )
 
 !           if (do_flux) then
 !             call sfc_boundary_layer( REAL(dt_atmos), Time_atmos, &
@@ -431,9 +431,9 @@ program coupler_main
             if (do_atmos) &
               call update_atmos_model_down( Land_ice_atmos_boundary, Atm )
 
-              call update_simple_surface (float(dt_atmos), Time_atmos, Atm, &
-                                          Land_ice_atmos_boundary%dt_t, &
-                                          Land_ice_atmos_boundary%dt_q)
+!               call update_simple_surface (float(dt_atmos), Time_atmos, Atm, &
+!                                           Land_ice_atmos_boundary%dt_t, &
+!                                           Land_ice_atmos_boundary%dt_q)
 
 !           call flux_down_from_atmos( Time_atmos, Atm, Land, Ice, &
 !                Land_ice_atmos_boundary, &
@@ -837,7 +837,7 @@ contains
 !pjp    Lima Atm contains fields in addition to what df is using.
 !pjp    They are initialized to zero by atmos_model_init.
 !pjp    I don't think any action is necessary to make simple_surface_init compatable with Lima.
-        call simple_surface_init (Time, Atm)
+!         call simple_surface_init (Time, Atm)
         id = size(Atm%t_bot,1)
         jd = size(Atm%t_bot,2)
         allocate (Land_ice_atmos_boundary%t        (id,jd), &
@@ -964,7 +964,7 @@ contains
 !pjp    Lima Atm contains fields in addition to what df is using.
 !pjp    They are initialized to zero by atmos_model_init.
 !pjp    I don't think any action is necessary to make simple_surface_end compatable with Lima.
-        call simple_surface_end (Atm)
+!         call simple_surface_end (Atm)
 
 !       call  land_model_end (Atmos_land_boundary, Land)
 !       call   ice_model_end (Ice)

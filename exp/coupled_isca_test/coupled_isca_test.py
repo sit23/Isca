@@ -49,7 +49,7 @@ exp.clear_rundir()
 
 #Define values for the 'core' namelist
 exp.namelist = namelist = Namelist({
-    'main_nml':{
+    'coupler_nml':{
      'days'   : 30,
      'hours'  : 0,
      'minutes': 0,
