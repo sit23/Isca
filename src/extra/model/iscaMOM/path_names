@@ -136,6 +136,7 @@ coupler/coupler_main.F90
 shared/axis_utils/axis_utils.F90
 shared/constants/constants.F90
 shared/astronomy/astronomy.f90
+shared/coupler/coupler_types.F90
 shared/diag_manager/diag_axis.F90
 shared/diag_manager/diag_data.F90
 shared/diag_manager/diag_grid.F90
