@@ -149,8 +149,8 @@ program coupler_main
 
   use  field_manager_mod, only : field_manager_init
   use  diag_manager_mod, only: diag_manager_init, diag_manager_end, &
-                               DIAG_OTHER, DIAG_ALL, get_base_date
-!   use  data_override_mod, only: data_override_init
+                               DIAG_OCEAN, DIAG_OTHER, DIAG_ALL, get_base_date
+  use  data_override_mod, only: data_override_init
 !
 ! model interfaces used to couple the component models:
 !               atmosphere, land, ice, and ocean
@@ -173,7 +173,7 @@ program coupler_main
 !                             ocean_ice_boundary_type, atmos_ice_boundary_type
 
 use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
-                            ocean_model_end, ocean_public_type, ice_ocean_boundary_type
+                            ocean_model_end, ocean_public_type, ocean_state_type, ice_ocean_boundary_type
 !                             , &
 !                             read_ice_ocean_boundary, write_ice_ocean_boundary, &
 !                             init_default_ice_ocean_boundary
@@ -220,6 +220,7 @@ use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
 ! type  (land_data_type) :: Land
 ! type   (ice_data_type) :: Ice
 type (ocean_public_type) :: Ocean
+type (ocean_state_type),  pointer :: Ocean_state => NULL()
 
 ! type(atmos_land_boundary_type)     :: Atmos_land_boundary
 ! type(atmos_ice_boundary_type)      :: Atmos_ice_boundary
@@ -231,7 +232,7 @@ type (ocean_public_type) :: Ocean
 !-----------------------------------------------------------------------
 ! ----- coupled model time -----
 
-  type (time_type) :: Time, Time_init, Time_end, Time_step_atmos
+  type (time_type) :: Time, Time_init, Time_end, Time_step_atmos, Time_step_cpld, Time_step_ocean
   type(time_type) :: Time_atmos
   integer :: num_ocean_calls, num_atmos_calls, no, na
   integer :: num_cpld_calls, nc
@@ -348,7 +349,7 @@ type (ocean_public_type) :: Ocean
   logical :: concurrent=.FALSE.
   logical :: use_lag_fluxes=.TRUE.
   namelist /coupler_nml/ current_date, calendar, force_date_from_namelist, months, days, hours, &
-                         minutes, seconds, dt_atmos, do_atmos, do_flux, atmos_npes
+                         minutes, seconds, dt_atmos, dt_ocean, dt_cpld, do_atmos, do_flux, atmos_npes
 
   integer :: initClock, mainClock, termClock
 
@@ -796,8 +797,8 @@ contains
 
   num_cpld_calls  = Run_length      / Time_step_cpld
   num_ocean_calls = Time_step_cpld  / Time_step_ocean
-!   num_atmos_calls = Time_step_cpld  / Time_step_atmos
-    num_atmos_calls = Run_length      / Time_step_atmos
+  num_atmos_calls = Time_step_cpld  / Time_step_atmos
+!     num_atmos_calls = Run_length      / Time_step_atmos
 
 !-----------------------------------------------------------------------
 !------------------- some error checks ---------------------------------
@@ -882,7 +883,7 @@ contains
   if( Ocean%pe )then
       call mpp_set_current_pelist(Ocean%pelist)
 !---- ocean ---------
-      call ocean_model_init( Ocean, Time_init, Time, Time_step_ocean )
+      call ocean_model_init( Ocean, ocean_state, Time_init, Time, dt_ocean )
       call print_memuse_stats( 'ocean_model_init' )
       call data_override_init(Ocean_domain_in = Ocean%domain )
   end if
