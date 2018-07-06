@@ -14,11 +14,11 @@
 # These particular values are here for testing purposes in GFDL only.  
 #######################################################################
   set echo
-  set name         = "grid_spec"                                  # name of the grid file will be generated
-  set platform     = "ncrc.intel"                                    # A unique identifier for your platform
+  set name         = "grid_spec_mk1"                                  # name of the grid file will be generated
+  set platform     = "emps-gv"                       # A unique identifier for your platform
   set npes         = 1                                      # number of processors
 #
-  set root         = $cwd:h:h:h:h                       # The directory that contains src/ and bin/
+  set root         = $GFDL_BASE                      # The directory that contains src/ and bin/
   set tooldir      = $cwd                                         # directory of the tool 
   set workdir      = $tooldir/workdir                             # where the tool is run and output is produced
   set executable   = $tooldir/exec/make_xgrids                    # executable created after compilation
@@ -26,17 +26,20 @@
 #
 # Users must ensure the following  files exist for their platform.
 #
-  source $root/bin/environs.$platform                   # environment variables and compiler options
+  source $root/src/extra/env/$platform                   # environment variables and compiler options
 
 # model grid data
-  set atmos_grid   = $tooldir:h/atmos/workdir/atmos_grid.nc       # atmos grid
-  set land_grid    = $tooldir:h/atmos/workdir/atmos_grid.nc       # land grid
-  set ocean_grid   = $tooldir:h/ocean/workdir/ocean_grid.nc       # ocean grid
+  set atmos_grid   = $tooldir:h/atmos/workdir/atmos_grid_t42.nc       # atmos grid
+#   set land_grid    = $tooldir:h/atmos/workdir/atmos_grid.nc       # land grid
+  set ocean_grid   = $tooldir:h/ocean/workdir/ocean_grid_simple_mk1.nc       # ocean grid
+
+  set NETCDF_LIBS = `nc-config --libs`
+  set NETCDF_FLAGS = `nc-config --fflags`
 
 #--create the executable -----------------------------------------------------------
   if( ! -d $executable:h ) mkdir $executable:h
   cd $executable:h
-  cc -O -o $executable:t $xgrids_code -I$netcdf3_inc_dir -L$netcdf3_lib_dir -lnetcdf -lm
+  cc -O -o $executable:t $xgrids_code $NETCDF_FLAGS $NETCDF_LIBS -lm
 
 #--------------------------------------------------------------------------------------------------------
 # setup directory structure
@@ -48,7 +51,9 @@
   cp $executable $executable:t
 
 #  run the executable
-  ./$executable:t -o $ocean_grid -a $atmos_grid -l $land_grid >>fms.out   
+#   ./$executable:t -o $ocean_grid -a $atmos_grid -l $land_grid >>fms.out   
+  ./$executable:t -o $ocean_grid -a $atmos_grid >>fms.out   
+
   cat fms.out
   
 # renmae output file
