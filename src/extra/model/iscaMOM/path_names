@@ -157,6 +157,7 @@ shared/drifters/drifters_push.h
 shared/drifters/drifters_set_field.h
 shared/drifters/fms_switches.h
 shared/drifters/quicksort.F90
+shared/exchange/stock_constants.F90
 shared/fft/fft99.F90
 shared/fft/fft.F90
 shared/field_manager/field_manager.F90
