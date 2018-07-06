@@ -79,10 +79,11 @@ character(len=128) :: &
 character (len=128) :: tagname = &
      '$Name: tikal $'
 
-real,parameter:: gtpi=grav/2.0/pi, epsln=1e-20 
+real :: gtpi=0.
+real,parameter :: epsln=1e-20 
 real,parameter:: sqrt_2 = sqrt(2.)
 real,parameter:: rhoair=1.2233, rhoh2o=1000., gamma=0.028  
-real,parameter:: fac2=0.5*gamma*rhoair/rhoh2o/grav
+real :: fac2=0.
 real,parameter:: twopi=2.*pi, third=1./3., seventh=1./7.
 real,parameter:: rho_ice=905.
 
@@ -235,6 +236,9 @@ subroutine ocean_wave_init(Grid, Domain, Waves, Time, Time_steps, Ocean_options,
   allocate(wrk2(isc:iec,jsc:jec))
 #endif
 
+  gtpi=grav/2.0/pi !Initialise constants here as grav is not parameter anymore, meaning these can't be either.
+  fac2=0.5*gamma*rhoair/rhoh2o/grav
+
   Waves%xmom   = 0.0
   Waves%ymom   = 0.0
   Waves%wave_k = 0.0
@@ -271,6 +275,7 @@ subroutine ocean_wave_init(Grid, Domain, Waves, Time, Time_steps, Ocean_options,
   id_wave_k = register_diag_field ('ocean_model', 'wave_k', Grd%tracer_axes(1:2), &
               Time%model_time, 'wave number', '1/m',                              &
               missing_value=missing_value, range=(/-1e3,1e3/))
+
 
   ! initialise the time stepping
   tau_w   = 0
