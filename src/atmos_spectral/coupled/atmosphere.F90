@@ -47,6 +47,7 @@ character(len=128), parameter :: tagname = &
 public :: atmosphere_init, atmosphere_down, atmosphere_up, atmosphere_end, atmosphere_domain
 public :: atmosphere_resolution, atmosphere_boundary, get_bottom_mass, get_bottom_wind, get_atmosphere_axes
 public :: surf_diff_type, atmosphere_restart
+public :: get_nhum
 integer :: seconds, days, num_tracers, num_levels, nhum
 logical :: dry_model
 
@@ -384,6 +385,17 @@ z_bot_out = z_bot
 
 return
 end subroutine get_bottom_mass
+!####################################################################################################################
+
+subroutine get_nhum (nhum_out)
+
+integer, intent(out) :: nhum_out
+
+nhum_out = nhum
+
+return
+end subroutine get_nhum
+
 !####################################################################################################################
 
 subroutine get_bottom_wind (u_bot, v_bot)

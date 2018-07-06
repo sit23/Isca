@@ -46,7 +46,7 @@ use atmosphere_mod,     only: atmosphere_end, get_bottom_mass, get_bottom_wind
 use atmosphere_mod,     only: atmosphere_resolution, atmosphere_domain
 use atmosphere_mod,     only: atmosphere_boundary, get_atmosphere_axes
 use atmosphere_mod,     only: surf_diff_type
-
+use atmosphere_mod,     only: get_nhum
 !-----------------------------------------------------------------------
 
 implicit none
@@ -265,13 +265,15 @@ subroutine update_atmos_model_down( Surface_boundary, Atmos )
 
 type(land_ice_atmos_boundary_type), intent(in) :: Surface_boundary
 type (atmos_data_type), intent(inout) :: Atmos
-                                      
+
+integer :: nhum                                      
 !-----------------------------------------------------------------------
   call mpp_clock_begin(atmClock)
 
+    call get_nhum (nhum)
 
     Atmos%Surf_diff%delta_t = Surface_boundary%dt_t
-    Atmos%Surf_diff%delta_q = Surface_boundary%dt_q
+    Atmos%Surf_diff%delta_tr(:,:,nhum) = Surface_boundary%dt_q
 
     call atmosphere_up (Atmos%Time,  Surface_boundary%land_frac, Atmos%Surf_diff, &
                         Atmos%lprec, Atmos%fprec, Atmos%gust)
