@@ -226,14 +226,14 @@ type (ocean_state_type),  pointer :: Ocean_state => NULL()
 ! type(atmos_ice_boundary_type)      :: Atmos_ice_boundary
   type(land_ice_atmos_boundary_type) :: Land_ice_atmos_boundary
 ! type(land_ice_boundary_type)       :: Land_ice_boundary
-! type(ice_ocean_boundary_type)      :: Ice_ocean_boundary
+ type(ice_ocean_boundary_type)      :: Ice_ocean_boundary
 ! type(ocean_ice_boundary_type)      :: Ocean_ice_boundary
 
 !-----------------------------------------------------------------------
 ! ----- coupled model time -----
 
   type (time_type) :: Time, Time_init, Time_end, Time_step_atmos, Time_step_cpld, Time_step_ocean
-  type(time_type) :: Time_atmos
+  type(time_type) :: Time_atmos, Time_ocean
   integer :: num_ocean_calls, num_atmos_calls, no, na
   integer :: num_cpld_calls, nc
 
@@ -345,11 +345,14 @@ type (ocean_state_type),  pointer :: Ocean_state => NULL()
   integer ::atmos_npes=0
   integer ::ocean_npes=0  
   logical :: do_atmos =.true.
+  logical :: do_ocean =.true.
+  logical :: do_land =.false.
+  logical :: do_ice =.false.  
   logical :: do_flux =.true.
   logical :: concurrent=.FALSE.
   logical :: use_lag_fluxes=.TRUE.
   namelist /coupler_nml/ current_date, calendar, force_date_from_namelist, months, days, hours, &
-                         minutes, seconds, dt_atmos, dt_ocean, dt_cpld, do_atmos, do_flux, atmos_npes
+          minutes, seconds, dt_atmos, dt_ocean, dt_cpld, do_atmos, do_ocean, do_land, do_ice, do_flux, atmos_npes
 
   integer :: initClock, mainClock, termClock
 
@@ -486,26 +489,18 @@ do nc = 1, num_cpld_calls
 !        call flux_ice_to_ocean( Time, Ice, Ocean, Ice_ocean_boundary )
 !    end if
 
-!    if( Ocean%pe )then
-!        call mpp_set_current_pelist(Ocean%pelist)
-!        do no = 1,num_ocean_calls
+    if( Ocean%pe )then
+        call mpp_set_current_pelist(Ocean%pelist)
 
-!            if( mpp_pe().EQ.mpp_root_pe() )write( stderr(),'(a,2i4)' )'nc,no=', nc,no
-!           Time_ocean = Time_ocean + Time_step_ocean
 
-!           ocean_seg_start = ( no .eq. 1 )               ! could eliminate these by
-!           ocean_seg_end   = ( no .eq. num_ocean_calls ) ! putting this loop in
-                                                          ! update_ocean_model since
-                                                          ! fluxes don't change here
+           if (do_ocean)  call update_ocean_model( Ice_ocean_boundary, Ocean_state,  Ocean, &
+                                             Time_ocean, Time_step_cpld )
 
-!           if (do_ocean) call update_ocean_model( Ice_ocean_boundary, Ocean, &
-!                              ocean_seg_start, ocean_seg_end, num_ocean_calls)
-
-!        enddo
+            Time_ocean = Time_ocean +  Time_step_cpld
 !   ------ end of ocean time step loop -----
 !-----------------------------------------------------------------------
-!        Time = Time_ocean
-!    end if
+        Time = Time_ocean
+    end if
 !--------------
    write( text,'(a,i4)' )'Main loop at coupling timestep=', nc
    call print_memuse_stats(text)
@@ -895,7 +890,7 @@ contains
 !        land_ice_boundary, ice_ocean_boundary, ocean_ice_boundary )
 
     Time_atmos = Time
-!   Time_ocean = Time
+    Time_ocean = Time
 
 !---- initialize Ice for ice_ocean_boundary update ----
 !  ! Only ocean PEs read ice_ocean_boundary; data in ice_ocean_boundary
