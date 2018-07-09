@@ -73,6 +73,10 @@ class Experiment(Logger, EventEmitter):
 
         self.diag_table = DiagTable()
         self.field_table_file = P(self.codebase.srcdir, 'extra', 'model', self.codebase.name, 'field_table')
+
+        if self.codebase.name=='iscaMOM':
+            self.data_table_file = P(self.codebase.srcdir, 'extra', 'model', self.codebase.name, 'data_table')
+
         self.inputfiles = []
 
         self.namelist = Namelist()
@@ -156,6 +160,10 @@ class Experiment(Logger, EventEmitter):
         self.log.info('Writing field_table to %r' % P(outdir, 'field_table'))
         sh.cp(self.field_table_file, P(outdir, 'field_table'))
 
+    def write_data_table(self, outdir):
+        self.log.info('Writing data_table to %r' % P(outdir, 'data_table'))
+        sh.cp(self.data_table_file, P(outdir, 'data_table'))
+
     def log_output(self, outputstring):
         line = outputstring.strip()
         if 'warning' in line.lower():
@@ -213,6 +221,10 @@ class Experiment(Logger, EventEmitter):
         self.codebase.write_source_control_status(P(self.rundir, 'git_hash_used.txt'))
         self.write_namelist(self.rundir)
         self.write_field_table(self.rundir)
+        try:
+            self.write_data_table(self.rundir)
+        except:
+            pass
         self.write_diag_table(self.rundir)
 
         for filename in self.inputfiles:
@@ -323,6 +335,11 @@ class Experiment(Logger, EventEmitter):
             # just save some useful diagnostic information
             self.write_namelist(outdir)
             self.write_field_table(outdir)
+            try:
+                self.write_data_table(outdir)
+            except:
+                pass
+
             self.write_diag_table(outdir)
             self.codebase.write_source_control_status(P(outdir, 'git_hash_used.txt'))
 
