@@ -181,6 +181,9 @@ exp.namelist = namelist = Namelist({
 
             'frazil_heating_after_vphysics':True,
        },
+    'ocean_density_nml': {
+            'eos_linear':True,
+       },
 })
 #Verified as giving exactly the same result as Frierson test case.
 #Lets do a run!
