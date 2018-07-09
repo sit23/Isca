@@ -378,7 +378,7 @@ type (ocean_state_type),  pointer :: Ocean_state => NULL()
 !-----------------------------------------------------------------------
 !------ ocean/slow-ice integration loop ------
 
-! do nc = 1, num_cpld_calls
+do nc = 1, num_cpld_calls
      if( Atm%pe )then
          call mpp_set_current_pelist(Atm%pelist)
 !        call generate_sfc_xgrid( Land, Ice )
@@ -405,7 +405,6 @@ type (ocean_state_type),  pointer :: Ocean_state => NULL()
 
 
          do na = 1, num_atmos_calls
-
             Time_atmos = Time_atmos + Time_step_atmos
 
 !             call compute_flux (float(dt_atmos), Time_atmos, Atm,       &
@@ -429,10 +428,8 @@ type (ocean_state_type),  pointer :: Ocean_state => NULL()
 !           end if
 
 !      ---- atmosphere down ----
-
             if (do_atmos) &
               call update_atmos_model_down( Land_ice_atmos_boundary, Atm )
-
 !               call update_simple_surface (float(dt_atmos), Time_atmos, Atm, &
 !                                           Land_ice_atmos_boundary%dt_t, &
 !                                           Land_ice_atmos_boundary%dt_q)
@@ -510,10 +507,10 @@ type (ocean_state_type),  pointer :: Ocean_state => NULL()
 !        Time = Time_ocean
 !    end if
 !--------------
-!    write( text,'(a,i4)' )'Main loop at coupling timestep=', nc
-!    call print_memuse_stats(text)
+   write( text,'(a,i4)' )'Main loop at coupling timestep=', nc
+   call print_memuse_stats(text)
 
-! enddo
+enddo
 
 ! Need final update of Ice_ocean_boundary for concurrent restart
 !  if( concurrent )then

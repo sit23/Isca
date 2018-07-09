@@ -23,7 +23,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('coupled_frierson_test_experiment_2', codebase=cb)
+exp = Experiment('coupled_frierson_test_experiment_3', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
@@ -188,6 +188,6 @@ exp.namelist = namelist = Namelist({
 #Verified as giving exactly the same result as Frierson test case.
 #Lets do a run!
 if __name__=="__main__":
-    exp.run(1, use_restart=False, num_cores=NCORES)
+    exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=True)
     for i in range(2,121):
         exp.run(i, num_cores=NCORES)
