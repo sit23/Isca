@@ -23,7 +23,9 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('coupled_frierson_test_experiment', codebase=cb)
+exp = Experiment('coupled_frierson_test_experiment_2', codebase=cb)
+
+exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
 #Tell model how to write diagnostics
 diag = DiagTable()
@@ -54,9 +56,9 @@ exp.namelist = namelist = Namelist({
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,
-     'dt_atmos':720,
-     'dt_ocean':720,     
-     'dt_cpld':720,          
+     'dt_atmos':600,
+     'dt_ocean':600,     
+     'dt_cpld':600,          
      'current_date' : [1,1,1,0,0,0],
      'calendar' : 'thirty_day'
     },
@@ -170,7 +172,11 @@ exp.namelist = namelist = Namelist({
     'vert_coordinate_nml': {
         'bk': [0.000000, 0.0117665, 0.0196679, 0.0315244, 0.0485411, 0.0719344, 0.1027829, 0.1418581, 0.1894648, 0.2453219, 0.3085103, 0.3775033, 0.4502789, 0.5244989, 0.5977253, 0.6676441, 0.7322627, 0.7900587, 0.8400683, 0.8819111, 0.9157609, 0.9422770, 0.9625127, 0.9778177, 0.9897489, 1.0000000],
         'pk': [0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000],
-       }
+       },
+
+    'ocean_barotropic_nml':{
+            'barotropic_time_stepping_B':True,
+       },
 })
 #Verified as giving exactly the same result as Frierson test case.
 #Lets do a run!
