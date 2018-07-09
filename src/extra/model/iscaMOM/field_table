@@ -6,5 +6,37 @@
 	  "hole_filling",             "off"
           "advect_vert",              "finite_volume_parabolic"
           "robert_filter",            "on"
-          "profile_type", "fixed",   "surface_value=0.0" /
-
+          "profile_type", "fixed",   "surface_value=0.0"
+### MDPPM for T,S
+"prog_tracers","ocean_mod","temp"
+horizontal-advection-scheme = mdppm
+vertical-advection-scheme = mdppm
+restart_file  = ocean_temp_salt.res.nc
+ppm_hlimiter=2
+ppm_vlimiter=2
+/
+"prog_tracers","ocean_mod","salt"
+horizontal-advection-scheme = mdppm
+vertical-advection-scheme = mdppm
+restart_file  = ocean_temp_salt.res.nc
+ppm_hlimiter=2
+ppm_vlimiter=2
+/
+### MDPPM for Age
+"tracer_packages","ocean_mod","ocean_age_tracer"
+names = global
+horizontal-advection-scheme = mdppm
+vertical-advection-scheme = mdppm
+restart_file = ocean_age.res.nc
+const_init_tracer = f
+const_init_value = 0.0
+ppm_hlimiter=2
+ppm_vlimiter=2
+min_tracer_limit=0.0
+/
+"namelists","ocean_mod","ocean_age_tracer/global"
+slat = -90.0
+nlat =  90.0
+wlon =   0.0
+elon = 360.0
+/

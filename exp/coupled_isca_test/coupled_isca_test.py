@@ -177,6 +177,10 @@ exp.namelist = namelist = Namelist({
     'ocean_barotropic_nml':{
             'barotropic_time_stepping_B':True,
        },
+    'ocean_tracer_nml': {
+
+            'frazil_heating_after_vphysics':True,
+       },
 })
 #Verified as giving exactly the same result as Frierson test case.
 #Lets do a run!
