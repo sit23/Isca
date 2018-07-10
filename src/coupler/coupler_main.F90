@@ -180,7 +180,7 @@ use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
 !
 ! flux_ calls translate information between model grids - see flux_exchange.f90
 !
-! use flux_exchange_mod, only: flux_exchange_init,   &
+use flux_exchange_mod, only: flux_exchange_init!,   &
 !                              sfc_boundary_layer,   &
 !                              generate_sfc_xgrid,   &
 !                              flux_down_from_atmos, &
@@ -493,8 +493,8 @@ do nc = 1, num_cpld_calls
         call mpp_set_current_pelist(Ocean%pelist)
 
 
-           if (do_ocean)  call update_ocean_model( Ice_ocean_boundary, Ocean_state,  Ocean, &
-                                             Time_ocean, Time_step_cpld )
+!           if (do_ocean)  call update_ocean_model( Ice_ocean_boundary, Ocean_state,  Ocean, &
+!                                             Time_ocean, Time_step_cpld )
 
             Time_ocean = Time_ocean +  Time_step_cpld
 !   ------ end of ocean time step loop -----
@@ -885,9 +885,9 @@ contains
 !   call mpp_broadcast_domain(Ocean%domain)
 !-----------------------------------------------------------------------
 !---- initialize flux exchange module ----
-!   call flux_exchange_init ( Time, Atm, Land, Ice, Ocean, &
-!        atmos_ice_boundary, land_ice_atmos_boundary, &
-!        land_ice_boundary, ice_ocean_boundary, ocean_ice_boundary )
+   call flux_exchange_init ( Time, Atm, Land, Ice, Ocean, &
+        atmos_ice_boundary, land_ice_atmos_boundary, &
+        land_ice_boundary, ice_ocean_boundary, ocean_ice_boundary )
 
     Time_atmos = Time
     Time_ocean = Time

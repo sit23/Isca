@@ -173,7 +173,7 @@ module flux_exchange_mod
 !REDIST: same grid, transfer in index space only
 !DIRECT: same grid, same decomp, direct copy
   use atmos_model_mod, only: atmos_data_type, land_ice_atmos_boundary_type
-  use ocean_model_mod, only: ocean_data_type, ice_ocean_boundary_type
+  use ocean_model_mod, only: ocean_public_type, ice_ocean_boundary_type
   use ice_model_mod,   only: ice_data_type, land_ice_boundary_type, &
        ocean_ice_boundary_type, atmos_ice_boundary_type
   use    land_model_mod, only:  land_data_type, atmos_land_boundary_type
@@ -361,7 +361,7 @@ contains
 !  <IN NAME="Ice" TYPE="ice_data_type">
 !   A derived data type to specify ice boundary data.
 !  </IN>
-!  <IN NAME="Ocean" TYPE="ocean_data_type">
+!  <IN NAME="Ocean" TYPE="ocean_public_type">
 !   A derived data type to specify ocean boundary data.
 !  </IN>
 !  <INOUT NAME="atmos_ice_boundary" TYPE="atmos_ice_boundary_type">
@@ -389,7 +389,7 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, &
   type(atmos_data_type),             intent(in)  :: Atm
   type(land_data_type),              intent(in)  :: Land
   type(ice_data_type),               intent(in)  :: Ice
-  type(ocean_data_type),             intent(in)  :: Ocean
+  type(ocean_public_type),             intent(in)  :: Ocean
 ! All intent(OUT) derived types with pointer components must be 
 ! COMPLETELY allocated here and in subroutines called from here;
 ! NO pointer components should have been allocated before entry if the
@@ -1743,7 +1743,7 @@ end subroutine flux_land_to_ice
 !  <IN NAME=" Ice" TYPE="ice_data_type">
 !   A derived data type to specify ice boundary data.
 !  </IN>
-!  <IN NAME="Ocean" TYPE="ocean_data_type">
+!  <IN NAME="Ocean" TYPE="ocean_public_type">
 !   A derived data type to specify ocean boundary data.
 !  </IN>
 !  <INOUT NAME="Boundary" TYPE="ice_ocean_boundary_type">
@@ -1753,7 +1753,7 @@ end subroutine flux_land_to_ice
 subroutine flux_ice_to_ocean ( Time, Ice, Ocean, Boundary )
   type(time_type),        intent(in) :: Time
   type(ice_data_type),   intent(in)  :: Ice
-  type(ocean_data_type), intent(in)  :: Ocean
+  type(ocean_public_type), intent(in)  :: Ocean
 !  real, dimension(:,:),   intent(out) :: flux_u_ocean,  flux_v_ocean,  &
 !                                         flux_t_ocean,  flux_q_ocean,  &
 !                                         flux_sw_ocean, flux_lw_ocean, &
@@ -1875,7 +1875,7 @@ subroutine flux_ice_to_ocean ( Time, Ice, Ocean, Boundary )
 !  <IN NAME="Time" TYPE="time_type">
 !   current time
 !  </IN>
-!  <IN NAME=" Ocean" TYPE="ocean_data_type">
+!  <IN NAME=" Ocean" TYPE="ocean_public_type">
 !   A derived data type to specify ocean boundary data.
 !  </IN>
 !  <IN NAME="Ice" TYPE="ice_data_type">
@@ -1887,7 +1887,7 @@ subroutine flux_ice_to_ocean ( Time, Ice, Ocean, Boundary )
 !
 subroutine flux_ocean_to_ice ( Time, Ocean, Ice, Boundary )
   type(time_type),       intent(in)  :: Time
-  type(ocean_data_type), intent(in)  :: Ocean
+  type(ocean_public_type), intent(in)  :: Ocean
   type(ice_data_type),   intent(in)  :: Ice
 !  real, dimension(:,:),   intent(out) :: t_surf_ice, u_surf_ice, v_surf_ice, &
 !                                         frazil_ice, s_surf_ice, sea_lev_ice
