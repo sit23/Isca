@@ -4,7 +4,7 @@ use               mpp_mod, only: mpp_clock_id, mpp_clock_begin, mpp_clock_end, M
 
 use               fms_mod, only: mpp_pe, mpp_root_pe, error_mesg, FATAL, write_version_number, set_domain, &
                                  stdlog, close_file, open_namelist_file, check_nml_error, file_exist, field_size, &
-                                 read_data, write_data
+                                 read_data, write_data, NOTE
 
 ! use    physics_driver_mod, only: do_moist_in_phys_up
 
@@ -46,7 +46,7 @@ character(len=128), parameter :: tagname = &
 
 public :: atmosphere_init, atmosphere_down, atmosphere_up, atmosphere_end, atmosphere_domain
 public :: atmosphere_resolution, atmosphere_boundary, get_bottom_mass, get_bottom_wind, get_atmosphere_axes
-public :: surf_diff_type, atmosphere_restart
+public :: surf_diff_type, atmosphere_restart, get_stock_pe
 public :: get_nhum
 integer :: seconds, days, num_tracers, num_levels, nhum
 logical :: dry_model
@@ -80,6 +80,8 @@ real :: delta_t, dt_real
 integer :: is, ie, js, je
 integer :: previous, current, future
 logical :: module_is_initialized=.false., atmos_domain_is_computed=.false.
+
+logical :: stock_warning_issued = .FALSE.
 
 type(time_type) :: Time_step, Time_prev, Time_next
 
@@ -537,5 +539,27 @@ end subroutine atmosphere_end
 
 
 !####################################################################################################################
+
+ subroutine get_stock_pe(index, value)
+
+ ! This is a dummy routine.
+ ! It is neccessary to satisfy revision 13.0.4.3.2.1 of atmos_coupled/atmos_model.f90
+ ! Since that revision of atmos_coupled/atmos_model.f90 does nothing with the result,
+ ! this routine can be a dummy.
+ ! If and when the result is needed, it should be the total water content of the
+ ! global atmosphere (Kg), including vapor, liquid and ice.
+
+ integer, intent(in) :: index
+ real, intent(out)   :: value
+
+ value = 0.0
+ if(.not.stock_warning_issued) then
+   call error_mesg('get_stock_pe','Stocks not yet implemented. Returning zero.',NOTE)
+   stock_warning_issued = .true.
+ endif
+
+ end subroutine get_stock_pe
+
+!#######################################################################
 
 end module atmosphere_mod

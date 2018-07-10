@@ -47,6 +47,7 @@ use atmosphere_mod,     only: atmosphere_resolution, atmosphere_domain
 use atmosphere_mod,     only: atmosphere_boundary, get_atmosphere_axes
 use atmosphere_mod,     only: surf_diff_type
 use atmosphere_mod,     only: get_nhum
+use atmosphere_mod,     only: get_stock_pe
 !-----------------------------------------------------------------------
 
 implicit none
@@ -56,6 +57,7 @@ public update_atmos_model_down, update_atmos_model_up
 public atmos_model_init, atmos_model_end, atmos_data_type
 public land_ice_atmos_boundary_type, land_atmos_boundary_type
 public ice_atmos_boundary_type
+public atm_stock_pe
 !-----------------------------------------------------------------------
 
 !<PUBLICTYPE >
@@ -644,6 +646,45 @@ character(len=64) :: fname = 'RESTART/atmos_coupled.res.nc'
 
 end subroutine atmos_model_end
 ! </SUBROUTINE>
+
+!#######################################################################
+! <SUBROUTINE NAME="atm_stock_pe">
+!
+! <OVERVIEW>
+!  returns the total stock in atmospheric model
+! </OVERVIEW>
+
+! <DESCRIPTION>
+!  Called to compute and return the total stock (e.g., water, heat, etc.)
+! in the atmospheric on the current PE.
+! </DESCRIPTION>
+
+! <TEMPLATE>
+!   call atm_stock_pe (Atmos, index, value)
+! </TEMPLATE>
+
+! <INOUT NAME="Atm" TYPE="type(atmos_data_type)">
+!   Derived-type variable that contains fields needed by the flux exchange module.
+! </INOUT>
+!
+! <IN NAME="index" TYPE="integer">
+!   Index of stock to be computed.
+! </IN>
+!
+! <OUT NAME="value" TYPE="real">
+!   Value of stock on the current processor.
+! </OUT>
+
+subroutine atm_stock_pe (Atm, index, value)
+
+type (atmos_data_type), intent(inout) :: Atm
+integer,                intent(in)    :: index
+real,                   intent(out)   :: value
+
+   value = 0.0
+   if(Atm%pe) call get_stock_pe (index, value)
+
+end subroutine atm_stock_pe
 
 !#######################################################################
 

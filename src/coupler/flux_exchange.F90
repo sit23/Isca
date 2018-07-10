@@ -297,8 +297,8 @@ integer :: remap_method = 1
 
 real, parameter :: bound_tol = 1e-7
 
-real, parameter :: d622 = rdgas/rvgas
-real, parameter :: d378 = 1.0-d622
+real :: d622 = 0.
+real :: d378 = 0.
 
 !--- namelist interface ------------------------------------------------------
 ! <NAMELIST NAME="flux_exchange_nml">
@@ -551,6 +551,9 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
   integer              :: n, npes_atm, npes_ocn, npes_all
   integer, allocatable :: pelist(:)
 
+
+  d622 = rdgas/rvgas
+  d378 = 1.0-d622  
 !-----------------------------------------------------------------------
 
 !
