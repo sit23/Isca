@@ -103,6 +103,7 @@ atmos_param/diag_integral/diag_integral.F90
 atmos_shared/interpolator/interpolator.F90
 atmos_shared/vert_advection/vert_advection.F90
 atmos_shared/tracer_driver/atmos_tracer_driver.F90
+atmos_shared/tracer_driver/atmos_co2.F90
 atmos_coupled/atmos_model.F90
 atmos_spectral/coupled/atmosphere.F90
 atmos_spectral/driver/solo/idealized_moist_phys.F90

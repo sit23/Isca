@@ -161,16 +161,16 @@ program coupler_main
                               atmos_data_type, &
                               land_ice_atmos_boundary_type
 
-! use   land_model_mod, only: land_model_init, land_model_end, &
-!                             land_data_type, atmos_land_boundary_type, &
-!                             update_land_model_fast, update_land_model_slow
+use   land_model_mod, only: land_model_init, land_model_end, &
+                            land_data_type, atmos_land_boundary_type, &
+                            update_land_model_fast, update_land_model_slow
 
-! use    ice_model_mod, only: ice_model_init, ice_model_end,  &
-!                             update_ice_model_slow_up,          &
-!                             update_ice_model_fast,          &
-!                             update_ice_model_slow_dn,          &
-!                             ice_data_type, land_ice_boundary_type, &
-!                             ocean_ice_boundary_type, atmos_ice_boundary_type
+use    ice_model_mod, only: ice_model_init, ice_model_end,  &
+                            update_ice_model_slow_up,          &
+                            update_ice_model_fast,          &
+                            update_ice_model_slow_dn,          &
+                            ice_data_type, land_ice_boundary_type, &
+                            ocean_ice_boundary_type, atmos_ice_boundary_type
 
 use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
                             ocean_model_end, ocean_public_type, ocean_state_type, ice_ocean_boundary_type
@@ -217,17 +217,17 @@ use flux_exchange_mod, only: flux_exchange_init!,   &
 !---- model defined-types ----
 
   type (atmos_data_type) :: Atm
-! type  (land_data_type) :: Land
-! type   (ice_data_type) :: Ice
+type  (land_data_type) :: Land
+type   (ice_data_type) :: Ice
 type (ocean_public_type) :: Ocean
 type (ocean_state_type),  pointer :: Ocean_state => NULL()
 
-! type(atmos_land_boundary_type)     :: Atmos_land_boundary
-! type(atmos_ice_boundary_type)      :: Atmos_ice_boundary
-  type(land_ice_atmos_boundary_type) :: Land_ice_atmos_boundary
-! type(land_ice_boundary_type)       :: Land_ice_boundary
- type(ice_ocean_boundary_type)      :: Ice_ocean_boundary
-! type(ocean_ice_boundary_type)      :: Ocean_ice_boundary
+type(atmos_land_boundary_type)     :: Atmos_land_boundary
+type(atmos_ice_boundary_type)      :: Atmos_ice_boundary
+type(land_ice_atmos_boundary_type) :: Land_ice_atmos_boundary
+type(land_ice_boundary_type)       :: Land_ice_boundary
+type(ice_ocean_boundary_type)      :: Ice_ocean_boundary
+type(ocean_ice_boundary_type)      :: Ocean_ice_boundary
 
 !-----------------------------------------------------------------------
 ! ----- coupled model time -----
@@ -828,39 +828,39 @@ contains
         call atmos_model_init( Atm, Time_init, Time, Time_step_atmos )
         call print_memuse_stats( 'atmos_model_init' )
 
-!pjp    Lima Atm contains fields in addition to what df is using.
-!pjp    They are initialized to zero by atmos_model_init.
-!pjp    I don't think any action is necessary to make simple_surface_init compatable with Lima.
+! pjp    Lima Atm contains fields in addition to what df is using.
+! pjp    They are initialized to zero by atmos_model_init.
+! pjp    I don't think any action is necessary to make simple_surface_init compatable with Lima.
 !         call simple_surface_init (Time, Atm)
-        id = size(Atm%t_bot,1)
-        jd = size(Atm%t_bot,2)
-        allocate (Land_ice_atmos_boundary%t        (id,jd), &
-                  Land_ice_atmos_boundary%albedo   (id,jd), &
-                  Land_ice_atmos_boundary%land_frac(id,jd), &
-                  Land_ice_atmos_boundary%dtaudu   (id,jd), &
-                  Land_ice_atmos_boundary%dtaudv   (id,jd), &
-                  Land_ice_atmos_boundary%dt_t     (id,jd), &
-                  Land_ice_atmos_boundary%dt_q     (id,jd), &
-                  Land_ice_atmos_boundary%u_flux   (id,jd), &
-                  Land_ice_atmos_boundary%v_flux   (id,jd), &
-                  Land_ice_atmos_boundary%u_star   (id,jd), &
-                  Land_ice_atmos_boundary%b_star   (id,jd), &
-                  Land_ice_atmos_boundary%q_star   (id,jd), &
-                  Land_ice_atmos_boundary%rough_mom(id,jd))
-
-        Land_ice_atmos_boundary%t         = 0.0
-        Land_ice_atmos_boundary%albedo    = 0.0
-        Land_ice_atmos_boundary%land_frac = 0.0
-        Land_ice_atmos_boundary%dtaudu    = 0.0
-        Land_ice_atmos_boundary%dtaudv    = 0.0
-        Land_ice_atmos_boundary%dt_t      = 0.0
-        Land_ice_atmos_boundary%dt_q      = 0.0
-        Land_ice_atmos_boundary%u_flux    = 0.0
-        Land_ice_atmos_boundary%v_flux    = 0.0
-        Land_ice_atmos_boundary%u_star    = 0.0
-        Land_ice_atmos_boundary%b_star    = 0.0
-        Land_ice_atmos_boundary%q_star    = 0.0
-        Land_ice_atmos_boundary%rough_mom = 0.0
+!         id = size(Atm%t_bot,1)
+!         jd = size(Atm%t_bot,2)
+!         allocate (Land_ice_atmos_boundary%t        (id,jd), &
+!                   Land_ice_atmos_boundary%albedo   (id,jd), &
+!                   Land_ice_atmos_boundary%land_frac(id,jd), &
+!                   Land_ice_atmos_boundary%dtaudu   (id,jd), &
+!                   Land_ice_atmos_boundary%dtaudv   (id,jd), &
+!                   Land_ice_atmos_boundary%dt_t     (id,jd), &
+!                   Land_ice_atmos_boundary%dt_q     (id,jd), &
+!                   Land_ice_atmos_boundary%u_flux   (id,jd), &
+!                   Land_ice_atmos_boundary%v_flux   (id,jd), &
+!                   Land_ice_atmos_boundary%u_star   (id,jd), &
+!                   Land_ice_atmos_boundary%b_star   (id,jd), &
+!                   Land_ice_atmos_boundary%q_star   (id,jd), &
+!                   Land_ice_atmos_boundary%rough_mom(id,jd))
+! 
+!         Land_ice_atmos_boundary%t         = 0.0
+!         Land_ice_atmos_boundary%albedo    = 0.0
+!         Land_ice_atmos_boundary%land_frac = 0.0
+!         Land_ice_atmos_boundary%dtaudu    = 0.0
+!         Land_ice_atmos_boundary%dtaudv    = 0.0
+!         Land_ice_atmos_boundary%dt_t      = 0.0
+!         Land_ice_atmos_boundary%dt_q      = 0.0
+!         Land_ice_atmos_boundary%u_flux    = 0.0
+!         Land_ice_atmos_boundary%v_flux    = 0.0
+!         Land_ice_atmos_boundary%u_star    = 0.0
+!         Land_ice_atmos_boundary%b_star    = 0.0
+!         Land_ice_atmos_boundary%q_star    = 0.0
+!         Land_ice_atmos_boundary%rough_mom = 0.0
 
 !---- land ----------
 !       call land_model_init( Atmos_land_boundary, Land, Time_init, Time, &
@@ -885,7 +885,7 @@ contains
 !   call mpp_broadcast_domain(Ocean%domain)
 !-----------------------------------------------------------------------
 !---- initialize flux exchange module ----
-   call flux_exchange_init ( Time, Atm, Land, Ice, Ocean, &
+   call flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
         atmos_ice_boundary, land_ice_atmos_boundary, &
         land_ice_boundary, ice_ocean_boundary, ocean_ice_boundary )
 
