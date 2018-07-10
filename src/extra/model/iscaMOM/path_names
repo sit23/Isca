@@ -133,7 +133,7 @@ atmos_spectral/tools/spherical_fourier.F90
 atmos_spectral/tools/transforms.F90
 coupler/surface_flux.F90
 coupler/coupler_main.F90
-coupler/flux_exchange.F90
+coupler/flux_exchange_MiMA.F90
 shared/axis_utils/axis_utils.F90
 shared/constants/constants.F90
 shared/astronomy/astronomy.f90
