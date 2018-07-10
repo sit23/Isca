@@ -471,3 +471,7 @@ ice_sis/ice_type.F90
 ice_sis/mask.F90
 ice_sis/rot.F90
 land_null/land_model.F90
+ice_param/ice_albedo.F90
+ice_param/ocean_albedo.F90
+ice_param/ocean_rough.F90
+shared/exchange/xgrid.F90
