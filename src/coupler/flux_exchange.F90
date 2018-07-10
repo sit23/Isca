@@ -319,6 +319,9 @@ real :: d378 = 0.
 !   <DATA NAME="do_runoff"  TYPE="logical"  DEFAULT=".TRUE.">
 !    Turns on/off the land runoff interpolation to the ocean.
 !   </DATA>
+  
+  logical :: bucket = .false. 
+  real :: max_bucket_depth_land = 0.15 ! default from Manabe 1969
 
 
   real ::  z_ref_heat =  2.,  &
@@ -332,7 +335,8 @@ real :: d378 = 0.
   logical :: do_forecast = .false.
 
 namelist /flux_exchange_nml/ z_ref_heat, z_ref_mom, ex_u_star_smooth_bug, sw1way_bug, &
-         do_area_weighted_flux, debug_stocks, divert_stocks_report, do_runoff, do_forecast
+         do_area_weighted_flux, debug_stocks, divert_stocks_report, do_runoff, do_forecast, &
+         bucket, max_bucket_depth_land
 ! </NAMELIST>
 
 ! ---- allocatable module storage --------------------------------------------
@@ -392,6 +396,13 @@ logical, allocatable, dimension(:) :: &
 real, allocatable, dimension(:) :: &
      ex_e_t_n,      &
      ex_f_t_delt_n
+
+real, allocatable, dimension(:,:)   :: bucket_depth      ! RG Add bucket
+
+real, allocatable, dimension(:,:)  ::      &
+     depth_change_lh,      &   ! tendency in bucket depth due to latent heat transfer     ! RG Add bucket
+     depth_change_cond,    &   ! tendency in bucket depth due to condensation rain        ! RG Add bucket
+     depth_change_conv         ! tendency in bucket depth due to convection rain          ! RG Add bucket
 
 integer :: n_atm_tr  ! number of prognostic tracers in the atmos model
 integer :: n_atm_tr_tot  ! number of prognostic tracers in the atmos model
@@ -1056,6 +1067,10 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
     if( Ocean%domain.EQ.Ice%domain )ocean_ice_boundary%xtype = DIRECT
     ice_ocean_boundary%xtype = ocean_ice_boundary%xtype
 
+allocate(bucket_depth (is:ie, js:je)); bucket_depth = 0.        ! RG Add bucket
+allocate(depth_change_lh(is:ie, js:je))                       ! RG Add bucket
+allocate(depth_change_cond(is:ie, js:je))                     ! RG Add bucket
+allocate(depth_change_conv(is:ie, js:je))                     ! RG Add bucket
 
 !
 ! allocate fields amd fluxes for extra tracers for the Ice type
@@ -1548,6 +1563,12 @@ subroutine sfc_boundary_layer ( dt, Time, Atm, Land, Ice, Land_Ice_Atmos_Boundar
   call surface_flux (&
        ex_t_atm, ex_tr_atm(:,isphum),  ex_u_atm, ex_v_atm,  ex_p_atm,  ex_z_atm,  &
        ex_p_surf,ex_t_surf, ex_t_ca,  ex_tr_surf(:,isphum),                       &
+                                       bucket,                              &     ! RG Add bucket
+                    bucket_depth(:,0),                              &     ! RG Add bucket
+                        max_bucket_depth_land,                              &     ! RG Add bucket
+                         depth_change_lh(:,0),                              &     ! RG Add bucket
+                       depth_change_conv(:,0),                              &     ! RG Add bucket
+                       depth_change_cond(:,0),                              &     ! RG Add bucket       
        ex_u_surf, ex_v_surf,                                           &
        ex_rough_mom, ex_rough_heat, ex_rough_moist, ex_rough_scale,    &
        ex_gust,                                                        &
