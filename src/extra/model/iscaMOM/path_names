@@ -461,3 +461,13 @@ ocean_shared/generic_tracers/generic_miniBLING.F90
 ocean_shared/generic_tracers/generic_TOPAZ.F90
 ocean_shared/generic_tracers/generic_tracer.F90
 ocean_shared/generic_tracers/generic_tracer_utils.F90
+ice_sis/ice_bergs.F90
+ice_sis/ice_dyn.F90
+ice_sis/ice_grid.F90
+ice_sis/ice_model.F90
+ice_sis/ice_spec.F90
+ice_sis/ice_thm.F90
+ice_sis/ice_type.F90
+ice_sis/mask.F90
+ice_sis/rot.F90
+land_null/land_model.F90
