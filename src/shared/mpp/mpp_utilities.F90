@@ -1,29 +1,8 @@
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!                                                                   !!
-!!                   GNU General Public License                      !!
-!!                                                                   !!
-!! This file is part of the Flexible Modeling System (FMS).          !!
-!!                                                                   !!
-!! FMS is free software; you can redistribute it and/or modify it    !!
-!! under the terms of the GNU General Public License as published by !!
-!! the Free Software Foundation, either version 3 of the License, or !!
-!! (at your option) any later version.                               !!
-!!                                                                   !!
-!! FMS is distributed in the hope that it will be useful,            !!
-!! but WITHOUT ANY WARRANTY; without even the implied warranty of    !!
-!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the      !!
-!! GNU General Public License for more details.                      !!
-!!                                                                   !!
-!! You should have received a copy of the GNU General Public License !!
-!! along with FMS. if not, see: http://www.gnu.org/licenses/gpl.txt  !!
-!!                                                                   !!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 module mpp_utilities_mod
 
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: mpp_utilities.F90,v 17.0 2009/07/21 03:21:23 fms Exp $'
-  character(len=128) :: tag = '$Name: siena_201211 $'
+  character(len=128) :: version = '$Id$'
+  character(len=128) :: tag = '$Name$'
 !-----------------------------------------------------------------------
 
   public :: mpp_array_global_min_max
@@ -43,11 +22,11 @@ contains
 ! the values of extrema at each processor.
 !
 ! Vectorized using maxloc() and minloc() intrinsic functions by 
-! GFDL.Climate.Model.Info@noaa.gov (May 2005).
+! Russell.Fiedler@csiro.au (May 2005).
 !
-! Modified by GFDL.Climate.Model.Info@noaa.gov (July 2005)
+! Modified by Zhi.Liang@noaa.gov (July 2005)
 !          
-! Modified by GFDL.Climate.Model.Info@noaa.gov (Feb. 2009)
+! Modified by Niki.Zadeh@noaa.gov (Feb. 2009)
 !
 ! </DESCRIPTION>
 !
@@ -94,14 +73,14 @@ subroutine mpp_array_global_min_max(in_array, tmask,isd,jsd,isc,iec,jsc,jec,nk, 
   end if
 
   ! use "fudge" to distinguish processors when tracer extreme is independent of processor
-  fudge = 1.0 + 1.e-12*mpp_pe() 
+  fudge = 1.0 + 1.e-12*real(mpp_pe() )
   tmax = tmax*fudge
   tmin = tmin*fudge
   if(tmax == 0.0) then 
-    tmax = tmax + 1.e-12*mpp_pe() 
+    tmax = tmax + 1.e-12*real(mpp_pe() )
   endif 
   if(tmin == 0.0) then 
-    tmin = tmin + 1.e-12*mpp_pe() 
+    tmin = tmin + 1.e-12*real(mpp_pe() )
   endif 
   
 
@@ -122,8 +101,8 @@ subroutine mpp_array_global_min_max(in_array, tmask,isd,jsd,isc,iec,jsc,jec,nk, 
   !
   !mpp_max trick
   !-999 on all current PE's
-  xgmax=-999; ygmax=-999; zgmax=-999
-  xgmin=-999; ygmin=-999; zgmin=-999
+  xgmax=-999.; ygmax=-999.; zgmax=-999.
+  xgmin=-999.; ygmin=-999.; zgmin=-999.
 
 
   !except when

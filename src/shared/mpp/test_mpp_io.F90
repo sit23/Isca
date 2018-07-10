@@ -1,24 +1,3 @@
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!                                                                   !!
-!!                   GNU General Public License                      !!
-!!                                                                   !!
-!! This file is part of the Flexible Modeling System (FMS).          !!
-!!                                                                   !!
-!! FMS is free software; you can redistribute it and/or modify it    !!
-!! under the terms of the GNU General Public License as published by !!
-!! the Free Software Foundation, either version 3 of the License, or !!
-!! (at your option) any later version.                               !!
-!!                                                                   !!
-!! FMS is distributed in the hope that it will be useful,            !!
-!! but WITHOUT ANY WARRANTY; without even the implied warranty of    !!
-!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the      !!
-!! GNU General Public License for more details.                      !!
-!!                                                                   !!
-!! You should have received a copy of the GNU General Public License !!
-!! along with FMS. if not, see: http://www.gnu.org/licenses/gpl.txt  !!
-!!                                                                   !!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 #ifdef test_mpp_io
 program test
 #include <fms_platform.h>
@@ -36,6 +15,10 @@ program test
   use mpp_io_mod,      only : MPP_NETCDF, MPP_MULTI, mpp_get_atts, mpp_write, mpp_close
   use mpp_io_mod,      only : mpp_get_info, mpp_get_axes, mpp_get_fields, mpp_get_times
   use mpp_io_mod,      only : mpp_read, mpp_io_exit
+
+#ifdef INTERNAL_FILE_NML
+  USE mpp_mod, ONLY: input_nml_file
+#endif
 
   implicit none
 
@@ -59,7 +42,7 @@ program test
   namelist / test_mpp_io_nml / nx, ny, nz, nt, halo, stackmax, stackmaxd, debug, file, iospec, &
                                ntiles_x, ntiles_y, layout, io_layout
 
-  integer        :: pe, npes
+  integer        :: pe, npes, io_status
   type(domain2D) :: domain
 
   integer            :: tks_per_sec
@@ -74,23 +57,31 @@ program test
   type(fieldtype)    :: f
   type(domain1D)     :: xdom, ydom
   integer(LONG_KIND) :: rchk, chk
-  real(DOUBLE_KIND)                  :: doubledata
+  real(DOUBLE_KIND)                  :: doubledata = 0.0
   real                               :: realarray(4)
 
   call mpp_init() 
   pe = mpp_pe()
   npes = mpp_npes()
 
+#ifdef INTERNAL_FILE_NML
+  read (input_nml_file, test_mpp_io_nml, iostat=io_status)
+#else
   do
      inquire( unit=unit, opened=opened )
      if( .NOT.opened )exit
      unit = unit + 1
      if( unit.EQ.100 )call mpp_error( FATAL, 'Unable to locate unit number.' )
   end do
-  open( unit=unit, status='OLD', file='input.nml', err=10 )
-  read( unit,test_mpp_io_nml )
+  open( unit=unit, file='input.nml', iostat=io_status)
+  read( unit,test_mpp_io_nml, iostat=io_status )
   close(unit)
-10 continue
+#endif
+
+      if (io_status > 0) then
+         call mpp_error(FATAL,'=>test_mpp_io: Error reading input.nml')
+      endif
+
 
   call SYSTEM_CLOCK( count_rate=tks_per_sec )
   if( debug )then

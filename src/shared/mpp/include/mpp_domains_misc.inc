@@ -1,24 +1,3 @@
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!                                                                   !!
-!!                   GNU General Public License                      !!
-!!                                                                   !!
-!! This file is part of the Flexible Modeling System (FMS).          !!
-!!                                                                   !!
-!! FMS is free software; you can redistribute it and/or modify it    !!
-!! under the terms of the GNU General Public License as published by !!
-!! the Free Software Foundation, either version 3 of the License, or !!
-!! (at your option) any later version.                               !!
-!!                                                                   !!
-!! FMS is distributed in the hope that it will be useful,            !!
-!! but WITHOUT ANY WARRANTY; without even the implied warranty of    !!
-!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the      !!
-!! GNU General Public License for more details.                      !!
-!!                                                                   !!
-!! You should have received a copy of the GNU General Public License !!
-!! along with FMS. if not, see: http://www.gnu.org/licenses/gpl.txt  !!
-!!                                                                   !!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 ! -*-f90-*-
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                             !
@@ -75,6 +54,9 @@
       end if
 
       !--- namelist 
+#ifdef INTERNAL_FILE_NML
+      read (input_nml_file, mpp_domains_nml, iostat=io_status)
+#else
       unit_begin = 103
       unit_end   = 512
       do unit_nml = unit_begin, unit_end
@@ -85,6 +67,12 @@
       open(unit_nml,file='input.nml', iostat=io_status)
       read(unit_nml,mpp_domains_nml,iostat=io_status)
       close(unit_nml)
+#endif
+
+      if (io_status > 0) then
+         call mpp_error(FATAL,'=>mpp_domains_init: Error reading input.nml')
+      endif
+
 
       select case(lowercase(trim(debug_update_domain)))
       case("none")
@@ -120,8 +108,7 @@
           recv_clock          = mpp_clock_id( 'Halo recv' )
           unpk_clock          = mpp_clock_id( 'Halo unpk' )
           wait_clock          = mpp_clock_id( 'Halo wait' )
-          pack_clock_nonblock = mpp_clock_id( 'Halo pack nonblock' )
-          send_clock_nonblock = mpp_clock_id( 'Halo send nonblock' )
+          send_pack_clock_nonblock = mpp_clock_id( 'Halo pack and send nonblock' )
           recv_clock_nonblock = mpp_clock_id( 'Halo recv nonblock' )
           unpk_clock_nonblock = mpp_clock_id( 'Halo unpk nonblock' )
           wait_clock_nonblock = mpp_clock_id( 'Halo wait nonblock' )
@@ -130,6 +117,16 @@
           nest_recv_clock     = mpp_clock_id( 'nest recv' )
           nest_unpk_clock     = mpp_clock_id( 'nest unpk' )
           nest_wait_clock     = mpp_clock_id( 'nest wait' )
+          group_pack_clock     = mpp_clock_id( 'group pack' )
+          group_send_clock     = mpp_clock_id( 'group send' )
+          group_recv_clock     = mpp_clock_id( 'group recv' )
+          group_unpk_clock     = mpp_clock_id( 'group unpk' )
+          group_wait_clock     = mpp_clock_id( 'group wait' )
+          nonblock_group_pack_clock     = mpp_clock_id( 'nonblock group pack' )
+          nonblock_group_send_clock     = mpp_clock_id( 'nonblock group send' )
+          nonblock_group_recv_clock     = mpp_clock_id( 'nonblock group recv' )
+          nonblock_group_unpk_clock     = mpp_clock_id( 'nonblock group unpk' )
+          nonblock_group_wait_clock     = mpp_clock_id( 'nonblock group wait' )
       end if
       return
     end subroutine mpp_domains_init
@@ -161,6 +158,8 @@ subroutine init_nonblock_type( nonblock_obj )
    nonblock_obj%request_send(:)    = 0
    nonblock_obj%request_recv(:)    = 0
 #endif
+   nonblock_obj%buffer_pos_send(:) = 0
+   nonblock_obj%buffer_pos_recv(:) = 0
    nonblock_obj%nfields            = 0
    nonblock_obj%field_addrs(:)     = 0
    nonblock_obj%field_addrs2(:)    = 0
@@ -1689,18 +1688,18 @@ end subroutine init_nonblock_type
 #define MPP_GET_BOUNDARY_2D_ mpp_get_boundary_r8_2d
 #undef MPP_GET_BOUNDARY_3D_
 #define MPP_GET_BOUNDARY_3D_ mpp_get_boundary_r8_3d
-#undef MPP_GET_BOUNDARY_4D_
-#define MPP_GET_BOUNDARY_4D_ mpp_get_boundary_r8_4d
-#undef MPP_GET_BOUNDARY_5D_
-#define MPP_GET_BOUNDARY_5D_ mpp_get_boundary_r8_5d
+!#undef MPP_GET_BOUNDARY_4D_
+!#define MPP_GET_BOUNDARY_4D_ mpp_get_boundary_r8_4d
+!#undef MPP_GET_BOUNDARY_5D_
+!#define MPP_GET_BOUNDARY_5D_ mpp_get_boundary_r8_5d
 #undef MPP_GET_BOUNDARY_2D_V_
 #define MPP_GET_BOUNDARY_2D_V_ mpp_get_boundary_r8_2dv
 #undef MPP_GET_BOUNDARY_3D_V_
 #define MPP_GET_BOUNDARY_3D_V_ mpp_get_boundary_r8_3dv
-#undef MPP_GET_BOUNDARY_4D_V_
-#define MPP_GET_BOUNDARY_4D_V_ mpp_get_boundary_r8_4dv
-#undef MPP_GET_BOUNDARY_5D_V_
-#define MPP_GET_BOUNDARY_5D_V_ mpp_get_boundary_r8_5dv
+!#undef MPP_GET_BOUNDARY_4D_V_
+!#define MPP_GET_BOUNDARY_4D_V_ mpp_get_boundary_r8_4dv
+!#undef MPP_GET_BOUNDARY_5D_V_
+!#define MPP_GET_BOUNDARY_5D_V_ mpp_get_boundary_r8_5dv
 #include <mpp_get_boundary.h>
 
 #ifdef OVERLOAD_R4
@@ -1710,18 +1709,18 @@ end subroutine init_nonblock_type
 #define MPP_GET_BOUNDARY_2D_ mpp_get_boundary_r4_2d
 #undef MPP_GET_BOUNDARY_3D_
 #define MPP_GET_BOUNDARY_3D_ mpp_get_boundary_r4_3d
-#undef MPP_GET_BOUNDARY_4D_
-#define MPP_GET_BOUNDARY_4D_ mpp_get_boundary_r4_4d
-#undef MPP_GET_BOUNDARY_5D_
-#define MPP_GET_BOUNDARY_5D_ mpp_get_boundary_r4_5d
+!#undef MPP_GET_BOUNDARY_4D_
+!#define MPP_GET_BOUNDARY_4D_ mpp_get_boundary_r4_4d
+!#undef MPP_GET_BOUNDARY_5D_
+!#define MPP_GET_BOUNDARY_5D_ mpp_get_boundary_r4_5d
 #undef MPP_GET_BOUNDARY_2D_V_
 #define MPP_GET_BOUNDARY_2D_V_ mpp_get_boundary_r4_2dv
 #undef MPP_GET_BOUNDARY_3D_V_
 #define MPP_GET_BOUNDARY_3D_V_ mpp_get_boundary_r4_3dv
-#undef MPP_GET_BOUNDARY_4D_V_
-#define MPP_GET_BOUNDARY_4D_V_ mpp_get_boundary_r4_4dv
-#undef MPP_GET_BOUNDARY_5D_V_
-#define MPP_GET_BOUNDARY_5D_V_ mpp_get_boundary_r4_5dv
+!#undef MPP_GET_BOUNDARY_4D_V_
+!#define MPP_GET_BOUNDARY_4D_V_ mpp_get_boundary_r4_4dv
+!#undef MPP_GET_BOUNDARY_5D_V_
+!#define MPP_GET_BOUNDARY_5D_V_ mpp_get_boundary_r4_5dv
 #include <mpp_get_boundary.h>
 #endif
 
@@ -1742,3 +1741,75 @@ end subroutine init_nonblock_type
 #define MPP_DO_GET_BOUNDARY_3D_V_ mpp_do_get_boundary_r4_3dv
 #include <mpp_do_get_boundary.h>
 #endif
+
+#undef MPP_TYPE_
+#define MPP_TYPE_ real(DOUBLE_KIND)
+#undef MPI_TYPE_
+#define MPI_TYPE_ MPI_REAL8
+#undef MPP_CREATE_GROUP_UPDATE_2D_
+#define MPP_CREATE_GROUP_UPDATE_2D_ mpp_create_group_update_r8_2d
+#undef MPP_CREATE_GROUP_UPDATE_3D_
+#define MPP_CREATE_GROUP_UPDATE_3D_ mpp_create_group_update_r8_3d
+#undef MPP_CREATE_GROUP_UPDATE_4D_
+#define MPP_CREATE_GROUP_UPDATE_4D_ mpp_create_group_update_r8_4d
+#undef MPP_CREATE_GROUP_UPDATE_2D_V_
+#define MPP_CREATE_GROUP_UPDATE_2D_V_ mpp_create_group_update_r8_2dv
+#undef MPP_CREATE_GROUP_UPDATE_3D_V_
+#define MPP_CREATE_GROUP_UPDATE_3D_V_ mpp_create_group_update_r8_3dv
+#undef MPP_CREATE_GROUP_UPDATE_4D_V_
+#define MPP_CREATE_GROUP_UPDATE_4D_V_ mpp_create_group_update_r8_4dv
+#undef MPP_DO_GROUP_UPDATE_
+#define MPP_DO_GROUP_UPDATE_ mpp_do_group_update_r8
+#undef MPP_START_GROUP_UPDATE_
+#define MPP_START_GROUP_UPDATE_ mpp_start_group_update_r8
+#undef MPP_COMPLETE_GROUP_UPDATE_
+#define MPP_COMPLETE_GROUP_UPDATE_ mpp_complete_group_update_r8
+#undef MPP_RESET_GROUP_UPDATE_FIELD_2D_
+#define MPP_RESET_GROUP_UPDATE_FIELD_2D_ mpp_reset_group_update_field_r8_2d
+#undef MPP_RESET_GROUP_UPDATE_FIELD_3D_
+#define MPP_RESET_GROUP_UPDATE_FIELD_3D_ mpp_reset_group_update_field_r8_3d
+#undef MPP_RESET_GROUP_UPDATE_FIELD_4D_
+#define MPP_RESET_GROUP_UPDATE_FIELD_4D_ mpp_reset_group_update_field_r8_4d
+#undef MPP_RESET_GROUP_UPDATE_FIELD_2D_V_
+#define MPP_RESET_GROUP_UPDATE_FIELD_2D_V_ mpp_reset_group_update_field_r8_2dv
+#undef MPP_RESET_GROUP_UPDATE_FIELD_3D_V_
+#define MPP_RESET_GROUP_UPDATE_FIELD_3D_V_ mpp_reset_group_update_field_r8_3dv
+#undef MPP_RESET_GROUP_UPDATE_FIELD_4D_V_
+#define MPP_RESET_GROUP_UPDATE_FIELD_4D_V_ mpp_reset_group_update_field_r8_4dv
+#include <mpp_group_update.h>
+
+#undef MPP_TYPE_
+#define MPP_TYPE_ real(FLOAT_KIND)
+#undef MPI_TYPE_
+#define MPI_TYPE_ MPI_REAL4
+#undef MPP_CREATE_GROUP_UPDATE_2D_
+#define MPP_CREATE_GROUP_UPDATE_2D_ mpp_create_group_update_r4_2d
+#undef MPP_CREATE_GROUP_UPDATE_3D_
+#define MPP_CREATE_GROUP_UPDATE_3D_ mpp_create_group_update_r4_3d
+#undef MPP_CREATE_GROUP_UPDATE_4D_
+#define MPP_CREATE_GROUP_UPDATE_4D_ mpp_create_group_update_r4_4d
+#undef MPP_CREATE_GROUP_UPDATE_2D_V_
+#define MPP_CREATE_GROUP_UPDATE_2D_V_ mpp_create_group_update_r4_2dv
+#undef MPP_CREATE_GROUP_UPDATE_3D_V_
+#define MPP_CREATE_GROUP_UPDATE_3D_V_ mpp_create_group_update_r4_3dv
+#undef MPP_CREATE_GROUP_UPDATE_4D_V_
+#define MPP_CREATE_GROUP_UPDATE_4D_V_ mpp_create_group_update_r4_4dv
+#undef MPP_DO_GROUP_UPDATE_
+#define MPP_DO_GROUP_UPDATE_ mpp_do_group_update_r4
+#undef MPP_START_GROUP_UPDATE_
+#define MPP_START_GROUP_UPDATE_ mpp_start_group_update_r4
+#undef MPP_COMPLETE_GROUP_UPDATE_
+#define MPP_COMPLETE_GROUP_UPDATE_ mpp_complete_group_update_r4
+#undef MPP_RESET_GROUP_UPDATE_FIELD_2D_
+#define MPP_RESET_GROUP_UPDATE_FIELD_2D_ mpp_reset_group_update_field_r4_2d
+#undef MPP_RESET_GROUP_UPDATE_FIELD_3D_
+#define MPP_RESET_GROUP_UPDATE_FIELD_3D_ mpp_reset_group_update_field_r4_3d
+#undef MPP_RESET_GROUP_UPDATE_FIELD_4D_
+#define MPP_RESET_GROUP_UPDATE_FIELD_4D_ mpp_reset_group_update_field_r4_4d
+#undef MPP_RESET_GROUP_UPDATE_FIELD_2D_V_
+#define MPP_RESET_GROUP_UPDATE_FIELD_2D_V_ mpp_reset_group_update_field_r4_2dv
+#undef MPP_RESET_GROUP_UPDATE_FIELD_3D_V_
+#define MPP_RESET_GROUP_UPDATE_FIELD_3D_V_ mpp_reset_group_update_field_r4_3dv
+#undef MPP_RESET_GROUP_UPDATE_FIELD_4D_V_
+#define MPP_RESET_GROUP_UPDATE_FIELD_4D_V_ mpp_reset_group_update_field_r4_4dv
+#include <mpp_group_update.h>
