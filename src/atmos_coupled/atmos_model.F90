@@ -74,6 +74,7 @@ public ice_atmos_boundary_type
      real, pointer, dimension(:,:) :: u_bot    => NULL() ! zonal wind component at lowest model level
      real, pointer, dimension(:,:) :: v_bot    => NULL() ! meridional wind component at lowest model level
      real, pointer, dimension(:,:) :: p_surf   => NULL() ! surface pressure 
+     real, pointer, dimension(:,:) :: slp      => null() ! sea level pressure      
      real, pointer, dimension(:,:) :: gust     => NULL() ! gustiness factor
      real, pointer, dimension(:,:) :: coszen   => NULL() ! cosine of the zenith angle
      real, pointer, dimension(:,:) :: flux_sw  => NULL() ! net shortwave flux (W/m2) at the surface
@@ -392,6 +393,7 @@ type (time_type), intent(in) :: Time_init, Time, Time_step
                Atmos % u_bot    (nlon,nlat), &
                Atmos % v_bot    (nlon,nlat), &
                Atmos % p_surf   (nlon,nlat), &
+               Atmos % slp      (nlon,nlat), &               
                Atmos % gust     (nlon,nlat), &
                Atmos % flux_sw  (nlon,nlat), &
                Atmos % flux_sw_dir (nlon,nlat), &
@@ -621,6 +623,7 @@ character(len=64) :: fname = 'RESTART/atmos_coupled.res.nc'
                Atmos % u_bot    , &
                Atmos % v_bot    , &
                Atmos % p_surf   , &
+               Atmos % slp      , &               
                Atmos % gust     , &
                Atmos % flux_sw  , &
                Atmos % flux_sw_dir  , &
