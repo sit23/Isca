@@ -702,12 +702,12 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
        call mpp_get_global_domain(Atm%domain, isg, ieg, jsg, jeg, xsize=nxg, ysize=nyg)
        call mpp_get_compute_domain(Atm%domain, isc, iec, jsc, jec)
        call mpp_get_data_domain(Atm%domain, isd, ied, jsd, jed)
-       if(size(Atm%lon_bnd,1) .NE. iec-isc+2 .OR. size(Atm%lon_bnd,2) .NE. jec-jsc+2) then
+       if(size(Atm%lon_bnd) .NE. iec-isc+2 .OR. size(Atm%lat_bnd) .NE. jec-jsc+2) then
           call error_mesg ('flux_exchange_mod',  &
               'size of Atm%lon_bnd does not match the Atm computational domain', FATAL)          
        endif
        ioff = lbound(Atm%lon_bnd,1) - isc
-       joff = lbound(Atm%lon_bnd,2) - jsc
+       joff = lbound(Atm%lat_bnd,1) - jsc
        if(field_exist(grid_file, "AREA_ATM" ) ) then  ! old grid
           call field_size(grid_file, "AREA_ATM", siz)
           nlon = siz(1)
@@ -732,9 +732,9 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
           call read_data(grid_file, 'yba', atmlatb, no_domain=.true. )
 
           do i=isc, iec+1
-             if(abs(atmlonb(i)-Atm%lon_bnd(i+ioff,jsc+joff)*45/atan(1.0))>bound_tol) then
+             if(abs(atmlonb(i)-Atm%lon_bnd(i+ioff)*45/atan(1.0))>bound_tol) then
                 print *, 'GRID_SPEC/ATMOS LONGITUDE INCONSISTENCY at i= ',i, ': ', &
-                     atmlonb(i),  Atm%lon_bnd(i+ioff,jsc+joff)*45/atan(1.0)
+                     atmlonb(i),  Atm%lon_bnd(i+ioff)*45/atan(1.0)
                 call error_mesg ('flux_exchange_mod', &
                      'grid_spec.nc incompatible with atmosphere longitudes (see xba.dat and yba.dat)'&
                      , FATAL)
@@ -744,9 +744,9 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
           !      longitude from file grid_spec.nc ( from field yba ) is different from the longitude from atmosphere model.
           !   </ERROR>
           do j=jsc, jec+1
-             if(abs(atmlatb(j)-Atm%lat_bnd(isc+ioff,j+joff)*45/atan(1.0))>bound_tol) then
+             if(abs(atmlatb(j)-Atm%lat_bnd(isc+ioff)*45/atan(1.0))>bound_tol) then
                 print *, 'GRID_SPEC/ATMOS LATITUDE INCONSISTENCY at j= ',j, ': ', &
-                     atmlatb(j),  Atm%lat_bnd(isc+ioff, j+joff)*45/atan(1.0)
+                     atmlatb(j),  Atm%lat_bnd(isc+ioff)*45/atan(1.0)
                 call error_mesg ('flux_exchange_mod', &
                      'grid_spec.nc incompatible with atmosphere latitudes (see xba.dat and yba.dat)'&
                      , FATAL)
@@ -790,9 +790,9 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
 
            do j = jsc, jec+1
               do i = isc, iec+1
-                 if (abs(tmpx(2*i-1,2*j-1)-Atm%lon_bnd(i+ioff,j+joff)*45/atan(1.0))>bound_tol) then
+                 if (abs(tmpx(2*i-1,2*j-1)-Atm%lon_bnd(i+ioff)*45/atan(1.0))>bound_tol) then
                     print *, 'GRID_SPEC/ATMOS LONGITUDE INCONSISTENCY at i= ',i, ', j= ', j, ': ', &
-                         tmpx(2*i-1,2*j-1),  Atm%lon_bnd(i+ioff,j+joff)*45/atan(1.0)
+                         tmpx(2*i-1,2*j-1),  Atm%lon_bnd(i+ioff)*45/atan(1.0)
                     !   <ERROR MSG="grid_spec.nc incompatible with atmosphere longitudes (see xba.dat and yba.dat)" STATUS="FATAL">
                     !      longitude from file grid_spec.nc ( from field xba ) is different from the longitude from atmosphere model.
                     !   </ERROR>
@@ -800,9 +800,9 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
                          'grid_spec.nc incompatible with atmosphere longitudes (see '//trim(tile_file)//')'&
                          ,FATAL)
                  end if
-                 if (abs(tmpy(2*i-1,2*j-1)-Atm%lat_bnd(i+ioff,j+joff)*45/atan(1.0))>bound_tol) then
+                 if (abs(tmpy(2*i-1,2*j-1)-Atm%lat_bnd(j+joff)*45/atan(1.0))>bound_tol) then
                     print *, 'GRID_SPEC/ATMOS LATITUDE INCONSISTENCY at i= ',i, ', j= ', j, ': ', &
-                         tmpy(2*i-1,2*j-1),  Atm%lat_bnd(i+ioff,j+joff)*45/atan(1.0)
+                         tmpy(2*i-1,2*j-1),  Atm%lat_bnd(j+joff)*45/atan(1.0)
                     !   <ERROR MSG="grid_spec.nc incompatible with atmosphere latitudes (see grid_spec.nc)" STATUS="FATAL">
                     !      latgitude from file grid_spec.nc is different from the latitude from atmosphere model.
                     !   </ERROR>
@@ -822,7 +822,7 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
 
         call setup_xmap(xmap_sfc, (/ 'ATM', 'OCN', 'LND' /),   &
              (/ Atm%Domain, Ice%Domain, Land%Domain /),        &
-             "INPUT/grid_spec.nc", Atm%grid)
+             "INPUT/grid_spec.nc")
         ! exchange grid indices
         X1_GRID_ATM = 1; X1_GRID_ICE = 2; X1_GRID_LND = 3;
         call generate_sfc_xgrid( Land, Ice )
@@ -853,7 +853,7 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
 
         call diag_field_init ( Time, Atm%axes(1:2), Land%axes )
         ni_atm = size(Atm%lon_bnd,1)-1 ! to dimension "diag_atm"
-        nj_atm = size(Atm%lon_bnd,2)-1 ! in flux_ocean_to_ice
+        nj_atm = size(Atm%lat_bnd,1)-1 ! in flux_ocean_to_ice
 
 !Balaji
         

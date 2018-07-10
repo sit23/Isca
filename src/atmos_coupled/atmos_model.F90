@@ -38,7 +38,7 @@ use fms_mod,            only: open_restart_file, open_namelist_file, check_nml_e
 use fms_io_mod,         only: get_restart_io_mode
 use time_manager_mod,   only: time_type, operator(+), get_time
 use field_manager_mod,  only: MODEL_ATMOS
-use tracer_manager_mod, only: register_tracers
+use tracer_manager_mod, only: register_tracers, get_tracer_index, NO_TRACER
 use diag_integral_mod,  only: diag_integral_init, diag_integral_end
 use diag_integral_mod,  only: diag_integral_output
 use atmosphere_mod,     only: atmosphere_up, atmosphere_down, atmosphere_init
@@ -48,6 +48,8 @@ use atmosphere_mod,     only: atmosphere_boundary, get_atmosphere_axes
 use atmosphere_mod,     only: surf_diff_type
 use atmosphere_mod,     only: get_nhum
 use atmosphere_mod,     only: get_stock_pe
+use coupler_types_mod,  only: coupler_2d_bc_type
+
 !-----------------------------------------------------------------------
 
 implicit none
@@ -70,7 +72,7 @@ public atm_stock_pe
      real, pointer, dimension(:)   :: lon_bnd  => NULL() ! local longitude axis grid box boundaries in radians.
      real, pointer, dimension(:)   :: lat_bnd  => NULL() ! local latitude axis grid box boundaries in radians.
      real, pointer, dimension(:,:) :: t_bot    => NULL() ! temperature at lowest model level
-     real, pointer, dimension(:,:) :: q_bot    => NULL() ! specific humidity at lowest model level
+     real, pointer, dimension(:,:,:) :: tr_bot   => null() ! tracers at lowest model level
      real, pointer, dimension(:,:) :: z_bot    => NULL() ! height above the surface for the lowest model level
      real, pointer, dimension(:,:) :: p_bot    => NULL() ! pressure at lowest model level
      real, pointer, dimension(:,:) :: u_bot    => NULL() ! zonal wind component at lowest model level
@@ -98,6 +100,8 @@ public atm_stock_pe
      type (time_type)              :: Time_init          ! reference time.
      integer, pointer              :: pelist(:) =>NULL() ! pelist where atmosphere is running.
      logical                       :: pe                 ! current pe.
+     type(coupler_2d_bc_type)      :: fields             ! array of fields used for additional tracers
+     
  end type
 !</PUBLICTYPE >
 
@@ -113,7 +117,7 @@ type land_ice_atmos_boundary_type
    real, dimension(:,:),   pointer :: albedo_nir_dif =>NULL()
    real, dimension(:,:),   pointer :: land_frac      =>NULL() ! fraction amount of land in a grid box 
    real, dimension(:,:),   pointer :: dt_t           =>NULL() ! temperature tendency at the lowest level
-   real, dimension(:,:),   pointer :: dt_q           =>NULL() ! specific humidity tendency at the lowest level
+   real, dimension(:,:,:), pointer :: dt_tr          =>null() ! tracer tendency at the lowest level
    real, dimension(:,:),   pointer :: u_flux         =>NULL() ! zonal wind stress
    real, dimension(:,:),   pointer :: v_flux         =>NULL() ! meridional wind stress
    real, dimension(:,:),   pointer :: dtaudu         =>NULL() ! derivative of zonal wind stress w.r.t. the lowest zonal level wind speed
@@ -122,6 +126,7 @@ type land_ice_atmos_boundary_type
    real, dimension(:,:),   pointer :: b_star         =>NULL() ! bouyancy scale
    real, dimension(:,:),   pointer :: q_star         =>NULL() ! moisture scale
    real, dimension(:,:),   pointer :: rough_mom      =>NULL() ! surface roughness (used for momentum)
+   real, dimension(:,:),   pointer :: frac_open_sea  =>null() ! non-seaice fraction (%)   
    real, dimension(:,:,:), pointer :: data           =>NULL() !collective field for "named" fields above
    integer                         :: xtype                   !REGRID, REDIST or DIRECT
 end type land_ice_atmos_boundary_type
@@ -146,6 +151,8 @@ integer :: atmClock
 
 character(len=128) :: version = '$Id: atmos_model.f90,v 12.0 2005/04/14 15:35:34 fms Exp $'
 character(len=128) :: tagname = '$Name: lima $'
+
+integer :: ivapor = NO_TRACER ! index of water vapor tracer
 
 !-----------------------------------------------------------------------
 character(len=80) :: restart_format = 'atmos_coupled_mod restart format 01'
@@ -276,7 +283,7 @@ integer :: nhum
     call get_nhum (nhum)
 
     Atmos%Surf_diff%delta_t = Surface_boundary%dt_t
-    Atmos%Surf_diff%delta_tr(:,:,nhum) = Surface_boundary%dt_q
+    Atmos%Surf_diff%delta_tr = Surface_boundary%dt_tr
 
     call atmosphere_up (Atmos%Time,  Surface_boundary%land_frac, Atmos%Surf_diff, &
                         Atmos%lprec, Atmos%fprec, Atmos%gust)
@@ -286,7 +293,7 @@ integer :: nhum
     Atmos % Time = Atmos % Time + Atmos % Time_step
 
 
-    call get_bottom_mass (Atmos % t_bot, Atmos % q_bot,  &
+    call get_bottom_mass (Atmos % t_bot, Atmos % tr_bot,  &
                           Atmos % p_bot, Atmos % z_bot,  &
                           Atmos % p_surf                 )
 
@@ -370,7 +377,12 @@ type (time_type), intent(in) :: Time_init, Time, Time_step
 !  (will print number below)
    call register_tracers ( MODEL_ATMOS, ntrace, ntprog, ntdiag, ntfamily )
    if ( ntfamily > 0 ) call error_mesg ('atmos_model', 'ntfamily > 0', FATAL)
-
+   ivapor = get_tracer_index( MODEL_ATMOS, 'sphum' )
+   if (ivapor==NO_TRACER) &
+        ivapor = get_tracer_index( MODEL_ATMOS, 'mix_rat' )
+   if (ivapor==NO_TRACER) &
+        call error_mesg('atmos_model_init', 'Cannot find water vapor in ATM tracer table', FATAL)
+        
 !-----------------------------------------------------------------------
 !  ----- initialize atmospheric model -----
 
@@ -389,7 +401,7 @@ type (time_type), intent(in) :: Time_init, Time, Time_step
                Atmos %  lon_bnd (nlon+1),    &
                Atmos %  lat_bnd (nlat+1),    &
                Atmos % t_bot    (nlon,nlat), &
-               Atmos % q_bot    (nlon,nlat), &
+               Atmos % tr_bot    (nlon,nlat, ntprog), &
                Atmos % z_bot    (nlon,nlat), &
                Atmos % p_bot    (nlon,nlat), &
                Atmos % u_bot    (nlon,nlat), &
@@ -438,7 +450,7 @@ type (time_type), intent(in) :: Time_init, Time, Time_step
     call atmosphere_boundary ( Atmos %  lon_bnd, Atmos %  lat_bnd, &
                                global=.false. )
 
-    call get_bottom_mass (Atmos % t_bot, Atmos % q_bot,  &
+    call get_bottom_mass (Atmos % t_bot, Atmos % tr_bot,  &
                           Atmos % p_bot, Atmos % z_bot,  &
                           Atmos % p_surf                 )
 
@@ -480,7 +492,7 @@ type (time_type), intent(in) :: Time_init, Time, Time_step
 
        if (restart_tbot_qbot) then
           call read_data('INPUT/atmos_coupled.res.nc', 't_bot', Atmos%t_bot, Atmos%domain)
-          call read_data('INPUT/atmos_coupled.res.nc', 'q_bot', Atmos%q_bot, Atmos%domain)
+          call read_data('INPUT/atmos_coupled.res.nc', 'q_bot', Atmos%tr_bot(:,:,ivapor), Atmos%domain)
        endif 
 
        call get_time (Atmos % Time_step, sec, day)
@@ -509,7 +521,7 @@ type (time_type), intent(in) :: Time_init, Time, Time_step
           call read_data ( unit, Atmos % gust  )
           if (restart_tbot_qbot) then
              call read_data ( unit, Atmos % t_bot  )
-             call read_data ( unit, Atmos % q_bot )
+             call read_data ( unit, Atmos % tr_bot(:,:,ivapor) )
           endif
           call close_file (unit)
 
@@ -594,7 +606,7 @@ character(len=64) :: fname = 'RESTART/atmos_coupled.res.nc'
      call write_data(fname, 'gust', Atmos%gust, Atmos%domain)
      if(restart_tbot_qbot) then
         call write_data(fname, 't_bot', Atmos%t_bot, Atmos%domain)
-        call write_data(fname, 'q_bot', Atmos%q_bot, Atmos%domain)
+        call write_data(fname, 'q_bot', Atmos%tr_bot(:,:,ivapor), Atmos%domain)
      endif
   else
      unit = open_restart_file ('RESTART/atmos_coupled.res', 'write')
@@ -607,7 +619,7 @@ character(len=64) :: fname = 'RESTART/atmos_coupled.res.nc'
      call write_data ( unit, Atmos % gust  )
      if(restart_tbot_qbot) then
         call write_data ( unit, Atmos % t_bot  )
-        call write_data ( unit, Atmos % q_bot  )
+        call write_data ( unit, Atmos % tr_bot(:,:,ivapor)  )
      endif
      call close_file (unit)
   endif
@@ -619,7 +631,7 @@ character(len=64) :: fname = 'RESTART/atmos_coupled.res.nc'
                Atmos %  lon_bnd , &
                Atmos %  lat_bnd , &
                Atmos % t_bot    , &
-               Atmos % q_bot    , &
+               Atmos % tr_bot    , &
                Atmos % z_bot    , &
                Atmos % p_bot    , &
                Atmos % u_bot    , &
