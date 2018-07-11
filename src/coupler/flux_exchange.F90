@@ -755,9 +755,9 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
           !      longitude from file grid_spec.nc ( from field yba ) is different from the longitude from atmosphere model.
           !   </ERROR>
           do j=jsc, jec+1
-             if(abs(atmlatb(j)-Atm%lat_bnd(isc+ioff)*45/atan(1.0))>bound_tol) then
+             if(abs(atmlatb(j)-Atm%lat_bnd(j+joff)*45/atan(1.0))>bound_tol) then
                 print *, 'GRID_SPEC/ATMOS LATITUDE INCONSISTENCY at j= ',j, ': ', &
-                     atmlatb(j),  Atm%lat_bnd(isc+ioff)*45/atan(1.0)
+                     atmlatb(j),  Atm%lat_bnd(j+joff)*45/atan(1.0)
                 call error_mesg ('flux_exchange_mod', &
                      'grid_spec.nc incompatible with atmosphere latitudes (see xba.dat and yba.dat)'&
                      , FATAL)
