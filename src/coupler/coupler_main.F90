@@ -181,14 +181,14 @@ use  ocean_model_mod, only: update_ocean_model, ocean_model_init,  &
 !
 ! flux_ calls translate information between model grids - see flux_exchange.f90
 !
-use flux_exchange_mod, only: flux_exchange_init!,   &
-!                              sfc_boundary_layer,   &
-!                              generate_sfc_xgrid,   &
-!                              flux_down_from_atmos, &
-!                              flux_up_to_atmos,     &
-!                              flux_land_to_ice,     &
-!                              flux_ice_to_ocean,    &
-!                              flux_ocean_to_ice
+use flux_exchange_mod, only: flux_exchange_init,   &
+                              sfc_boundary_layer,   &
+                             generate_sfc_xgrid,   &
+                             flux_down_from_atmos, &
+                             flux_up_to_atmos,     &
+                             flux_land_to_ice,     &
+                             flux_ice_to_ocean,    &
+                             flux_ocean_to_ice
 
 !   use simple_surface_mod, only: simple_surface_init,   &
 !                                 compute_flux,          &
@@ -426,10 +426,12 @@ do nc = 1, num_cpld_calls
 !                                Land_ice_atmos_boundary%u_star,    &
 !                                Land_ice_atmos_boundary%b_star     )
 
-!           if (do_flux) then
-!             call sfc_boundary_layer( REAL(dt_atmos), Time_atmos, &
-!                                      Atm, Land, Ice, Land_ice_atmos_boundary )
-!           end if
+        write(6,*) 'about to start loop again', nc
+
+          if (do_flux) then
+            call sfc_boundary_layer( REAL(dt_atmos), Time_atmos, &
+                                     Atm, Land, Ice, Land_ice_atmos_boundary )
+          end if
 
 !      ---- atmosphere down ----
             if (do_atmos) &
@@ -437,11 +439,11 @@ do nc = 1, num_cpld_calls
 !               call update_simple_surface (float(dt_atmos), Time_atmos, Atm, &
 !                                           Land_ice_atmos_boundary%dt_t, &
 !                                           Land_ice_atmos_boundary%dt_q)
-
-!           call flux_down_from_atmos( Time_atmos, Atm, Land, Ice, &
-!                Land_ice_atmos_boundary, &
-!                Atmos_land_boundary, &
-!                Atmos_ice_boundary )
+write(6,*) 'done update atmos model down'
+          call flux_down_from_atmos( Time_atmos, Atm, Land, Ice, &
+               Land_ice_atmos_boundary, &
+               Atmos_land_boundary, &
+               Atmos_ice_boundary )
 
 
 !      --------------------------------------------------------------
@@ -458,11 +460,12 @@ do nc = 1, num_cpld_calls
 !      --------------------------------------------------------------
 !      ---- atmosphere up ----
 
-!           call flux_up_to_atmos( Time_atmos, Land, Ice, Land_ice_atmos_boundary )
-
+           call flux_up_to_atmos( Time_atmos, Land, Ice, Land_ice_atmos_boundary, &
+                & Atmos_land_boundary, Atmos_ice_boundary )
+                
             if (do_atmos) &
               call update_atmos_model_up( Land_ice_atmos_boundary, Atm )
-
+write(6,*) 'done update atmos model up'
 !--------------
 
          enddo
@@ -494,9 +497,9 @@ do nc = 1, num_cpld_calls
         call mpp_set_current_pelist(Ocean%pelist)
 
 
-!           if (do_ocean)  call update_ocean_model( Ice_ocean_boundary, Ocean_state,  Ocean, &
-!                                             Time_ocean, Time_step_cpld )
-
+          if (do_ocean)  call update_ocean_model( Ice_ocean_boundary, Ocean_state,  Ocean, &
+                                            Time_ocean, Time_step_cpld )
+        write(6,*) 'done update ocean model'
             Time_ocean = Time_ocean +  Time_step_cpld
 !   ------ end of ocean time step loop -----
 !-----------------------------------------------------------------------
@@ -828,6 +831,7 @@ contains
     if( Atm%pe )then
         call mpp_set_current_pelist(Atm%pelist)
 !---- atmosphere ----
+        write(6,*) 'doing atmos model init NOW NOW NOW'
         call atmos_model_init( Atm, Time_init, Time, Time_step_atmos )
         call print_memuse_stats( 'atmos_model_init' )
 
@@ -878,7 +882,7 @@ contains
   if( Ocean%pe )then
       call mpp_set_current_pelist(Ocean%pelist)
 !---- ocean ---------
-      call ocean_model_init( Ocean, ocean_state, Time_init, Time, dt_ocean )
+!       call ocean_model_init( Ocean, ocean_state, Time_init, Time, dt_ocean )
       call print_memuse_stats( 'ocean_model_init' )
       call data_override_init(Ocean_domain_in = Ocean%domain )
   end if

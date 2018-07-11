@@ -388,7 +388,8 @@ type (time_type), intent(in) :: Time_init, Time, Time_step
 
     call atmosphere_init (Atmos%Time_init, Atmos%Time, Atmos%Time_step,&
                           Atmos%Surf_diff )
-                           
+    
+    write(6,*) 'checking surf-diff type', size(Atmos%Surf_diff%delta_u,1)
 !-----------------------------------------------------------------------
 !---- allocate space ----
 
