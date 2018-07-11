@@ -7,6 +7,10 @@
           "advect_vert",              "finite_volume_parabolic"
           "robert_filter",            "on"
           "profile_type", "fixed",   "surface_value=0.0" / 
+# sphum must be present on land as well
+ "TRACER", "land_mod",     "sphum"
+           "longname",     "specific humidity"
+           "units",        "kg/kg" /          
 ### MDPPM for T,S
 "prog_tracers","ocean_mod","temp"
 horizontal-advection-scheme = mdppm

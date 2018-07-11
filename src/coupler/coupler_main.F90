@@ -151,6 +151,7 @@ program coupler_main
   use  diag_manager_mod, only: diag_manager_init, diag_manager_end, &
                                DIAG_OCEAN, DIAG_OTHER, DIAG_ALL, get_base_date
   use  data_override_mod, only: data_override_init
+  use coupler_types_mod,       only: coupler_types_init  
 !
 ! model interfaces used to couple the component models:
 !               atmosphere, land, ice, and ocean
@@ -818,6 +819,8 @@ contains
        call error_mesg ('program coupler',   &
        'cpld time step is not a multiple of the ocean time step', FATAL)
 
+    call coupler_types_init
+
 !-----------------------------------------------------------------------
 !------ initialize component models ------
 !------ grid info now comes from grid_spec file
@@ -863,13 +866,13 @@ contains
 !         Land_ice_atmos_boundary%rough_mom = 0.0
 
 !---- land ----------
-!       call land_model_init( Atmos_land_boundary, Land, Time_init, Time, &
-!            Time_step_atmos, Time_step_cpld )
-!       call print_memuse_stats( 'land_model_init' )
+      call land_model_init( Atmos_land_boundary, Land, Time_init, Time, &
+           Time_step_atmos, Time_step_cpld )
+      call print_memuse_stats( 'land_model_init' )
 
 !---- ice -----------
-!       call ice_model_init( Ice, Time_init, Time, Time_step_atmos, Time_step_cpld )
-!       call print_memuse_stats( 'ice_model_init' )
+      call ice_model_init( Ice, Time_init, Time, Time_step_atmos, Time_step_cpld )
+      call print_memuse_stats( 'ice_model_init' )
 !       call data_override_init(Atm_domain_in = Atm%domain, Ice_domain_in = Ice%domain, Land_domain_in=Land%domain)
     end if
   if( Ocean%pe )then
