@@ -882,7 +882,7 @@ contains
   if( Ocean%pe )then
       call mpp_set_current_pelist(Ocean%pelist)
 !---- ocean ---------
-!       call ocean_model_init( Ocean, ocean_state, Time_init, Time, dt_ocean )
+      call ocean_model_init( Ocean, ocean_state, Time_init, Time, dt_ocean )
       call print_memuse_stats( 'ocean_model_init' )
       call data_override_init(Ocean_domain_in = Ocean%domain )
   end if
