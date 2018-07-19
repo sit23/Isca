@@ -80,7 +80,7 @@ character(len=10), parameter :: mod_name='atmosphere'
 
 !=================================================================================================================================
 
-public :: idealized_moist_phys_init , idealized_moist_phys , idealized_moist_phys_end
+public :: idealized_moist_phys_init , idealized_moist_phys , idealized_moist_phys_end, surf_diff_type
 
 logical :: module_is_initialized =.false.
 logical :: turb = .false.
@@ -275,10 +275,11 @@ type(time_type) :: Time_step
 contains
 !=================================================================================================================================
 
-subroutine idealized_moist_phys_init(Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init)
+subroutine idealized_moist_phys_init(Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init, surf_diff_init)
 type(time_type), intent(in) :: Time, Time_step_in
 integer, intent(in) :: nhum
 real, intent(in), dimension(:,:) :: rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init
+type(surf_diff_type), optional :: surf_diff_init
 
 integer :: io, nml_unit, stdlog_unit, seconds, days, id, jd, kd
 real, dimension (size(rad_lonb_2d,1)-1, size(rad_latb_2d,2)-1) :: sgsmtn !s added for damping_driver
@@ -580,6 +581,10 @@ if(turb) then
 ! gcm_vert_diff_down) because the variable sphum is not initialized
 ! otherwise in the vert_diff module
    call vert_diff_init (Tri_surf, ie-is+1, je-js+1, num_levels, .true., do_virtual) !s do_conserve_energy is hard-coded in.
+   if (present(surf_diff_init)) then
+       surf_diff_init = Tri_surf
+   endif
+      
 end if
 
 call lscale_cond_init()

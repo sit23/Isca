@@ -12,9 +12,7 @@ use     field_manager_mod, only: MODEL_ATMOS
 
 use    tracer_manager_mod, only: get_number_tracers, get_tracer_index
 
-use idealized_moist_phys_mod, only: idealized_moist_phys_init , idealized_moist_phys , idealized_moist_phys_end
-
-use         vert_diff_mod, only: surf_diff_type
+use idealized_moist_phys_mod, only: idealized_moist_phys_init , idealized_moist_phys , idealized_moist_phys_end, surf_diff_type
 
 use         constants_mod, only: grav
 
@@ -227,7 +225,7 @@ do j = js,je+1
   rad_latb_2d(:,j) = rad_latb(j)
 enddo
   write(6,*) 'doing idealized moist phys init NOW NOW NOW'
-   call idealized_moist_phys_init(Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current))
+   call idealized_moist_phys_init(Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), Surf_diff)
 
 ! call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes)
 
