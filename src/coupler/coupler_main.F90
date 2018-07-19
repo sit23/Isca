@@ -426,7 +426,7 @@ do nc = 1, num_cpld_calls
 !                                Land_ice_atmos_boundary%u_star,    &
 !                                Land_ice_atmos_boundary%b_star     )
 
-        write(6,*) 'about to start loop again', nc
+
 
           if (do_flux) then
             call sfc_boundary_layer( REAL(dt_atmos), Time_atmos, &
@@ -439,7 +439,6 @@ do nc = 1, num_cpld_calls
 !               call update_simple_surface (float(dt_atmos), Time_atmos, Atm, &
 !                                           Land_ice_atmos_boundary%dt_t, &
 !                                           Land_ice_atmos_boundary%dt_q)
-write(6,*) 'done update atmos model down'
           call flux_down_from_atmos( Time_atmos, Atm, Land, Ice, &
                Land_ice_atmos_boundary, &
                Atmos_land_boundary, &
@@ -465,7 +464,6 @@ write(6,*) 'done update atmos model down'
                 
             if (do_atmos) &
               call update_atmos_model_up( Land_ice_atmos_boundary, Atm )
-write(6,*) 'done update atmos model up'
 !--------------
 
          enddo
@@ -499,7 +497,7 @@ write(6,*) 'done update atmos model up'
 
           if (do_ocean)  call update_ocean_model( Ice_ocean_boundary, Ocean_state,  Ocean, &
                                             Time_ocean, Time_step_cpld )
-        write(6,*) 'done update ocean model'
+
             Time_ocean = Time_ocean +  Time_step_cpld
 !   ------ end of ocean time step loop -----
 !-----------------------------------------------------------------------
@@ -831,7 +829,6 @@ contains
     if( Atm%pe )then
         call mpp_set_current_pelist(Atm%pelist)
 !---- atmosphere ----
-        write(6,*) 'doing atmos model init NOW NOW NOW'
         call atmos_model_init( Atm, Time_init, Time, Time_step_atmos )
         call print_memuse_stats( 'atmos_model_init' )
 

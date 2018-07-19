@@ -224,7 +224,7 @@ enddo
 do j = js,je+1
   rad_latb_2d(:,j) = rad_latb(j)
 enddo
-  write(6,*) 'doing idealized moist phys init NOW NOW NOW'
+
    call idealized_moist_phys_init(Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), Surf_diff)
 
 ! call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes)

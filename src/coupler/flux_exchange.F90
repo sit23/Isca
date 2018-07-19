@@ -1244,7 +1244,7 @@ subroutine sfc_boundary_layer ( dt, Time, Atm, Land, Ice, Land_Ice_Atmos_Boundar
   call mpp_clock_begin(cplClock)
   call mpp_clock_begin(sfcClock)
   ! [2] allocate storage for variables that are also used in flux_up_to_atmos
-  write(6,*) 'about to allocate stuff'
+
   allocate ( &
        ex_t_surf   (n_xgrid_sfc),  &
        ex_t_surf_miz(n_xgrid_sfc), &
@@ -1326,7 +1326,7 @@ subroutine sfc_boundary_layer ( dt, Time, Atm, Land, Ice, Land_Ice_Atmos_Boundar
     enddo  !} m
   enddo  !} n
 
-  write(6,*) 'made it some of the way in'
+
 
 !
 !       Call the atmosphere tracer driver to gather the data needed for extra gas tracers
@@ -1561,7 +1561,7 @@ subroutine sfc_boundary_layer ( dt, Time, Atm, Land, Ice, Land_Ice_Atmos_Boundar
      ex_t_surf = ex_t_surf_miz
   end if
 
-  write(6,*) 'made it to just before surface flux'
+
 
   ! [5] compute explicit fluxes and tendencies at all available points ---
   call some(xmap_sfc, ex_avail)
@@ -1585,7 +1585,7 @@ subroutine sfc_boundary_layer ( dt, Time, Atm, Land, Ice, Land_Ice_Atmos_Boundar
        dt,                                                             &
        ex_land, ex_seawater .gt. 0,  ex_avail                          )
 
-write(6,*) 'made it out of surface flux'
+
 
 #ifdef SCM
 ! Option to override surface fluxes for SCM
@@ -1641,7 +1641,7 @@ write(6,*) 'made it out of surface flux'
 ! Combine explicit ocean flux and implicit land flux of extra flux fields.
 
   ! Calculate ocean explicit flux here
-write(6,*) 'made it to atmos_ocean_fluxes_calc'
+
 
   call atmos_ocean_fluxes_calc(ex_gas_fields_atm, ex_gas_fields_ice, ex_gas_fluxes, ex_seawater)
 
@@ -1816,7 +1816,7 @@ write(6,*) 'made it to atmos_ocean_fluxes_calc'
        ex_albedo_nir_dif_fix = 1.
   endif
 #endif
-write(6,*) 'made it to the diagnostics section'
+
   !=======================================================================
   ! [7] diagnostics section
 
@@ -2093,7 +2093,7 @@ write(6,*) 'made it to the diagnostics section'
 !Balaji
   call mpp_clock_end(sfcClock)
   call mpp_clock_end(cplClock)
-write(6,*) 'finished sfc boundary layer'
+
 !=======================================================================
 
 end subroutine sfc_boundary_layer
@@ -2250,7 +2250,7 @@ subroutine flux_down_from_atmos (Time, Atm, Land, Ice, &
   ex_flux_sw_dif     = 0.0
   ex_flux_sw_vis_dif = 0.0
   ex_flux_lwd        = 0.0           
-  write(6,*)  'putting stuff onto xgrid'
+
   call put_to_xgrid (Atm%flux_sw_dir, 'ATM', ex_flux_sw_dir, xmap_sfc, complete=.false.)
   call put_to_xgrid (Atm%flux_sw_vis_dir, 'ATM', ex_flux_sw_vis_dir, xmap_sfc, complete=.false.)
   call put_to_xgrid (Atm%flux_sw_dif, 'ATM', ex_flux_sw_dif, xmap_sfc, complete=.false.)
@@ -2259,7 +2259,7 @@ subroutine flux_down_from_atmos (Time, Atm, Land, Ice, &
   call put_to_xgrid (Atm%flux_sw_down_total_dir, 'ATM', ex_flux_sw_down_total_dir, xmap_sfc, complete=.false.)
   call put_to_xgrid (Atm%flux_sw_down_vis_dif, 'ATM', ex_flux_sw_down_vis_dif, xmap_sfc, complete=.false.)
   call put_to_xgrid (Atm%flux_sw_down_total_dif, 'ATM', ex_flux_sw_down_total_dif, xmap_sfc, complete=.false.)
-  write(6,*)  '#1 done putting stuff onto xgrid'
+
   !  ccc = conservation_check(Atm%lprec, 'ATM', xmap_sfc)
   !  if (mpp_pe()== mpp_root_pe()) print *,'LPREC', ccc
 
@@ -2271,7 +2271,7 @@ subroutine flux_down_from_atmos (Time, Atm, Land, Ice, &
      call put_to_xgrid (Atm%fprec,   'ATM', ex_fprec, xmap_sfc, complete=.false.)
      call put_to_xgrid (Atm%t_bot,   'ATM', ex_tprec, xmap_sfc, complete=.false.)
 !!$  endif
-  write(6,*)  '#2 done putting stuff onto xgrid'
+
   call put_to_xgrid (Atm%coszen,  'ATM', ex_coszen, xmap_sfc, complete=.true.)
 
   call put_to_xgrid (Atm%flux_lw, 'ATM', ex_flux_lwd, xmap_sfc, remap_method=remap_method, complete=.false.)
@@ -2279,17 +2279,16 @@ subroutine flux_down_from_atmos (Time, Atm, Land, Ice, &
      call put_to_xgrid (Atmos_boundary%u_star, 'ATM', ex_u_star_smooth, xmap_sfc, remap_method=remap_method, complete=.false.)
      ex_u_star = ex_u_star_smooth
   endif
-  write(6,*)  '#3 done putting stuff onto xgrid', size(Atm%Surf_Diff%delta_u,1), size(Atm%Surf_Diff%delta_u,2)
-  write(6,*)   '#3.1', size(Atm%lprec,1), size(Atm%lprec,2)
+
 ! MOD changed the following two lines to put Atmos%surf_diff%delta_u and v
 ! on exchange grid instead of the stresses themselves so that only the 
 ! implicit corrections are filtered through the atmospheric grid not the
 ! stresses themselves
   ex_delta_u = 0.0; ex_delta_v = 0.0
   call put_to_xgrid (Atm%Surf_Diff%delta_u, 'ATM', ex_delta_u, xmap_sfc, remap_method=remap_method, complete=.false.)
-  write(6,*)  '#3.25 done putting stuff onto xgrid'  
+
   call put_to_xgrid (Atm%Surf_Diff%delta_v, 'ATM', ex_delta_v, xmap_sfc, remap_method=remap_method, complete=.true.)
-  write(6,*)  '#3.5 done putting stuff onto xgrid'
+
   ! MOD update stresses using atmos delta's but derivatives on exchange grid
   ex_flux_u = ex_flux_u + ex_delta_u*ex_dtaudu_atm
   ex_flux_v = ex_flux_v + ex_delta_v*ex_dtaudv_atm
@@ -2323,7 +2322,7 @@ subroutine flux_down_from_atmos (Time, Atm, Land, Ice, &
      ex_flux_sw_vis = ex_flux_sw_vis_dir + ex_flux_sw_vis_dif ! legacy, remove later
      ex_flux_sw     = ex_flux_sw_dir     + ex_flux_sw_dif     ! legacy, remove later
   end if
-  write(6,*)  '#4 done putting stuff onto xgrid'
+
 !!$  ex_flux_sw_dir = ex_flux_sw_dir - ex_flux_sw_vis_dir            ! temporarily nir/dir
 !!$  ex_flux_sw_dir = ex_flux_sw_dir * ex_albedo_nir_dir_fix         ! fix nir/dir
 !!$  ex_flux_sw_vis_dir = ex_flux_sw_vis_dir * ex_albedo_vis_dir_fix ! fix vis/dir

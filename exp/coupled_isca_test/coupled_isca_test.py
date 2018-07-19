@@ -4,7 +4,7 @@ import numpy as np
 
 from isca import IscaMOMCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
 
-NCORES = 2
+NCORES = 16
 base_dir = os.path.dirname(os.path.realpath(__file__))
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
@@ -23,26 +23,33 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('coupled_frierson_test_experiment_5_ocean_on', codebase=cb)
+exp = Experiment('coupled_frierson_test_experiment_6_ocean_on', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
 #Tell model how to write diagnostics
 diag = DiagTable()
-diag.add_file('atmos_monthly', 30, 'days', time_units='days')
+diag.add_file('atmos_daily', 1, 'days', time_units='days')
+diag.add_file('ocean_daily', 1, 'days', time_units='days')
+
 
 #Tell model which diagnostics to write
-diag.add_field('dynamics', 'ps', time_avg=True)
-diag.add_field('dynamics', 'bk')
-diag.add_field('dynamics', 'pk')
-diag.add_field('atmosphere', 'precipitation', time_avg=True)
-diag.add_field('mixed_layer', 't_surf', time_avg=True)
-diag.add_field('dynamics', 'sphum', time_avg=True)
-diag.add_field('dynamics', 'ucomp', time_avg=True)
-diag.add_field('dynamics', 'vcomp', time_avg=True)
-diag.add_field('dynamics', 'temp', time_avg=True)
-diag.add_field('dynamics', 'vor', time_avg=True)
-diag.add_field('dynamics', 'div', time_avg=True)
+diag.add_field('dynamics', 'ps', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'bk', files = ['atmos_daily'])
+diag.add_field('dynamics', 'pk', files = ['atmos_daily'])
+diag.add_field('atmosphere', 'precipitation', time_avg=True, files = ['atmos_daily'])
+diag.add_field('mixed_layer', 't_surf', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'sphum', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'ucomp', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'vcomp', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'temp', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'vor', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'div', time_avg=True, files = ['atmos_daily'])
+
+diag.add_field('ocean_model', 'salt', time_avg=True, files = ['ocean_daily'])
+diag.add_field('ocean_model', 'temp', time_avg=True, files = ['ocean_daily'])
+diag.add_field('ocean_model', 'u', time_avg=True, files = ['ocean_daily'])
+diag.add_field('ocean_model', 'v', time_avg=True, files = ['ocean_daily'])
 
 exp.diag_table = diag
 
@@ -52,7 +59,7 @@ exp.clear_rundir()
 #Define values for the 'core' namelist
 exp.namelist = namelist = Namelist({
     'coupler_nml':{
-     'days'   : 30,
+     'days'   : 5,
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,

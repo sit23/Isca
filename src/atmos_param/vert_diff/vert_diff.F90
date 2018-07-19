@@ -170,9 +170,6 @@ subroutine vert_diff_init (Tri_surf, idim, jdim, kdim,    &
 
  call alloc_surf_diff_type ( Tri_surf, idim, jdim, ntprog )
  
- write(6,*) 'checking surf-diff type in vert-diff', size(Tri_surf%delta_u,1)
-
- 
  do_conserve_energy = do_conserve_energy_in
 
  ! allocate data storage for tracers
@@ -224,9 +221,6 @@ integer,              intent(in)    :: idim, jdim, ntprog
     allocate( Tri_surf%sst_miz   (idim, jdim) ) ; Tri_surf%sst_miz = 280.0 !miz
     allocate( Tri_surf%dflux_tr  (idim, jdim, ntprog) ) ; Tri_surf%dflux_tr = 0.0
     allocate( Tri_surf%delta_tr  (idim, jdim, ntprog) ) ; Tri_surf%delta_tr = 0.0
-
-write(6,*) 'allocating surf diff type NOW NOW NOW'
-write(6,*) 'allocating surf diff type', idim, jdim, ntprog
 
 end subroutine alloc_surf_diff_type
 
