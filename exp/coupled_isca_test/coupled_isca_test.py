@@ -23,7 +23,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('coupled_frierson_test_experiment_6_ocean_on', codebase=cb)
+exp = Experiment('coupled_frierson_test_experiment_16_ocean_and_ice_on', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
@@ -31,6 +31,7 @@ exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 diag = DiagTable()
 diag.add_file('atmos_daily', 1, 'days', time_units='days')
 diag.add_file('ocean_daily', 1, 'days', time_units='days')
+diag.add_file('ice_daily', 1, 'days', time_units='days')
 
 
 #Tell model which diagnostics to write
@@ -51,6 +52,9 @@ diag.add_field('ocean_model', 'temp', time_avg=True, files = ['ocean_daily'])
 diag.add_field('ocean_model', 'u', time_avg=True, files = ['ocean_daily'])
 diag.add_field('ocean_model', 'v', time_avg=True, files = ['ocean_daily'])
 
+diag.add_field('ice_model', 'CN', time_avg=True, files = ['ice_daily'])
+diag.add_field('ice_model', 'EXT', time_avg=True, files = ['ice_daily'])
+
 exp.diag_table = diag
 
 #Empty the run directory ready to run
@@ -67,7 +71,10 @@ exp.namelist = namelist = Namelist({
      'dt_ocean':600,     
      'dt_cpld':600,          
      'current_date' : [1,1,1,0,0,0],
-     'calendar' : 'thirty_day'
+     'calendar' : 'thirty_day',
+     'do_land' : False,
+     'do_ice' : True,
+
     },
 
     'idealized_moist_phys_nml': {
@@ -195,6 +202,6 @@ exp.namelist = namelist = Namelist({
 #Verified as giving exactly the same result as Frierson test case.
 #Lets do a run!
 if __name__=="__main__":
-    exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=True)
+    exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=False)
     for i in range(2,121):
         exp.run(i, num_cores=NCORES)
