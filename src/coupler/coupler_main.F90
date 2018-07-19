@@ -704,6 +704,7 @@ contains
     Ocean%pelist = (/(i,i=ocean_pe_start,ocean_pe_end)/)
     Atm%pe = atmos_pe_start.LE.pe .AND. pe.LE.atmos_pe_end
     Ocean%pe = ocean_pe_start.LE.pe .AND. pe.LE.ocean_pe_end
+    Ocean%is_ocean_pe = ANY(Ocean%pelist .EQ. mpp_pe())      
     call mpp_declare_pelist( Atm%pelist,   '_atm' )
    call mpp_declare_pelist( Ocean%pelist, '_ocn' )
    if( concurrent .AND. pe.EQ.mpp_root_pe() )then
@@ -949,12 +950,11 @@ contains
 !the call to fms_io_exit has been moved here
 !this will work for serial code or concurrent (disjoint pelists)
 !but will fail on overlapping but unequal pelists
-!   if( Ocean%pe )then
-!       call mpp_set_current_pelist(Ocean%pelist)
-!        call write_ice_ocean_boundary('RESTART/coupler_fluxes.res.nc', &
-!                                      ice_ocean_boundary,Ocean)
-!       call ocean_model_end (Ocean)
-!   end if
+
+    if( Ocean%is_ocean_pe )then
+        call mpp_set_current_pelist(Ocean%pelist)
+        call ocean_model_end (Ocean, Ocean_state, Time)
+    end if
     if( Atm%pe )then
         call mpp_set_current_pelist(Atm%pelist)
         call atmos_model_end (Atm)
