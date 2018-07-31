@@ -27,3 +27,5 @@ src/extra/python/scripts/archived/
 mima_pz.txt
 src/preprocessing/generate_grids/*/exec/*
 src/preprocessing/generate_grids/*/workdir/*
+test/.cache
+test/results.xml
