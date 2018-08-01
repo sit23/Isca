@@ -752,270 +752,10 @@ endif
 
 rain = 0.0; snow = 0.0; precip = 0.0
 
-select case(r_conv_scheme)
 
-case(SIMPLE_BETTS_CONV)
+call idealized_convection_and_lscale_cond(tg, grid_tracers, previous, current, rain, snow, precip, dt_tg, dt_tracers, mask, kbot)
 
-   call qe_moist_convection ( delta_t,              tg(:,:,:,previous),      &
-    grid_tracers(:,:,:,previous,nsphum),        p_full(:,:,:,previous),      &
-                          p_half(:,:,:,previous),                coldT,      &
-                                 rain,                            snow,      &
-                           conv_dt_tg,                      conv_dt_qg,      &
-                                q_ref,                        convflag,      &
-                                klzbs,                            cape,      &
-                                  cin,             invtau_q_relaxation,      &
-                  invtau_t_relaxation,                           t_ref)
-
-   tg_tmp = conv_dt_tg + tg(:,:,:,previous)
-   qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
-!  note the delta's are returned rather than the time derivatives
-
-   conv_dt_tg = conv_dt_tg/delta_t
-   conv_dt_qg = conv_dt_qg/delta_t
-   depth_change_conv = rain/dens_h2o     ! RG Add bucket
-   rain       = rain/delta_t
-   precip     = rain
-
-   if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
-   if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
-   if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
-   if(id_cape  > 0) used = send_data(id_cape, cape, Time)
-   if(id_cin  > 0) used = send_data(id_cin, cin, Time)
-
-case(FULL_BETTS_MILLER_CONV)
-
-   call betts_miller (          delta_t,           tg(:,:,:,previous),       &
-    grid_tracers(:,:,:,previous,nsphum),       p_full(:,:,:,previous),       &
-                 p_half(:,:,:,previous),                        coldT,       &
-                                   rain,                         snow,       &
-                             conv_dt_tg,                   conv_dt_qg,       &
-                                  q_ref,                     convflag,       &
-                                  klzbs,                         cape,       &
-                                    cin,                        t_ref,       &
-                    invtau_t_relaxation,          invtau_q_relaxation,       &
-                               capeflag)
-
-   tg_tmp = conv_dt_tg + tg(:,:,:,previous)
-   qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
-!  note the delta's are returned rather than the time derivatives
-
-   conv_dt_tg = conv_dt_tg/delta_t
-   conv_dt_qg = conv_dt_qg/delta_t
-   depth_change_conv = rain/dens_h2o     ! RG Add bucket
-   rain       = rain/delta_t
-   precip     = rain
-
-   if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
-   if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
-   if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
-   if(id_cape  > 0) used = send_data(id_cape, cape, Time)
-   if(id_cin  > 0) used = send_data(id_cin, cin, Time)
-
-case(DRY_CONV)
-    call dry_convection(Time, tg(:, :, :, previous),                         &
-                        p_full(:,:,:,previous), p_half(:,:,:,previous),      &
-                        conv_dt_tg, cape, cin)
-
-    tg_tmp = conv_dt_tg*delta_t + tg(:,:,:,previous)
-    qg_tmp = grid_tracers(:,:,:,previous,nsphum)
-
-    if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
-    if(id_cape  > 0) used = send_data(id_cape, cape, Time)
-    if(id_cin  > 0) used = send_data(id_cin, cin, Time)
-
-case(RAS_CONV)
-
-    call ras   (is,   js,     Time,                                                  &  
-                tg(:,:,:,previous),   grid_tracers(:,:,:,previous,nsphum),           &
-                ug(:,:,:,previous),  vg(:,:,:,previous),    p_full(:,:,:,previous),  &
-                p_half(:,:,:,previous), z_half(:,:,:,previous), coldT,  delta_t,     &
-                conv_dt_tg,   conv_dt_qg, dt_ug_conv,  dt_vg_conv,                   &
-                rain, snow,   do_strat,                                              &                                              
-                !OPTIONAL 
-                mask,  kbot,                                                         &
-                !OPTIONAL OUT
-                mc,   tracer(:,:,:), tracer(:,:,:),                          &
-               tracer(:,:,:),  tracertnd(:,:,:),                             &
-               tracertnd(:,:,:), tracertnd(:,:,:))
-                
-
-      !update tendencies - dT and dq are done after cases
-      tg_tmp = tg(:,:,:,previous) + conv_dt_tg
-      qg_tmp = grid_tracers(:,:,:,previous,nsphum) + conv_dt_qg
-      dt_ug = dt_ug + dt_ug_conv
-      dt_vg = dt_vg + dt_vg_conv
-
-      precip     = precip + rain + snow
-
-   if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
-   if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
-   if(id_conv_rain  > 0) used = send_data(id_conv_rain, precip, Time)
-
-
-case(NO_CONV)
-   tg_tmp = tg(:,:,:,previous)
-   qg_tmp = grid_tracers(:,:,:,previous,nsphum)
-
-case default
-  call error_mesg('idealized_moist_phys','Invalid convection scheme.', FATAL)
-
-end select
-
-
-! Add the T and q tendencies due to convection to the timestep
-dt_tg = dt_tg + conv_dt_tg
-dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + conv_dt_qg
-
-
-! Perform large scale convection
-if (r_conv_scheme .ne. DRY_CONV) then
-  ! Large scale convection is a function of humidity only.  This is
-  ! inconsistent with the dry convection scheme, don't run it!
-  rain = 0.0; snow = 0.0
-  call lscale_cond (         tg_tmp,                          qg_tmp,        &
-             p_full(:,:,:,previous),          p_half(:,:,:,previous),        &
-                              coldT,                            rain,        &
-                               snow,                      cond_dt_tg,        &
-                         cond_dt_qg )
-
-  cond_dt_tg = cond_dt_tg/delta_t
-  cond_dt_qg = cond_dt_qg/delta_t
-  depth_change_cond = rain/dens_h2o     ! RG Add bucket
-  rain       = rain/delta_t
-  snow       = snow/delta_t
-  precip     = precip + rain + snow
-
-  dt_tg = dt_tg + cond_dt_tg
-  dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + cond_dt_qg
-
-  if(id_cond_dt_qg > 0) used = send_data(id_cond_dt_qg, cond_dt_qg, Time)
-  if(id_cond_dt_tg > 0) used = send_data(id_cond_dt_tg, cond_dt_tg, Time)
-  if(id_cond_rain  > 0) used = send_data(id_cond_rain, rain, Time)
-  if(id_precip     > 0) used = send_data(id_precip, precip, Time)
-
-endif
-
-
-! Begin the radiation calculation by computing downward fluxes.
-! This part of the calculation does not depend on the surface temperature.
-
-if(two_stream_gray) then
-   call two_stream_gray_rad_down(is, js, Time, &
-                       rad_lat(:,:),           &
-                       rad_lon(:,:),           &
-                       p_half(:,:,:,current),  &
-                       tg(:,:,:,previous),     &
-                       net_surf_sw_down(:,:),  &
-                       surf_lw_down(:,:), albedo, &
-                       grid_tracers(:,:,:,previous,nsphum))
-end if
-
-if(.not.mixed_layer_bc) then
-
-!!$! infinite heat capacity
-!    t_surf = surface_temperature_forced(rad_lat)
-!!$! no heat capacity:
-!!$   t_surf = tg(:,:,num_levels,previous)
-
-!!$! surface temperature has same potential temp. as lowest layer:
-!!$  t_surf = surface_temperature(tg(:,:,:,previous), p_full(:,:,:,current), p_half(:,:,:,current))
-end if
-
-if(.not.gp_surface) then 
-call surface_flux(                                                          &
-                  tg(:,:,num_levels,previous),                              &
- grid_tracers(:,:,num_levels,previous,nsphum),                              &
-                  ug(:,:,num_levels,previous),                              &
-                  vg(:,:,num_levels,previous),                              &
-               p_full(:,:,num_levels,current),                              &
-   z_full(:,:,num_levels,current)-z_surf(:,:),                              &
-             p_half(:,:,num_levels+1,current),                              &
-                                  t_surf(:,:),                              &
-                                  t_surf(:,:),                              &
-                                  q_surf(:,:),                              & ! is intent(inout)
-                                       bucket,                              &     ! RG Add bucket
-                    bucket_depth(:,:,current),                              &     ! RG Add bucket
-                        max_bucket_depth_land,                              &     ! RG Add bucket
-                         depth_change_lh(:,:),                              &     ! RG Add bucket
-                       depth_change_conv(:,:),                              &     ! RG Add bucket
-                       depth_change_cond(:,:),                              &     ! RG Add bucket
-                                  u_surf(:,:),                              &
-                                  v_surf(:,:),                              &
-                               rough_mom(:,:),                              &
-                              rough_heat(:,:),                              &
-                             rough_moist(:,:),                              &
-                               rough_mom(:,:),                              & ! using rough_mom in place of rough_scale -- pjp
-                                    gust(:,:),                              &
-                                  flux_t(:,:),                              & ! is intent(out)
-                                  flux_q(:,:),                              & ! is intent(out)
-                                  flux_r(:,:),                              & ! is intent(out)
-                                  flux_u(:,:),                              & ! is intent(out)
-                                  flux_v(:,:),                              & ! is intent(out)
-                                  drag_m(:,:),                              & ! is intent(out)
-                                  drag_t(:,:),                              & ! is intent(out)
-                                  drag_q(:,:),                              & ! is intent(out)
-                                   w_atm(:,:),                              & ! is intent(out)
-                                   ustar(:,:),                              & ! is intent(out)
-                                   bstar(:,:),                              & ! is intent(out)
-                                   qstar(:,:),                              & ! is intent(out)
-                               dhdt_surf(:,:),                              & ! is intent(out)
-                               dedt_surf(:,:),                              & ! is intent(out)
-                               dedq_surf(:,:),                              & ! is intent(out)
-                               drdt_surf(:,:),                              & ! is intent(out)
-                                dhdt_atm(:,:),                              & ! is intent(out)
-                                dedq_atm(:,:),                              & ! is intent(out)
-                              dtaudu_atm(:,:),                              & ! is intent(out)
-                              dtaudv_atm(:,:),                              & ! is intent(out)
-                                      delta_t,                              &
-                                    land(:,:),                              &
-                               .not.land(:,:),                              &
-                                   avail(:,:)  )
-endif
-
-! Now complete the radiation calculation by computing the upward and net fluxes.
-
-if(two_stream_gray) then
-   call two_stream_gray_rad_up(is, js, Time, &
-                     rad_lat(:,:),           &
-                     p_half(:,:,:,current),  &
-                     t_surf(:,:),            &
-                     tg(:,:,:,previous),     &
-                     dt_tg(:,:,:), albedo)
-end if
-
-#ifdef RRTM_NO_COMPILE
-    if (do_rrtm_radiation) then
-        call error_mesg('idealized_moist_phys','do_rrtm_radiation is .true. but compiler flag -D RRTM_NO_COMPILE used. Stopping.', FATAL)
-    endif
-#else
-if(do_rrtm_radiation) then
-   !need t at half grid
-	tg_interp=tg(:,:,:,previous)
-   call interp_temp(z_full(:,:,:,current),z_half(:,:,:,current),tg_interp, Time)
-   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full(:,:,:,current),p_half(:,:,:,current),albedo,grid_tracers(:,:,:,previous,nsphum),tg_interp,t_surf(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
-endif
-#endif
-
-
-
-if(gp_surface) then
-
-	call gp_surface_flux (dt_tg(:,:,:), p_half(:,:,:,current), num_levels)
-	
-    call compute_rayleigh_bottom_drag( 1,                     ie-is+1, &
-                                       1,                     je-js+1, &
-                                     Time,                    delta_t, &
-                   rad_lat(:,:),         dt_ug(:,:,:      ), &
-                        dt_vg(:,:,:     ),                             &
-                       ug(:,:,:,previous),         vg(:,:,:,previous), &
-                     p_half(:,:,:,previous),     p_full(:,:,:,previous), &
-                     dt_tg, diss_heat_ray )
-
-	if(id_diss_heat_ray > 0) used = send_data(id_diss_heat_ray, diss_heat_ray, Time)
-endif
-
-
-
+call idealized_radiation_and_optional_surface_flux()
 
 !----------------------------------------------------------------------
 !    Copied from MiMA physics_driver.f90
@@ -1265,5 +1005,274 @@ subroutine rh_calc(pfull,T,qv,RH) !s subroutine copied from 2006 FMS MoistModel 
 END SUBROUTINE rh_calc
 
 !=================================================================================================================================
+
+subroutine idealized_convection_and_lscale_cond() 
+
+
+    select case(r_conv_scheme)
+
+    case(SIMPLE_BETTS_CONV)
+
+       call qe_moist_convection ( delta_t,              tg(:,:,:,previous),      &
+        grid_tracers(:,:,:,previous,nsphum),        p_full(:,:,:,previous),      &
+                              p_half(:,:,:,previous),                coldT,      &
+                                     rain,                            snow,      &
+                               conv_dt_tg,                      conv_dt_qg,      &
+                                    q_ref,                        convflag,      &
+                                    klzbs,                            cape,      &
+                                      cin,             invtau_q_relaxation,      &
+                      invtau_t_relaxation,                           t_ref)
+
+       tg_tmp = conv_dt_tg + tg(:,:,:,previous)
+       qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
+    !  note the delta's are returned rather than the time derivatives
+
+       conv_dt_tg = conv_dt_tg/delta_t
+       conv_dt_qg = conv_dt_qg/delta_t
+       depth_change_conv = rain/dens_h2o     ! RG Add bucket
+       rain       = rain/delta_t
+       precip     = rain
+
+       if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
+       if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
+       if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
+       if(id_cape  > 0) used = send_data(id_cape, cape, Time)
+       if(id_cin  > 0) used = send_data(id_cin, cin, Time)
+
+    case(FULL_BETTS_MILLER_CONV)
+
+       call betts_miller (          delta_t,           tg(:,:,:,previous),       &
+        grid_tracers(:,:,:,previous,nsphum),       p_full(:,:,:,previous),       &
+                     p_half(:,:,:,previous),                        coldT,       &
+                                       rain,                         snow,       &
+                                 conv_dt_tg,                   conv_dt_qg,       &
+                                      q_ref,                     convflag,       &
+                                      klzbs,                         cape,       &
+                                        cin,                        t_ref,       &
+                        invtau_t_relaxation,          invtau_q_relaxation,       &
+                                   capeflag)
+
+       tg_tmp = conv_dt_tg + tg(:,:,:,previous)
+       qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
+    !  note the delta's are returned rather than the time derivatives
+
+       conv_dt_tg = conv_dt_tg/delta_t
+       conv_dt_qg = conv_dt_qg/delta_t
+       depth_change_conv = rain/dens_h2o     ! RG Add bucket
+       rain       = rain/delta_t
+       precip     = rain
+
+       if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
+       if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
+       if(id_conv_rain  > 0) used = send_data(id_conv_rain, rain, Time)
+       if(id_cape  > 0) used = send_data(id_cape, cape, Time)
+       if(id_cin  > 0) used = send_data(id_cin, cin, Time)
+
+    case(DRY_CONV)
+        call dry_convection(Time, tg(:, :, :, previous),                         &
+                            p_full(:,:,:,previous), p_half(:,:,:,previous),      &
+                            conv_dt_tg, cape, cin)
+
+        tg_tmp = conv_dt_tg*delta_t + tg(:,:,:,previous)
+        qg_tmp = grid_tracers(:,:,:,previous,nsphum)
+
+        if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
+        if(id_cape  > 0) used = send_data(id_cape, cape, Time)
+        if(id_cin  > 0) used = send_data(id_cin, cin, Time)
+
+    case(RAS_CONV)
+
+        call ras   (is,   js,     Time,                                                  &  
+                    tg(:,:,:,previous),   grid_tracers(:,:,:,previous,nsphum),           &
+                    ug(:,:,:,previous),  vg(:,:,:,previous),    p_full(:,:,:,previous),  &
+                    p_half(:,:,:,previous), z_half(:,:,:,previous), coldT,  delta_t,     &
+                    conv_dt_tg,   conv_dt_qg, dt_ug_conv,  dt_vg_conv,                   &
+                    rain, snow,   do_strat,                                              &                                              
+                    !OPTIONAL 
+                    mask,  kbot,                                                         &
+                    !OPTIONAL OUT
+                    mc,   tracer(:,:,:), tracer(:,:,:),                          &
+                   tracer(:,:,:),  tracertnd(:,:,:),                             &
+                   tracertnd(:,:,:), tracertnd(:,:,:))
+                
+
+          !update tendencies - dT and dq are done after cases
+          tg_tmp = tg(:,:,:,previous) + conv_dt_tg
+          qg_tmp = grid_tracers(:,:,:,previous,nsphum) + conv_dt_qg
+          dt_ug = dt_ug + dt_ug_conv
+          dt_vg = dt_vg + dt_vg_conv
+
+          precip     = precip + rain + snow
+
+       if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
+       if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
+       if(id_conv_rain  > 0) used = send_data(id_conv_rain, precip, Time)
+
+
+    case(NO_CONV)
+       tg_tmp = tg(:,:,:,previous)
+       qg_tmp = grid_tracers(:,:,:,previous,nsphum)
+
+    case default
+      call error_mesg('idealized_moist_phys','Invalid convection scheme.', FATAL)
+
+    end select
+
+    ! Add the T and q tendencies due to convection to the timestep
+    dt_tg = dt_tg + conv_dt_tg
+    dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + conv_dt_qg
+
+
+    ! Perform large scale convection
+    if (r_conv_scheme .ne. DRY_CONV) then
+      ! Large scale convection is a function of humidity only.  This is
+      ! inconsistent with the dry convection scheme, don't run it!
+      rain = 0.0; snow = 0.0
+      call lscale_cond (         tg_tmp,                          qg_tmp,        &
+                 p_full(:,:,:,previous),          p_half(:,:,:,previous),        &
+                                  coldT,                            rain,        &
+                                   snow,                      cond_dt_tg,        &
+                             cond_dt_qg )
+
+      cond_dt_tg = cond_dt_tg/delta_t
+      cond_dt_qg = cond_dt_qg/delta_t
+      depth_change_cond = rain/dens_h2o     ! RG Add bucket
+      rain       = rain/delta_t
+      snow       = snow/delta_t
+      precip     = precip + rain + snow
+
+      dt_tg = dt_tg + cond_dt_tg
+      dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + cond_dt_qg
+
+      if(id_cond_dt_qg > 0) used = send_data(id_cond_dt_qg, cond_dt_qg, Time)
+      if(id_cond_dt_tg > 0) used = send_data(id_cond_dt_tg, cond_dt_tg, Time)
+      if(id_cond_rain  > 0) used = send_data(id_cond_rain, rain, Time)
+      if(id_precip     > 0) used = send_data(id_precip, precip, Time)
+
+    endif
+
+end subroutine idealized_convection_and_lscale_cond
+
+subroutine idealized_radiation_and_optional_surface_flux()
+
+    ! Begin the radiation calculation by computing downward fluxes.
+    ! This part of the calculation does not depend on the surface temperature.
+
+    if(two_stream_gray) then
+       call two_stream_gray_rad_down(is, js, Time, &
+                           rad_lat(:,:),           &
+                           rad_lon(:,:),           &
+                           p_half(:,:,:,current),  &
+                           tg(:,:,:,previous),     &
+                           net_surf_sw_down(:,:),  &
+                           surf_lw_down(:,:), albedo, &
+                           grid_tracers(:,:,:,previous,nsphum))
+    end if
+
+    if(.not.mixed_layer_bc) then
+
+    !!$! infinite heat capacity
+    !    t_surf = surface_temperature_forced(rad_lat)
+    !!$! no heat capacity:
+    !!$   t_surf = tg(:,:,num_levels,previous)
+
+    !!$! surface temperature has same potential temp. as lowest layer:
+    !!$  t_surf = surface_temperature(tg(:,:,:,previous), p_full(:,:,:,current), p_half(:,:,:,current))
+    end if
+
+    if(.not.gp_surface) then 
+    call surface_flux(                                                          &
+                      tg(:,:,num_levels,previous),                              &
+     grid_tracers(:,:,num_levels,previous,nsphum),                              &
+                      ug(:,:,num_levels,previous),                              &
+                      vg(:,:,num_levels,previous),                              &
+                   p_full(:,:,num_levels,current),                              &
+       z_full(:,:,num_levels,current)-z_surf(:,:),                              &
+                 p_half(:,:,num_levels+1,current),                              &
+                                      t_surf(:,:),                              &
+                                      t_surf(:,:),                              &
+                                      q_surf(:,:),                              & ! is intent(inout)
+                                           bucket,                              &     ! RG Add bucket
+                        bucket_depth(:,:,current),                              &     ! RG Add bucket
+                            max_bucket_depth_land,                              &     ! RG Add bucket
+                             depth_change_lh(:,:),                              &     ! RG Add bucket
+                           depth_change_conv(:,:),                              &     ! RG Add bucket
+                           depth_change_cond(:,:),                              &     ! RG Add bucket
+                                      u_surf(:,:),                              &
+                                      v_surf(:,:),                              &
+                                   rough_mom(:,:),                              &
+                                  rough_heat(:,:),                              &
+                                 rough_moist(:,:),                              &
+                                   rough_mom(:,:),                              & ! using rough_mom in place of rough_scale -- pjp
+                                        gust(:,:),                              &
+                                      flux_t(:,:),                              & ! is intent(out)
+                                      flux_q(:,:),                              & ! is intent(out)
+                                      flux_r(:,:),                              & ! is intent(out)
+                                      flux_u(:,:),                              & ! is intent(out)
+                                      flux_v(:,:),                              & ! is intent(out)
+                                      drag_m(:,:),                              & ! is intent(out)
+                                      drag_t(:,:),                              & ! is intent(out)
+                                      drag_q(:,:),                              & ! is intent(out)
+                                       w_atm(:,:),                              & ! is intent(out)
+                                       ustar(:,:),                              & ! is intent(out)
+                                       bstar(:,:),                              & ! is intent(out)
+                                       qstar(:,:),                              & ! is intent(out)
+                                   dhdt_surf(:,:),                              & ! is intent(out)
+                                   dedt_surf(:,:),                              & ! is intent(out)
+                                   dedq_surf(:,:),                              & ! is intent(out)
+                                   drdt_surf(:,:),                              & ! is intent(out)
+                                    dhdt_atm(:,:),                              & ! is intent(out)
+                                    dedq_atm(:,:),                              & ! is intent(out)
+                                  dtaudu_atm(:,:),                              & ! is intent(out)
+                                  dtaudv_atm(:,:),                              & ! is intent(out)
+                                          delta_t,                              &
+                                        land(:,:),                              &
+                                   .not.land(:,:),                              &
+                                       avail(:,:)  )
+    endif
+
+    ! Now complete the radiation calculation by computing the upward and net fluxes.
+
+    if(two_stream_gray) then
+       call two_stream_gray_rad_up(is, js, Time, &
+                         rad_lat(:,:),           &
+                         p_half(:,:,:,current),  &
+                         t_surf(:,:),            &
+                         tg(:,:,:,previous),     &
+                         dt_tg(:,:,:), albedo)
+    end if
+
+    #ifdef RRTM_NO_COMPILE
+        if (do_rrtm_radiation) then
+            call error_mesg('idealized_moist_phys','do_rrtm_radiation is .true. but compiler flag -D RRTM_NO_COMPILE used. Stopping.', FATAL)
+        endif
+    #else
+    if(do_rrtm_radiation) then
+       !need t at half grid
+        tg_interp=tg(:,:,:,previous)
+       call interp_temp(z_full(:,:,:,current),z_half(:,:,:,current),tg_interp, Time)
+       call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full(:,:,:,current),p_half(:,:,:,current),albedo,grid_tracers(:,:,:,previous,nsphum),tg_interp,t_surf(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
+    endif
+    #endif
+
+
+
+    if(gp_surface) then
+
+        call gp_surface_flux (dt_tg(:,:,:), p_half(:,:,:,current), num_levels)
+    
+        call compute_rayleigh_bottom_drag( 1,                     ie-is+1, &
+                                           1,                     je-js+1, &
+                                         Time,                    delta_t, &
+                       rad_lat(:,:),         dt_ug(:,:,:      ), &
+                            dt_vg(:,:,:     ),                             &
+                           ug(:,:,:,previous),         vg(:,:,:,previous), &
+                         p_half(:,:,:,previous),     p_full(:,:,:,previous), &
+                         dt_tg, diss_heat_ray )
+
+        if(id_diss_heat_ray > 0) used = send_data(id_diss_heat_ray, diss_heat_ray, Time)
+    endif
+
+end subroutine idealized_radiation_and_optional_surface_flux
 
 end module idealized_moist_phys_mod
