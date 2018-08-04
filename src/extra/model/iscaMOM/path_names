@@ -97,6 +97,8 @@ atmos_param/damping_driver/damping_driver.f90
 atmos_param/mg_drag/mg_drag.f90
 atmos_param/cg_drag/cg_drag.f90
 atmos_param/topo_drag/topo_drag.f90
+atmos_param/physics_driver/isca_physics_driver.F90
+atmos_param/moist_processes/isca_moist_processes.F90
 atmos_param/vert_diff/vert_diff.F90
 atmos_param/vert_turb_driver/vert_turb_driver.F90
 atmos_param/diag_integral/diag_integral.F90
@@ -108,6 +110,7 @@ atmos_coupled/atmos_model.F90
 atmos_spectral/coupled/atmosphere.F90
 atmos_spectral/driver/solo/idealized_moist_phys.F90
 atmos_spectral/driver/solo/mixed_layer.F90
+atmos_spectral/driver/coupled/spectral_physics.F90
 atmos_spectral/init/ic_from_external_file.F90
 atmos_spectral/init/jablonowski_2006.F90
 atmos_spectral/init/polvani_2004.F90
