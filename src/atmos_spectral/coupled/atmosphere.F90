@@ -101,7 +101,7 @@ type(time_type),      intent(in)    :: Time_init, Time, Time_step_in
 type(surf_diff_type), intent(inout) :: Surf_diff
 
 integer :: ierr, io, unit, lon_max, lat_max, ntr, nt, i, j
-integer, dimension(4) :: siz
+integer, dimension(4) :: siz, axes_send
 character(len=64) :: file, tr_name
 character(len=4) :: ch1,ch2,ch3,ch4
 
@@ -225,7 +225,9 @@ do j = js,je+1
   rad_latb_2d(:,j) = rad_latb(j)
 enddo
 
-   call idealized_moist_phys_init(Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), Surf_diff)
+    axes_send = get_axis_id()
+
+   call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), Surf_diff)
 
 ! call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes)
 

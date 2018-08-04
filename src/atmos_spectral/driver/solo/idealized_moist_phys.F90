@@ -32,10 +32,6 @@ use      dry_convection_mod, only: dry_convection_init, dry_convection
 
 use        diag_manager_mod, only: register_diag_field, send_data
 
-use          transforms_mod, only: get_grid_domain
-
-use   spectral_dynamics_mod, only: get_axis_id, get_num_levels, get_surf_geopotential
-
 use        surface_flux_mod, only: surface_flux, gp_surface_flux
 
 use      sat_vapor_pres_mod, only: lookup_es !s Have added this to allow relative humdity to be calculated in a consistent way.
@@ -275,10 +271,12 @@ type(time_type) :: Time_step
 contains
 !=================================================================================================================================
 
-subroutine idealized_moist_phys_init(Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init, surf_diff_init)
+subroutine idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes_in, surf_geopotential_in, Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init, surf_diff_init)
+integer, intent(in)         :: is_in, ie_in, js_in, je_in, num_levels_in
+integer, dimension(4), intent(in) :: axes_in
 type(time_type), intent(in) :: Time, Time_step_in
 integer, intent(in) :: nhum
-real, intent(in), dimension(:,:) :: rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init
+real, intent(in), dimension(:,:) :: rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init, surf_geopotential_in
 type(surf_diff_type), optional :: surf_diff_init
 
 integer :: io, nml_unit, stdlog_unit, seconds, days, id, jd, kd
@@ -394,8 +392,12 @@ call get_time(Time_step, seconds, days)
 dt_integer   = 86400*days + seconds
 dt_real      = float(dt_integer)
 
-call get_grid_domain(is, ie, js, je)
-call get_num_levels(num_levels)
+is = is_in
+ie = ie_in
+js = js_in
+je = je_in
+num_levels= num_levels_in
+axes=axes_in
 
 allocate(rad_lat     (is:ie, js:je)); rad_lat = rad_lat_2d
 allocate(rad_lon     (is:ie, js:je)); rad_lon = rad_lon_2d
@@ -482,7 +484,7 @@ allocate(p_half_1d(num_levels+1), ln_p_half_1d(num_levels+1))
 allocate(p_full_1d(num_levels  ), ln_p_full_1d(num_levels  ))
 allocate(capeflag     (is:ie, js:je))
 
-call get_surf_geopotential(z_surf)
+z_surf = surf_geopotential_in
 z_surf = z_surf/grav
 
 !s initialise the land area
@@ -543,8 +545,7 @@ endif
 
 
 if (gp_surface) then
-call rayleigh_bottom_drag_init(get_axis_id(), Time)
-axes = get_axis_id()
+call rayleigh_bottom_drag_init(axes, Time)
 id_diss_heat_ray = register_diag_field(mod_name, 'diss_heat_ray', &
                    axes(1:3), Time, 'dissipated heat from Rayleigh drag', 'K/s')
 endif
@@ -554,7 +555,7 @@ endif
       if(do_damping) then
          call pressure_variables(p_half_1d,ln_p_half_1d,pref(1:num_levels),ln_p_full_1d,PSTD_MKS)
 	 pref(num_levels+1) = PSTD_MKS
-         call damping_driver_init (rad_lonb_2d(:,1),rad_latb_2d(1,:), pref(:), get_axis_id(), Time, & !s note that in the original this is pref(:,1), which is the full model pressure levels and the surface pressure at the bottom. There is pref(:2) in this version with 81060 as surface pressure??
+         call damping_driver_init (rad_lonb_2d(:,1),rad_latb_2d(1,:), pref(:), axes, Time, & !s note that in the original this is pref(:,1), which is the full model pressure levels and the surface pressure at the bottom. There is pref(:2) in this version with 81060 as surface pressure??
                                 sgsmtn)
 
       endif
@@ -566,7 +567,7 @@ if(mixed_layer_bc) then
   ! to quickly enter the atmosphere avoiding problems with the convection scheme
   t_surf = t_surf_init + 1.0
 
-  call mixed_layer_init(is, ie, js, je, num_levels, t_surf, bucket_depth, get_axis_id(), Time, albedo, rad_lonb_2d(:,:), rad_latb_2d(:,:), land, bucket) ! t_surf is intent(inout) !s albedo distribution set here.
+  call mixed_layer_init(is, ie, js, je, num_levels, t_surf, bucket_depth, axes, Time, albedo, rad_lonb_2d(:,:), rad_latb_2d(:,:), land, bucket) ! t_surf is intent(inout) !s albedo distribution set here.
   
 elseif(gp_surface) then
   albedo=0.0
@@ -588,8 +589,6 @@ if(turb) then
 end if
 
 call lscale_cond_init()
-
-axes = get_axis_id()
 
 id_cond_dt_qg = register_diag_field(mod_name, 'dt_qg_condensation',        &
      axes(1:3), Time, 'Moisture tendency from condensation','kg/kg/s')
@@ -680,7 +679,7 @@ end select
 !endif
 
 
-if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, get_axis_id(), Time, rad_lonb_2d, rad_latb_2d, dt_real)
+if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, axes, Time, rad_lonb_2d, rad_latb_2d, dt_real)
 
 #ifdef RRTM_NO_COMPILE
     if (do_rrtm_radiation) then
@@ -701,9 +700,8 @@ if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, ge
 
 if(turb) then
    call vert_turb_driver_init (rad_lonb_2d, rad_latb_2d, ie-is+1,je-js+1, &
-                 num_levels,get_axis_id(),Time, doing_edt, doing_entrain)
+                 num_levels,axes,Time, doing_edt, doing_entrain)
 
-   axes = get_axis_id()
    id_diff_dt_ug = register_diag_field(mod_name, 'dt_ug_diffusion',        &
         axes(1:3), Time, 'zonal wind tendency from diffusion','m/s^2')
    id_diff_dt_vg = register_diag_field(mod_name, 'dt_vg_diffusion',        &
