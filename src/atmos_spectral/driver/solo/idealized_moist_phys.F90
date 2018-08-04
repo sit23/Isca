@@ -730,14 +730,11 @@ real, dimension(:,:,:),     intent(inout) :: dt_ug, dt_vg, dt_tg
 real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 
 real :: delta_t
-real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv
+real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH, dt_ug_conv, dt_vg_conv
 
 
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
-
-real, dimension(1,1,1):: tracer, tracertnd
-integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 if(current == previous) then
    delta_t = dt_real
@@ -753,9 +750,11 @@ endif
 rain = 0.0; snow = 0.0; precip = 0.0
 
 
-call idealized_convection_and_lscale_cond(tg, grid_tracers, previous, current, rain, snow, precip, dt_tg, dt_tracers, mask, kbot)
+call idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, tg_tmp, grid_tracers, qg_tmp, ug, dt_ug_conv, vg, dt_vg_conv, previous, current, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot)
 
-call idealized_radiation_and_optional_surface_flux()
+
+
+call idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, previous, current, dt_ug, dt_vg, dt_tg, dt_tracers, mask, kbot)
 
 !----------------------------------------------------------------------
 !    Copied from MiMA physics_driver.f90
@@ -1006,8 +1005,26 @@ END SUBROUTINE rh_calc
 
 !=================================================================================================================================
 
-subroutine idealized_convection_and_lscale_cond() 
+subroutine idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, tg_tmp, grid_tracers, qg_tmp, ug, dt_ug_conv, vg, dt_vg_conv, previous, current, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot) 
 
+type(time_type),            intent(in)    :: Time
+real, dimension(:,:,:,:),   intent(in)    :: p_half, p_full, z_half, z_full, ug, vg, tg
+real, dimension(:,:,:,:,:), intent(in)    :: grid_tracers
+integer,                    intent(in)    :: previous, current
+real, dimension(:,:,:),     intent(inout) :: dt_tg, dt_ug, dt_vg
+real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
+
+real, dimension(:,:,:), intent(inout) :: tg_tmp, qg_tmp, dt_ug_conv, dt_vg_conv
+
+real,                       intent(in)    :: delta_t
+
+real, intent(in) , dimension(:,:,:), optional :: mask
+integer, intent(in) , dimension(:,:),   optional :: kbot
+
+real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: mc
+
+real, dimension(1,1,1):: tracer, tracertnd
+integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
     select case(r_conv_scheme)
 
@@ -1153,7 +1170,22 @@ subroutine idealized_convection_and_lscale_cond()
 
 end subroutine idealized_convection_and_lscale_cond
 
-subroutine idealized_radiation_and_optional_surface_flux()
+subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, &
+                                previous, current, dt_ug, dt_vg, dt_tg, dt_tracers, mask, kbot  )
+
+integer,                    intent(in)    :: is, js
+type(time_type),            intent(in)    :: Time
+real,                       intent(in)    :: delta_t
+real, dimension(:,:,:,:),   intent(in)    :: p_half, p_full, z_half, z_full, ug, vg, tg
+real, dimension(:,:,:,:,:), intent(in)    :: grid_tracers
+integer,                    intent(in)    :: previous, current
+real, dimension(:,:,:),     intent(inout) :: dt_tg, dt_ug, dt_vg
+real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
+
+real, intent(in) , dimension(:,:,:), optional :: mask
+integer, intent(in) , dimension(:,:),   optional :: kbot
+
+real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
 
     ! Begin the radiation calculation by computing downward fluxes.
     ! This part of the calculation does not depend on the surface temperature.
@@ -1242,18 +1274,18 @@ subroutine idealized_radiation_and_optional_surface_flux()
                          dt_tg(:,:,:), albedo)
     end if
 
-    #ifdef RRTM_NO_COMPILE
-        if (do_rrtm_radiation) then
-            call error_mesg('idealized_moist_phys','do_rrtm_radiation is .true. but compiler flag -D RRTM_NO_COMPILE used. Stopping.', FATAL)
-        endif
-    #else
-    if(do_rrtm_radiation) then
-       !need t at half grid
-        tg_interp=tg(:,:,:,previous)
-       call interp_temp(z_full(:,:,:,current),z_half(:,:,:,current),tg_interp, Time)
-       call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full(:,:,:,current),p_half(:,:,:,current),albedo,grid_tracers(:,:,:,previous,nsphum),tg_interp,t_surf(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
+#ifdef RRTM_NO_COMPILE
+    if (do_rrtm_radiation) then
+        call error_mesg('idealized_moist_phys','do_rrtm_radiation is .true. but compiler flag -D RRTM_NO_COMPILE used. Stopping.', FATAL)
     endif
-    #endif
+#else
+if(do_rrtm_radiation) then
+   !need t at half grid
+    tg_interp=tg(:,:,:,previous)
+   call interp_temp(z_full(:,:,:,current),z_half(:,:,:,current),tg_interp, Time)
+   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full(:,:,:,current),p_half(:,:,:,current),albedo,grid_tracers(:,:,:,previous,nsphum),tg_interp,t_surf(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
+endif
+#endif
 
 
 
