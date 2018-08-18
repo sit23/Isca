@@ -40,9 +40,7 @@ use      damping_driver_mod, only: damping_driver, damping_driver_init, damping_
 
 use    press_and_geopot_mod, only: pressure_variables
 
-use         mpp_domains_mod, only: mpp_get_global_domain !s added to enable land reading
-
-use          transforms_mod, only: grid_domain
+use         mpp_domains_mod, only: mpp_get_global_domain, domain2D !s added to enable land reading
 
 use tracer_manager_mod, only: get_number_tracers, query_method
 
@@ -271,12 +269,13 @@ type(time_type) :: Time_step
 contains
 !=================================================================================================================================
 
-subroutine idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes_in, surf_geopotential_in, Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init, surf_diff_init)
+subroutine idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes_in, surf_geopotential_in, Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init, grid_domain_in, surf_diff_init)
 integer, intent(in)         :: is_in, ie_in, js_in, je_in, num_levels_in
 integer, dimension(4), intent(in) :: axes_in
 type(time_type), intent(in) :: Time, Time_step_in
 integer, intent(in) :: nhum
 real, intent(in), dimension(:,:) :: rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init, surf_geopotential_in
+type(domain2D) :: grid_domain_in
 type(surf_diff_type), optional :: surf_diff_init
 
 integer :: io, nml_unit, stdlog_unit, seconds, days, id, jd, kd
@@ -493,10 +492,10 @@ if(trim(land_option) .eq. 'input')then
 !s adapted from spectral_init_cond.F90
 
 	   if(file_exist(trim(land_file_name))) then
-	     call mpp_get_global_domain(grid_domain, xsize=global_num_lon, ysize=global_num_lat)
+	     call mpp_get_global_domain(grid_domain_in, xsize=global_num_lon, ysize=global_num_lat)
 	     call field_size(trim(land_file_name), trim(land_field_name), siz)
 	     if ( siz(1) == global_num_lon .or. siz(2) == global_num_lat ) then
-	       call read_data(trim(land_file_name), trim(land_field_name), land_ones, grid_domain)
+	       call read_data(trim(land_file_name), trim(land_field_name), land_ones, grid_domain_in)
 	       !s write something to screen to let the user know what's happening.
 	     else
 	       write(ctmp1(1: 4),'(i4)') siz(1)
