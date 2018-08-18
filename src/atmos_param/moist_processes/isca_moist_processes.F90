@@ -74,22 +74,22 @@ use mpp_mod,               only: mpp_chksum
 !                                  diag_cloud_restart
 use diag_integral_mod,     only: diag_integral_field_init, &
                                  sum_diag_integral_field
-use cu_mo_trans_mod,       only: cu_mo_trans_init, cu_mo_trans, cu_mo_trans_end
-use moz_hook_mod,          only: moz_hook
+! use cu_mo_trans_mod,       only: cu_mo_trans_init, cu_mo_trans, cu_mo_trans_end
+! use moz_hook_mod,          only: moz_hook
 use rad_utilities_mod,     only: aerosol_type
 use moist_proc_utils_mod,  only: capecalcnew, tempavg, column_diag, rh_calc, pmass
 
-use moistproc_kernels_mod, only: moistproc_init, moistproc_end, moistproc_mca, &
-                                 moistproc_ras, moistproc_lscale_cond,         &
-                                 moistproc_strat_cloud, moistproc_cmt,         &
-                                 moistproc_uw_conv, moistproc_scale_uw,        &
-                                 moistproc_scale_donner,                       &
-                                 rain_uw, snow_uw, ttnd_uw, qtnd_uw, utnd_uw,  &
-                                 vtnd_uw, qltnd_uw, qitnd_uw, qatnd_uw,        &
-                                 qntnd_uw, qtruw, qlin, qiin, qain, delta_ql,  &
-                                 delta_qi, delta_qa, qnitnd_uw
+! use moistproc_kernels_mod, only: moistproc_init, moistproc_end, moistproc_mca, &
+!                                  moistproc_ras, moistproc_lscale_cond,         &
+!                                  moistproc_strat_cloud, moistproc_cmt,         &
+!                                  moistproc_uw_conv, moistproc_scale_uw,        &
+!                                  moistproc_scale_donner,                       &
+!                                  rain_uw, snow_uw, ttnd_uw, qtnd_uw, utnd_uw,  &
+!                                  vtnd_uw, qltnd_uw, qitnd_uw, qatnd_uw,        &
+!                                  qntnd_uw, qtruw, qlin, qiin, qain, delta_ql,  &
+!                                  delta_qi, delta_qa, qnitnd_uw
 ! atmos_shared modules
-use atmos_tracer_utilities_mod, only : wet_deposition
+! use atmos_tracer_utilities_mod, only : wet_deposition
 
 implicit none
 private

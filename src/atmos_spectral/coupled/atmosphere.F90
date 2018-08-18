@@ -230,7 +230,7 @@ enddo
 
     axes_send = get_axis_id()
 
-!    call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), Surf_diff)
+!    call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), Surf_diff, grid_domain)
 
 call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes)
 
@@ -517,7 +517,7 @@ call write_data(trim(file), 'wg_full', wg_full, grid_domain)
 deallocate(dt_psg, dt_ug, dt_vg, dt_tg, dt_tracers)
 
 call set_domain(grid_domain)
-! call idealized_moist_phys_end
+! call idealized_moist_phys_end(grid_domain)
 call spectral_physics_end(Time)
 call spectral_dynamics_end(tracer_attributes, Time)
 

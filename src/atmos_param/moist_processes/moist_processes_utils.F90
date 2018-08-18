@@ -20,7 +20,7 @@
 use  sat_vapor_pres_mod, only: compute_qs, lookup_es
 use    time_manager_mod, only: time_type
 use    diag_manager_mod, only: send_data
-use       constants_mod, only: RDGAS, RVGAS
+! use       constants_mod, only: RDGAS, RVGAS
 
 implicit none
 private
@@ -523,6 +523,8 @@ subroutine rh_calc(pfull,T,qv,RH,do_simple,MASK, do_cmip)
 !       is, RH is used to store intermediary results
 !       in forming the full solution.
 
+        use       constants_mod, only: RDGAS, RVGAS
+
         IMPLICIT NONE
         
         REAL, INTENT (IN),    DIMENSION(:,:,:) :: pfull,T,qv
@@ -532,8 +534,10 @@ subroutine rh_calc(pfull,T,qv,RH,do_simple,MASK, do_cmip)
         logical, intent(in) :: do_simple
         REAL, DIMENSION(SIZE(T,1),SIZE(T,2),SIZE(T,3)) :: esat
       
-        real, parameter :: d622 = RDGAS/RVGAS
-        real, parameter :: d378 = 1.-d622
+        real :: d622, d378
+
+        d622 = RDGAS/RVGAS
+        d378 = 1.-d622
 
 ! because Betts-Miller uses a simplified scheme for calculating the relative humidity
         if (do_simple) then
