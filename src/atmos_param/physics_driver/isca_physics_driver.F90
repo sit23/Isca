@@ -57,11 +57,11 @@ use tracer_manager_mod,      only: tracer_manager_init, &
                                    get_number_tracers, &
                                    get_tracer_names
 
-use atmos_tracer_driver_mod, only: atmos_tracer_driver_init,    &
-                                   atmos_tracer_driver_time_vary, &
-                                   atmos_tracer_driver_endts, &
-                                   atmos_tracer_driver,  &
-                                   atmos_tracer_driver_end
+! use atmos_tracer_driver_mod, only: atmos_tracer_driver_init,    &
+!                                    atmos_tracer_driver_time_vary, &
+!                                    atmos_tracer_driver_endts, &
+!                                    atmos_tracer_driver,  &
+!                                    atmos_tracer_driver_end
 use mpp_mod,                 only: input_nml_file
 use fms_mod,                 only: mpp_clock_id, mpp_clock_begin,   &
                                    mpp_clock_end, CLOCK_MODULE_DRIVER, &
@@ -89,9 +89,6 @@ use rad_utilities_mod,       only: aerosol_type, radiative_gases_type, &
 
 !    component modules:
 
-use cosp_driver_mod,         only: cosp_driver_init, cosp_driver, &
-                                   cosp_driver_end, cosp_driver_time_vary,&
-                                   cosp_driver_endts
 use  moist_processes_mod,    only: moist_processes,    &
                                    moist_processes_init,  &
                                    set_cosp_precip_sources, &
@@ -102,7 +99,7 @@ use  moist_processes_mod,    only: moist_processes,    &
                                    moist_alloc_end, &
                                    doing_strat!,          &
 !                                   moist_processes_restart
-use moistproc_kernels_mod,   only:  moistproc_init, moistproc_end
+! use moistproc_kernels_mod,   only:  moistproc_init, moistproc_end
 
 use vert_turb_driver_mod,    only: vert_turb_driver,  &
                                    vert_turb_driver_init,  &
@@ -840,81 +837,51 @@ integer, intent(in)  :: is,js
 
 end subroutine physics_driver_down_endts
 
-
-
-
-!###################################################################
-
-
-subroutine physics_driver_up_time_vary (Time, Time_next, dt)
-
-!---------------------------------------------------------------------
-!    physics_driver_up_time_vary makes sure that all time-dependent, 
-!    spacially-independent calculations are completed before entering 
-!    window or thread loops. Resultant fields are usually saved as 
-!    module variables in the module where needed.
-!-----------------------------------------------------------------------
-
-type(time_type),         intent(in)             :: Time
-type(time_type),         intent(in)             :: Time_next
-real,                    intent(in)             :: dt
-
-
-      call aerosol_time_vary (Time)
-      call moist_processes_time_vary (dt)
-      if (do_cosp) call cosp_driver_time_vary (Time_next)
-
-!----------------------------------------------------------------------      
-
-end subroutine physics_driver_up_time_vary
-
-
 !######################################################################
 
 subroutine physics_driver_up_endts (is,js)
 
 integer, intent(in)  :: is,js
 
-      if (do_cosp) call cosp_driver_endts
       call moist_processes_endts (is,js)
       call aerosol_endts
 
 end subroutine physics_driver_up_endts
 
 
-!#####################################################################
+! !#####################################################################
 
-!--> cjg: code modification to allow diagnostic tracers in physics_up (20120508)
-!         
-!subroutine physics_driver_moist_init (ix,jx,kx,lx)
-!
-!integer, intent(in) :: ix,jx, kx, lx 
-!
-!      call moist_alloc_init (ix,jx,kx,lx)
+! !--> cjg: code modification to allow diagnostic tracers in physics_up (20120508)
+! !         
+! !subroutine physics_driver_moist_init (ix,jx,kx,lx)
+! !
+! !integer, intent(in) :: ix,jx, kx, lx 
+! !
+! !      call moist_alloc_init (ix,jx,kx,lx)
 
-subroutine physics_driver_moist_init (ix,jx,kx,lx,mx)
-
-
-integer, intent(in) :: ix,jx, kx, lx, mx
+! subroutine physics_driver_moist_init (ix,jx,kx,lx,mx)
 
 
-      call moist_alloc_init (ix,jx,kx,lx,mx)
-!<--cjg
-      call moistproc_init (ix,jx,kx, num_uw_tracers, do_strat)
-
-end subroutine physics_driver_moist_init 
+! integer, intent(in) :: ix,jx, kx, lx, mx
 
 
+!       call moist_alloc_init (ix,jx,kx,lx,mx)
+! !<--cjg
+!       call moistproc_init (ix,jx,kx, num_uw_tracers, do_strat)
 
-!######################################################################
-
-subroutine physics_driver_moist_end                  
-
-      call moist_alloc_end
-      call moistproc_end (do_strat)
+! end subroutine physics_driver_moist_init 
 
 
-end subroutine physics_driver_moist_end                  
+
+! !######################################################################
+
+! subroutine physics_driver_moist_end                  
+
+!       call moist_alloc_end
+!       call moistproc_end (do_strat)
+
+
+! end subroutine physics_driver_moist_end                  
 
 
 
@@ -1730,7 +1697,8 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                                Surf_diff,                         &
                                lprec,   fprec, gust,              &
                                mask, kbot,                        &
-                               hydrostatic, phys_hydrostatic      )
+                               hydrostatic, phys_hydrostatic,     &
+                               current, previous      )
 
 !----------------------------------------------------------------------
 !    physics_driver_up completes the calculation of vertical diffusion 
@@ -1757,6 +1725,7 @@ real,dimension(:,:),    intent(inout)          :: gust
 real,dimension(:,:,:),  intent(in),   optional :: mask
 integer,dimension(:,:), intent(in),   optional :: kbot
 logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
+integer,                intent(in),   optional :: current, previous
 
 !-----------------------------------------------------------------------
 !   intent(in) variables:
@@ -1979,26 +1948,8 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
                fl_ccrain(is:ie,js:je,:), fl_ccsnow(is:ie,js:je,:),    &
            fl_donmca_rain(is:ie,js:je,:), fl_donmca_snow(is:ie,js:je,:), &
                            gust_cv, area, lon, lat,   &
-                           lsc_cloud_area(is:ie,js:je,:),  &
-                           lsc_liquid(is:ie,js:je,:),  &
-                           lsc_ice(is:ie,js:je,:), &
-                           lsc_droplet_number(is:ie,js:je,:), &
-                           lsc_ice_number(is:ie,js:je,:), &
-             ! snow, rain
-                           lsc_snow(is:ie,js:je,:) , &
-                           lsc_rain(is:ie,js:je,:), &
-                           lsc_snow_size(is:ie,js:je,:),  &
-                           lsc_rain_size(is:ie,js:je,:), &
-! ---> h1g
-                           dcond_ls_liquid=dcond_ls_liquid,  dcond_ls_ice=dcond_ls_ice,  &
-                           Ndrop_act_CLUBB=Ndrop_act_CLUBB,  Icedrop_act_CLUBB=Icedrop_act_CLUBB,  &
-                           ndust=ndust, rbar_dust= rbar_dust, &
-                           diff_t_clubb   =diff_t_clubb,                                           &
-                           tdt_shf = tdt_shf,                                                      &
-                           qdt_lhf = qdt_lhf,                                                      &
-! <--- h1g
-                           Aerosol=Aerosol, mask=mask, kbot=kbot,    &
-                           hydrostatic=hydrostatic, phys_hydrostatic=phys_hydrostatic  )
+                           mask=mask, kbot=kbot,
+                           current=current, previous=previous)
                            
         call mpp_clock_end ( moist_processes_clock )
         diff_cu_mo(is:ie, js:je,:) = diff_cu_mo_loc(:,:,:)
@@ -2168,9 +2119,6 @@ integer :: clubb_term_clock
       call damping_driver_end
       call mpp_clock_end ( damping_term_clock )
       call mpp_clock_begin ( cosp_term_clock )
-      if (do_cosp) then
-        call cosp_driver_end
-      endif
       call mpp_clock_end ( cosp_term_clock )
 
 !---------------------------------------------------------------------

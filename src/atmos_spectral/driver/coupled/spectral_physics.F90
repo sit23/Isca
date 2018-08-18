@@ -316,53 +316,53 @@ call physics_driver_up(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,    &
                        grid_tracers(:,:,:,previous,:),                        &
                        frac_land, dt_ug, dt_vg, dt_tg,                        &
                        dt_tracers(:,:,:,nhum), dt_tracers, Surf_diff,         &
-                       lprec, fprec, gust)
+                       lprec, fprec, gust, current = current, previous = previous)
 
 return
 end subroutine spectral_physics_up
 !------------------------------------------------------------------------------------------------
-subroutine spectral_physics_moist(Time_next, delta_t, frac_land, p_half, p_full, z_half, z_full, wg_full, &
-                                  tg, qg, ug, vg, tracers, lprec, fprec, gust)
+! subroutine spectral_physics_moist(Time_next, delta_t, frac_land, p_half, p_full, z_half, z_full, wg_full, &
+!                                   tg, qg, ug, vg, tracers, lprec, fprec, gust)
 
-type(time_type), intent(in) :: Time_next
-real, intent(in)                        :: delta_t
-real, intent(in),    dimension(:,:)     :: frac_land
-real, intent(in),    dimension(:,:,:)   :: p_half, p_full, z_half, z_full, wg_full
-real, intent(inout), dimension(:,:,:)   :: tg, qg, ug, vg
-real, intent(inout), dimension(:,:,:,:) :: tracers
-real, intent(inout), dimension(:,:)     :: lprec, fprec, gust
-real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: dt_tg, dt_qg, dt_ug, dt_vg
-real, dimension(size(tracers,1), size(tracers,2), size(tracers,3), size(tracers,4)) :: dt_tracers
-real, dimension(size(gust,1), size(gust,2)) :: gust_cv
+! type(time_type), intent(in) :: Time_next
+! real, intent(in)                        :: delta_t
+! real, intent(in),    dimension(:,:)     :: frac_land
+! real, intent(in),    dimension(:,:,:)   :: p_half, p_full, z_half, z_full, wg_full
+! real, intent(inout), dimension(:,:,:)   :: tg, qg, ug, vg
+! real, intent(inout), dimension(:,:,:,:) :: tracers
+! real, intent(inout), dimension(:,:)     :: lprec, fprec, gust
+! real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: dt_tg, dt_qg, dt_ug, dt_vg
+! real, dimension(size(tracers,1), size(tracers,2), size(tracers,3), size(tracers,4)) :: dt_tracers
+! real, dimension(size(gust,1), size(gust,2)) :: gust_cv
 
-dt_tg=0.; dt_qg=0.; dt_ug=0.; dt_vg=0.; dt_tracers=0.
+! dt_tg=0.; dt_qg=0.; dt_ug=0.; dt_vg=0.; dt_tracers=0.
 
-if(do_moist_in_phys_up()) then
-  if ( do_mcm_moist_processes ) then
-    call error_mesg('spectral_physics_moist','do_mcm_moist_processes cannot be .true. when moist_processes'// &
-                    ' is called by physics_driver_up', FATAL)
-  endif
-else
-  if ( do_mcm_moist_processes ) then
-    call mcm_moist_processes(1, ie-is+1, 1, je-js+1, Time_next, delta_t, p_half, p_full, tg, tracers(:,:,:,nhum), lprec, fprec)
-  else
-    call moist_processes(1, ie-is+1, 1, je-js+1, Time_next, delta_t, frac_land, p_half, p_full, z_half, z_full, wg_full, &
-                         get_diff_t(), get_radturbten(),                                                                 &
-                         tg, qg, tracers, ug, vg, tg, qg, tracers, ug, vg, dt_tg, dt_qg, dt_tracers, dt_ug, dt_vg,       &
-                         diff_cu_mo, convect, lprec, fprec, gust_cv, area_2d, rad_lat_2d)
-    gust = sqrt( gust*gust + gust_cv*gust_cv)
-    call zero_radturbten()
-    tg = tg + dt_tg*delta_t
-    qg = qg + dt_qg*delta_t
-    ug = ug + dt_ug*delta_t
-    vg = vg + dt_vg*delta_t
-    tracers = tracers + dt_tracers*delta_t
-  endif
-endif
+! if(do_moist_in_phys_up()) then
+!   if ( do_mcm_moist_processes ) then
+!     call error_mesg('spectral_physics_moist','do_mcm_moist_processes cannot be .true. when moist_processes'// &
+!                     ' is called by physics_driver_up', FATAL)
+!   endif
+! else
+!   if ( do_mcm_moist_processes ) then
+!     call mcm_moist_processes(1, ie-is+1, 1, je-js+1, Time_next, delta_t, p_half, p_full, tg, tracers(:,:,:,nhum), lprec, fprec)
+!   else
+!     call moist_processes(1, ie-is+1, 1, je-js+1, Time_next, delta_t, frac_land, p_half, p_full, z_half, z_full, wg_full, &
+!                          get_diff_t(), get_radturbten(),                                                                 &
+!                          tg, qg, tracers, ug, vg, tg, qg, tracers, ug, vg, dt_tg, dt_qg, dt_tracers, dt_ug, dt_vg,       &
+!                          diff_cu_mo, convect, lprec, fprec, gust_cv, area_2d, rad_lat_2d, current, present)
+!     gust = sqrt( gust*gust + gust_cv*gust_cv)
+!     call zero_radturbten()
+!     tg = tg + dt_tg*delta_t
+!     qg = qg + dt_qg*delta_t
+!     ug = ug + dt_ug*delta_t
+!     vg = vg + dt_vg*delta_t
+!     tracers = tracers + dt_tracers*delta_t
+!   endif
+! endif
 
-return
-end subroutine spectral_physics_moist
-!------------------------------------------------------------------------------------------------
+! return
+! end subroutine spectral_physics_moist
+! !------------------------------------------------------------------------------------------------
 
 subroutine spectral_physics_end(Time)
 character(len=64) :: file

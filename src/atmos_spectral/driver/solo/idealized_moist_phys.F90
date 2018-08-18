@@ -727,8 +727,6 @@ real, dimension(:,:,:),     intent(inout) :: dt_ug, dt_vg, dt_tg
 real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 
 real :: delta_t
-real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH, dt_ug_conv, dt_vg_conv
-
 
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
@@ -747,7 +745,7 @@ endif
 rain = 0.0; snow = 0.0; precip = 0.0
 
 
-call idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, tg_tmp, grid_tracers, qg_tmp, ug, dt_ug_conv, vg, dt_vg_conv, previous, current, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot)
+call idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, grid_tracers, ug, vg, previous, current, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot)
 
 
 
@@ -870,11 +868,6 @@ if(turb) then
    if(id_diff_dt_qg > 0) used = send_data(id_diff_dt_qg, dt_tracers(:,:,:,nsphum) - non_diff_dt_qg, Time)
 
 endif ! if(turb) then
-
-!s Adding relative humidity calculation so as to allow comparison with Frierson's thesis.
-   call rh_calc (p_full(:,:,:,previous),tg_tmp,qg_tmp,RH)
-   if(id_rh >0) used = send_data(id_rh, RH*100., Time)
-
 
 ! RG Add bucket
 ! Timestepping for bucket. 
@@ -1003,7 +996,7 @@ END SUBROUTINE rh_calc
 
 !=================================================================================================================================
 
-subroutine idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, tg_tmp, grid_tracers, qg_tmp, ug, dt_ug_conv, vg, dt_vg_conv, previous, current, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot) 
+subroutine idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, grid_tracers, ug, vg, previous, current, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot) 
 
 type(time_type),            intent(in)    :: Time
 real, dimension(:,:,:,:),   intent(in)    :: p_half, p_full, z_half, z_full, ug, vg, tg
@@ -1011,15 +1004,12 @@ real, dimension(:,:,:,:,:), intent(in)    :: grid_tracers
 integer,                    intent(in)    :: previous, current
 real, dimension(:,:,:),     intent(inout) :: dt_tg, dt_ug, dt_vg
 real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
-
-real, dimension(:,:,:), intent(inout) :: tg_tmp, qg_tmp, dt_ug_conv, dt_vg_conv
-
 real,                       intent(in)    :: delta_t
 
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
 
-real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: mc
+real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: mc, dt_ug_conv, dt_vg_conv, tg_tmp, qg_tmp, RH
 
 real, dimension(1,1,1):: tracer, tracertnd
 integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
@@ -1158,6 +1148,12 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
       dt_tg = dt_tg + cond_dt_tg
       dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + cond_dt_qg
+
+      !s Adding relative humidity calculation so as to allow comparison with Frierson's thesis.
+      if (id_rh>0) then
+        call rh_calc (p_full(:,:,:,previous),tg_tmp,qg_tmp,RH)
+        used = send_data(id_rh, RH*100., Time)
+      endif
 
       if(id_cond_dt_qg > 0) used = send_data(id_cond_dt_qg, cond_dt_qg, Time)
       if(id_cond_dt_tg > 0) used = send_data(id_cond_dt_tg, cond_dt_tg, Time)

@@ -663,29 +663,9 @@ subroutine moist_processes (is, ie, js, je, Time, dt, land,            &
                             convect, lprec, fprec, fl_lsrain,          &
                             fl_lssnow, fl_ccrain, fl_ccsnow, &
                             fl_donmca_rain, fl_donmca_snow, gust_cv,  &
-                            area, lon, lat, lsc_cloud_area, lsc_liquid,     &
-                            lsc_ice, lsc_droplet_number, &
-                            lsc_ice_number, lsc_snow, lsc_rain,  &
-                            lsc_snow_size, lsc_rain_size     , &
-! ---> h1g
-                            dcond_ls_liquid,     dcond_ls_ice,         &
-                            Ndrop_act_CLUBB,     Icedrop_act_CLUBB,    &
-                            ndust, rbar_dust,                          &
-                            diff_t_clubb,                              &
-                            tdt_shf,                                   &
-                            qdt_lhf,                                   &
-! <--- h1g
-                            Aerosol, mask, kbot, &
-                            shallow_cloud_area, shallow_liquid,  &
-                            shallow_ice, shallow_droplet_number, &
-                            shallow_ice_number, &
-                            cell_cld_frac, cell_liq_amt, cell_liq_size, &
-                            cell_ice_amt, cell_ice_size, &
-                            cell_droplet_number, &
-                            meso_cld_frac, meso_liq_amt, meso_liq_size, &
-                            meso_ice_amt, meso_ice_size,  &
-                            meso_droplet_number, nsum_out, &
-                            hydrostatic, phys_hydrostatic)
+                            area, lon, lat,                           &
+                            mask, kbot,                               &
+                            current, previous)
 
 !-----------------------------------------------------------------------
 !
@@ -803,34 +783,11 @@ logical, intent(out), dimension(:,:)     :: convect
    real, intent(in) , dimension(:,:)     :: lon
    real, intent(in) , dimension(:,:)     :: lat
 
-! ---> h1g
-    real, intent(inout), dimension(:,:,:), optional :: dcond_ls_liquid, dcond_ls_ice
-    real, intent(inout), dimension(:,:,:), optional :: Ndrop_act_CLUBB,  Icedrop_act_CLUBB
-    real, intent(inout), dimension(:,:,:), optional :: ndust, rbar_dust
-    real, intent(inout), dimension(:,:,:), optional :: diff_t_clubb
-    real, intent(inout), dimension(:,:),   optional :: tdt_shf,  qdt_lhf
-! < --- h1g
 
-   real, intent(out) , dimension(:,:,:)  ::   &
-                       lsc_cloud_area, lsc_liquid, lsc_ice,   &
-                       lsc_droplet_number, lsc_ice_number, lsc_snow, &
-                       lsc_rain, lsc_snow_size, lsc_rain_size
-   type(aerosol_type),intent(in),       optional :: Aerosol
    real, intent(in) , dimension(:,:,:), optional :: mask
    integer, intent(in), dimension(:,:), optional :: kbot
 
-   logical, intent(in), optional :: hydrostatic, phys_hydrostatic
-   integer, intent(inout), dimension(:,:), optional ::  nsum_out
-   real, intent(inout), dimension(:,:,:), optional :: &      
-                                  shallow_cloud_area, shallow_liquid,   &
-                                  shallow_ice, shallow_droplet_number, &
-                                  shallow_ice_number, &
-                                  cell_cld_frac, cell_liq_amt, cell_liq_size, &
-                                  cell_ice_amt, cell_ice_size, &
-                                  cell_droplet_number, &
-                                  meso_cld_frac, meso_liq_amt, meso_liq_size, &
-                                  meso_ice_amt, meso_ice_size, &
-                                  meso_droplet_number
+   integer, intent(in), optional                 :: current, previous
 
 !-----------------------------------------------------------------------
    integer :: secs, days
@@ -1049,8 +1006,41 @@ logical, intent(out), dimension(:,:)     :: convect
 !---------------------------------------------------------------------
       call mpp_clock_begin (convection_clock)
 
+! subroutine moist_processes (is, ie, js, je, Time, dt, land,            &
+!                             phalf, pfull, zhalf, zfull, omega, diff_t, &
+!                             radturbten, cush, cbmf,                    &
+!                             pblht, ustar, bstar, qstar,                &
+!                             t, q, r, u, v, tm, qm, rm, um, vm,         &
+!                             tdt, qdt, rdt, udt, vdt, diff_cu_mo,       &
+!                             convect, lprec, fprec, fl_lsrain,          &
+!                             fl_lssnow, fl_ccrain, fl_ccsnow, &
+!                             fl_donmca_rain, fl_donmca_snow, gust_cv,  &
+!                             area, lon, lat, lsc_cloud_area, lsc_liquid,     &
+!                             lsc_ice, lsc_droplet_number, &
+!                             lsc_ice_number, lsc_snow, lsc_rain,  &
+!                             lsc_snow_size, lsc_rain_size     , &
+! ! ---> h1g
+!                             dcond_ls_liquid,     dcond_ls_ice,         &
+!                             Ndrop_act_CLUBB,     Icedrop_act_CLUBB,    &
+!                             ndust, rbar_dust,                          &
+!                             diff_t_clubb,                              &
+!                             tdt_shf,                                   &
+!                             qdt_lhf,                                   &
+! ! <--- h1g
+!                             Aerosol, mask, kbot, &
+!                             shallow_cloud_area, shallow_liquid,  &
+!                             shallow_ice, shallow_droplet_number, &
+!                             shallow_ice_number, &
+!                             cell_cld_frac, cell_liq_amt, cell_liq_size, &
+!                             cell_ice_amt, cell_ice_size, &
+!                             cell_droplet_number, &
+!                             meso_cld_frac, meso_liq_amt, meso_liq_size, &
+!                             meso_ice_amt, meso_ice_size,  &
+!                             meso_droplet_number, nsum_out, &
+!                             hydrostatic, phys_hydrostatic)
 
-    call idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, tg_tmp, grid_tracers, qg_tmp, ug, dt_ug_conv, vg, dt_vg_conv, previous, current, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot)    
+
+    call idealized_convection_and_lscale_cond( phalf, pfull, zhalf, zfull, t, r, u, v, previous, current, tdt, udt, vdt, rdt, Time, dt, mask, kbot)    
 !---------------------------------------------------------------------
 !    end the timing of the convection code section.
 !---------------------------------------------------------------------
