@@ -749,7 +749,7 @@ call idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, g
 
 
 
-call idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, previous, current, dt_ug, dt_vg, dt_tg, dt_tracers, mask, kbot)
+call idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half(:,:,:,current), p_full(:,:,:,current), z_half(:,:,:,current), z_full(:,:,:,current), ug, vg, tg, grid_tracers, previous, current, dt_ug, dt_vg, dt_tg, dt_tracers, mask, kbot)
 
 !----------------------------------------------------------------------
 !    Copied from MiMA physics_driver.f90
@@ -1164,13 +1164,14 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 end subroutine idealized_convection_and_lscale_cond
 
-subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, &
+subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug, vg, tg, grid_tracers, &
                                 previous, current, dt_ug, dt_vg, dt_tg, dt_tracers, mask, kbot  )
 
 integer,                    intent(in)    :: is, js
 type(time_type),            intent(in)    :: Time
 real,                       intent(in)    :: delta_t
-real, dimension(:,:,:,:),   intent(in)    :: p_half, p_full, z_half, z_full, ug, vg, tg
+real, dimension(:,:,:),   intent(in)      :: p_half_curr, p_full_curr, z_half_curr, z_full_curr
+real, dimension(:,:,:,:),   intent(in)    :: ug, vg, tg
 real, dimension(:,:,:,:,:), intent(in)    :: grid_tracers
 integer,                    intent(in)    :: previous, current
 real, dimension(:,:,:),     intent(inout) :: dt_tg, dt_ug, dt_vg
@@ -1188,7 +1189,7 @@ real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
        call two_stream_gray_rad_down(is, js, Time, &
                            rad_lat(:,:),           &
                            rad_lon(:,:),           &
-                           p_half(:,:,:,current),  &
+                           p_half_curr,  &
                            tg(:,:,:,previous),     &
                            net_surf_sw_down(:,:),  &
                            surf_lw_down(:,:), albedo, &
@@ -1212,9 +1213,9 @@ real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
      grid_tracers(:,:,num_levels,previous,nsphum),                              &
                       ug(:,:,num_levels,previous),                              &
                       vg(:,:,num_levels,previous),                              &
-                   p_full(:,:,num_levels,current),                              &
-       z_full(:,:,num_levels,current)-z_surf(:,:),                              &
-                 p_half(:,:,num_levels+1,current),                              &
+                   p_full_curr(:,:,num_levels),                              &
+       z_full_curr(:,:,num_levels)-z_surf(:,:),                              &
+                 p_half_curr(:,:,num_levels+1),                              &
                                       t_surf(:,:),                              &
                                       t_surf(:,:),                              &
                                       q_surf(:,:),                              & ! is intent(inout)
@@ -1262,7 +1263,7 @@ real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
     if(two_stream_gray) then
        call two_stream_gray_rad_up(is, js, Time, &
                          rad_lat(:,:),           &
-                         p_half(:,:,:,current),  &
+                         p_half_curr(:,:,:),  &
                          t_surf(:,:),            &
                          tg(:,:,:,previous),     &
                          dt_tg(:,:,:), albedo)
@@ -1276,8 +1277,8 @@ real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
 if(do_rrtm_radiation) then
    !need t at half grid
     tg_interp=tg(:,:,:,previous)
-   call interp_temp(z_full(:,:,:,current),z_half(:,:,:,current),tg_interp, Time)
-   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full(:,:,:,current),p_half(:,:,:,current),albedo,grid_tracers(:,:,:,previous,nsphum),tg_interp,t_surf(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
+   call interp_temp(z_full_curr(:,:,:),z_half_curr(:,:,:),tg_interp, Time)
+   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full_curr(:,:,:),p_half_curr(:,:,:),albedo,grid_tracers(:,:,:,previous,nsphum),tg_interp,t_surf(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
 endif
 #endif
 
@@ -1285,7 +1286,7 @@ endif
 
     if(gp_surface) then
 
-        call gp_surface_flux (dt_tg(:,:,:), p_half(:,:,:,current), num_levels)
+        call gp_surface_flux (dt_tg(:,:,:), p_half_curr(:,:,:), num_levels)
     
         call compute_rayleigh_bottom_drag( 1,                     ie-is+1, &
                                            1,                     je-js+1, &
@@ -1293,7 +1294,7 @@ endif
                        rad_lat(:,:),         dt_ug(:,:,:      ), &
                             dt_vg(:,:,:     ),                             &
                            ug(:,:,:,previous),         vg(:,:,:,previous), &
-                         p_half(:,:,:,previous),     p_full(:,:,:,previous), &
+                         p_half_curr(:,:,:),     p_full_curr(:,:,:), &
                          dt_tg, diss_heat_ray )
 
         if(id_diss_heat_ray > 0) used = send_data(id_diss_heat_ray, diss_heat_ray, Time)
