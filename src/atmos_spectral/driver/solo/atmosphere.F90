@@ -357,7 +357,7 @@ deallocate (deg_lon, rad_lon_2d, deg_lat, rad_lat_2d)
 
 call set_domain(grid_domain)
 if(idealized_moist_model) then
-    call idealized_moist_phys_end
+    call idealized_moist_phys_end(grid_domain)
 else
     call hs_forcing_end
 endif
