@@ -151,7 +151,7 @@ endif
 allocate(grid_tracers(is:ie, js:je, num_levels, num_tracers))
 grid_tracers = 0.
 
-call physics_driver_init(Time, lon_boundaries, lat_boundaries, axes, radiation_ref_press, grid_tracers, Surf_diff, p_half)
+call physics_driver_init(Time, lon_boundaries, lat_boundaries, axes, radiation_ref_press, grid_tracers, Surf_diff, p_half, grid_domain)
 
 if(sum(grid_tracers) /= 0.) then
   call error_mesg('spectral_physics_init','This version of the spectral atmospheric model not coded to handle'// &
@@ -257,7 +257,7 @@ if(do_moist_in_phys_up()) then
                flux_sw_down_vis_dif, flux_sw_down_total_dir,                     &
                flux_sw_down_total_dif, flux_sw_vis,                              &
                flux_sw_vis_dir, flux_sw_vis_dif,                                 &
-               flux_lw, coszen, gust, Surf_diff, gavg_rrv)
+               flux_lw, coszen, gust, Surf_diff, gavg_rrv, previous_in = previous, current_in = current)
 else
   call physics_driver_down(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,   &
             rad_lat_2d,    rad_lon_2d,  area_2d,                                 &
@@ -278,7 +278,7 @@ else
                flux_sw_down_total_dif, flux_sw_vis,                              &
                flux_sw_vis_dir, flux_sw_vis_dif,                                 &
                flux_lw, coszen, gust, Surf_diff, gavg_rrv, diff_cum_mom=diff_cu_mo, &
-               moist_convect=convect)
+               moist_convect=convect, previous_in = previous, current_in = current)
 endif
 
 return

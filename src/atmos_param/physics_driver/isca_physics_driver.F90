@@ -106,53 +106,56 @@ use vert_turb_driver_mod,    only: vert_turb_driver,  &
                                    vert_turb_driver_end, &
                                    vert_turb_driver_restart
 
-use vert_diff_driver_mod,    only: vert_diff_driver_down,  &
-                                   vert_diff_driver_up,    &
-                                   vert_diff_driver_init,  &
-                                   vert_diff_driver_end,   &
-                                   surf_diff_type
+use idealized_moist_phys_mod, only: idealized_moist_phys_init , idealized_moist_phys , idealized_convection_and_lscale_cond, idealized_radiation_and_optional_surface_flux, idealized_moist_phys_end, surf_diff_type
 
-use radiation_driver_mod,    only: radiation_driver_init,    &
-                                   define_rad_times, define_surface,   &
-                                   define_atmos_input_fields, &
-                                   radiation_driver_time_vary, &
-                                   radiation_driver_endts, &
-                                   radiation_driver,  &
-                                   return_cosp_inputs, &
-                                   atmos_input_dealloc,    &
-                                   microphys_dealloc, &
-                                   surface_dealloc, &
-                                   radiation_driver_end, &
-                                   radiation_driver_restart
+use         mpp_domains_mod, only: domain2D !s added to enable land reading
+
+! use vert_diff_driver_mod,    only: vert_diff_driver_down,  &
+!                                    vert_diff_driver_up,    &
+!                                    vert_diff_driver_init,  &
+!                                    vert_diff_driver_end,   &
+!                                    surf_diff_type
+
+! use radiation_driver_mod,    only: radiation_driver_init,    &
+!                                    define_rad_times, define_surface,   &
+!                                    define_atmos_input_fields, &
+!                                    radiation_driver_time_vary, &
+!                                    radiation_driver_endts, &
+!                                    radiation_driver,  &
+!                                    return_cosp_inputs, &
+!                                    atmos_input_dealloc,    &
+!                                    microphys_dealloc, &
+!                                    surface_dealloc, &
+!                                    radiation_driver_end, &
+!                                    radiation_driver_restart
   
-use cloud_spec_mod,          only: cloud_spec_init, cloud_spec, &
-                                   cloud_spec_dealloc, cloud_spec_end
+! use cloud_spec_mod,          only: cloud_spec_init, cloud_spec, &
+!                                    cloud_spec_dealloc, cloud_spec_end
 
-use aerosol_mod,             only: aerosol_init, aerosol_driver, &
-                                   aerosol_time_vary, &
-                                   aerosol_endts, &
-                                   aerosol_dealloc, aerosol_end
+! use aerosol_mod,             only: aerosol_init, aerosol_driver, &
+!                                    aerosol_time_vary, &
+!                                    aerosol_endts, &
+!                                    aerosol_dealloc, aerosol_end
  
-use radiative_gases_mod,     only: radiative_gases_init,   &
-                                   radiative_gases_time_vary, &
-                                   radiative_gases_endts, &
-                                   define_radiative_gases, &
-                                   radiative_gases_dealloc, &
-                                   radiative_gases_end,     &
-                                   radiative_gases_restart
+! use radiative_gases_mod,     only: radiative_gases_init,   &
+!                                    radiative_gases_time_vary, &
+!                                    radiative_gases_endts, &
+!                                    define_radiative_gases, &
+!                                    radiative_gases_dealloc, &
+!                                    radiative_gases_end,     &
+!                                    radiative_gases_restart
 
-use damping_driver_mod,      only: damping_driver,      &
-                                   damping_driver_init, &
-                                   damping_driver_time_vary,  &
-                                   damping_driver_endts, &
-                                   damping_driver_end,  &
-                                   damping_driver_restart
+! use damping_driver_mod,      only: damping_driver,      &
+!                                    damping_driver_init, &
+!                                    damping_driver_endts, &
+!                                    damping_driver_end,  &
+!                                    damping_driver_restart
 
-use grey_radiation_mod,       only: grey_radiation_init, grey_radiation, &
-                                    grey_radiation_end
+! use grey_radiation_mod,       only: grey_radiation_init, grey_radiation, &
+!                                     grey_radiation_end
 
 !--> h1g, cjg
-use clubb_driver_mod,         only: clubb_init, clubb, clubb_end
+! use clubb_driver_mod,         only: clubb_init, clubb, clubb_end
 !<-- h1g, cjg
 
 #ifdef SCM
@@ -186,9 +189,7 @@ character(len=128) :: tagname = '$Name: tikal $'
 !-------  interfaces --------
 
 public  physics_driver_init, physics_driver_down,   &
-        physics_driver_down_time_vary, physics_driver_up_time_vary, &
         physics_driver_down_endts, physics_driver_up_endts, &
-        physics_driver_moist_init, physics_driver_moist_end, &
         physics_driver_up, physics_driver_end, &
         do_moist_in_phys_up, get_diff_t, &
         get_radturbten, zero_radturbten, physics_driver_restart
@@ -581,7 +582,7 @@ integer, dimension(:), allocatable :: id_tracer_phys,         &  ! cjg
 !-->cjg
 !subroutine physics_driver_init (Time, lonb, latb, axes, pref, &
 subroutine physics_driver_init (Time, lonb, latb, lon, lat, axes, pref, &
-                                trs, Surf_diff, phalf, mask, kbot, &
+                                trs, Surf_diff, phalf, grid_domain_in, mask, kbot, &
                                 diffm, difft  )
 !<--cjg
 !---------------------------------------------------------------------
@@ -596,6 +597,7 @@ real,dimension(:,:),     intent(in)              :: pref
 real,dimension(:,:,:,:), intent(inout)           :: trs
 type(surf_diff_type),    intent(inout)           :: Surf_diff
 real,dimension(:,:,:),   intent(in)              :: phalf
+type(domain2D),          intent(in)              :: grid_domain_in
 real,dimension(:,:,:),   intent(in),   optional  :: mask
 integer,dimension(:,:),  intent(in),   optional  :: kbot
 real, dimension(:,:,:),  intent(out),  optional  :: diffm, difft
@@ -697,9 +699,7 @@ real, dimension(:,:,:),  intent(out),  optional  :: diffm, difft
 !       if(do_radiation .and. do_grey_radiation) & 
 !         call error_mesg('physics_driver_init','do_radiation and do_grey_radiation cannot both be .true.',FATAL)
 
-! NEED TO ADD IDEALIZED MOIST PHYS INIT HERE
-
-   call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), Surf_diff)
+   call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), grid_domain_in, Surf_diff)
 
 !--------------------------------------------------------------------
 !    write version number and namelist to log file.
@@ -1093,7 +1093,8 @@ subroutine physics_driver_down (is, ie, js, je,                       &
                                 flux_lw,  coszen,  gust,              &
                                 Surf_diff, gavg_rrv,                  &
                                 mask, kbot, diff_cum_mom,             &
-                                moist_convect, diffm, difft  )
+                                moist_convect, diffm, difft,          &
+                                previous_in, current_in  )
 
 !---------------------------------------------------------------------
 !    physics_driver_down calculates "first pass" physics tendencies,
@@ -1142,7 +1143,7 @@ integer, dimension(:,:), intent(in)   ,optional :: kbot
 real,  dimension(:,:,:), intent(in)   ,optional :: diff_cum_mom
 logical, dimension(:,:), intent(in)   ,optional :: moist_convect
 real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft 
-
+integer,                 intent(in)   , optional :: previous_in, current_in
 !-----------------------------------------------------------------------
 !   intent(in) variables:
 !
@@ -1337,8 +1338,38 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       
       
 !       PUT RRTM AND GREY RADIATION HERE
-      
-    call idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, previous, current, dt_ug, dt_vg, dt_tg, dt_tracers, mask, kbot)      
+      ! subroutine physics_driver_down (is, ie, js, je,                       &
+      !   Time_prev, Time, Time_next,           &
+      !   lat, lon, area,                       &
+      !   p_half, p_full, z_half, z_full,       &
+      !   phalfgrey,                            &
+      !   u, v, t, q, r, um, vm, tm, qm, rm,    &
+      !   frac_land, rough_mom,                 &
+      !   frac_open_sea,                        &
+      !   albedo, albedo_vis_dir, albedo_nir_dir,&
+      !   albedo_vis_dif, albedo_nir_dif,       &
+      !   t_surf_rad,                           &
+      !   u_star,    b_star, q_star,            &
+      !   dtau_du, dtau_dv,  tau_x,  tau_y,     &
+      !   udt, vdt, tdt, qdt, rdt,              &
+      !   flux_sw,                              &
+      !   flux_sw_dir,                          &
+      !   flux_sw_dif,                          &
+      !   flux_sw_down_vis_dir,                 &
+      !   flux_sw_down_vis_dif,                 &
+      !   flux_sw_down_total_dir,               &
+      !   flux_sw_down_total_dif,               &
+      !   flux_sw_vis,                          &
+      !   flux_sw_vis_dir,                      &
+      !   flux_sw_vis_dif,                      &
+      !   flux_lw,  coszen,  gust,              &
+      !   Surf_diff, gavg_rrv,                  &
+      !   mask, kbot, diff_cum_mom,             &
+      !   moist_convect, diffm, difft  )      
+
+
+
+    call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, previous_in, current_in, udt, vdt, tdt, rdt, mask, kbot)      
 
 !-------------------------------------------------------------------
 !    process the variables returned from radiation_driver_mod. the 
@@ -1510,29 +1541,29 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
       call mpp_clock_begin ( diff_down_clock )
       radturbten(is:ie,js:je,:) = radturbten(is:ie,js:je,:) - tdt(:,:,:)
-      if ( allocated(diff_t_clubb) ) then  !RASF Bug fix. Can only pass bounds of diff_t_clubb when allocated
-         call vert_diff_driver_down (is, js, Time_next, dt, p_half,   &
-                                  p_full, z_full,   &
-                                  diff_m(is:ie,js:je,:),         &
-                                  diff_t(is:ie,js:je,:),         &
-                                  um ,vm ,tm ,qm ,rm(:,:,:,1:ntp), &
-                                  dtau_du, dtau_dv, tau_x, tau_y,  &
-                                  udt, vdt, tdt, qdt, rdt,       &
-                                  Surf_diff,                     &
-                                  diff_t_clubb=diff_t_clubb(is:ie,js:je,:),   &   ! cjg
-                                  mask=mask, kbot=kbot           )
-     else
-        call vert_diff_driver_down (is, js, Time_next, dt, p_half,   &
-                                  p_full, z_full,   &
-                                  diff_m(is:ie,js:je,:),         &
-                                  diff_t(is:ie,js:je,:),         &
-                                  um ,vm ,tm ,qm ,rm(:,:,:,1:ntp), &
-                                  dtau_du, dtau_dv, tau_x, tau_y,  &
-                                  udt, vdt, tdt, qdt, rdt,       &
-                                  Surf_diff,                     &
-                                  diff_t_clubb=diff_t_clubb,   &   ! RASF
-                                  mask=mask, kbot=kbot           )
-      endif
+    !   if ( allocated(diff_t_clubb) ) then  !RASF Bug fix. Can only pass bounds of diff_t_clubb when allocated
+    !      call vert_diff_driver_down (is, js, Time_next, dt, p_half,   &
+    !                               p_full, z_full,   &
+    !                               diff_m(is:ie,js:je,:),         &
+    !                               diff_t(is:ie,js:je,:),         &
+    !                               um ,vm ,tm ,qm ,rm(:,:,:,1:ntp), &
+    !                               dtau_du, dtau_dv, tau_x, tau_y,  &
+    !                               udt, vdt, tdt, qdt, rdt,       &
+    !                               Surf_diff,                     &
+    !                               diff_t_clubb=diff_t_clubb(is:ie,js:je,:),   &   ! cjg
+    !                               mask=mask, kbot=kbot           )
+    !  else
+    !     call vert_diff_driver_down (is, js, Time_next, dt, p_half,   &
+    !                               p_full, z_full,   &
+    !                               diff_m(is:ie,js:je,:),         &
+    !                               diff_t(is:ie,js:je,:),         &
+    !                               um ,vm ,tm ,qm ,rm(:,:,:,1:ntp), &
+    !                               dtau_du, dtau_dv, tau_x, tau_y,  &
+    !                               udt, vdt, tdt, qdt, rdt,       &
+    !                               Surf_diff,                     &
+    !                               diff_t_clubb=diff_t_clubb,   &   ! RASF
+    !                               mask=mask, kbot=kbot           )
+    !   endif
 
       if (id_tdt_phys_vdif_dn > 0) then
         used = send_data ( id_tdt_phys_vdif_dn, +2.0*tdt(:,:,:), &
@@ -1837,7 +1868,7 @@ integer,                intent(in),   optional :: current, previous
 !        dt               physics time step [ seconds ]
 !
 !---------------------------------------------------------------------
-      type(aerosol_type)                               :: Aerosol
+      ! type(aerosol_type)                               :: Aerosol
 
 !---------------------------------------------------------------------
 !    verify that the module is initialized.
@@ -1883,9 +1914,9 @@ integer,                intent(in),   optional :: current, previous
 ! <--- h1g, 2012-08-28
 
       call mpp_clock_begin ( diff_up_clock )
-      call vert_diff_driver_up (is, js, Time_next, dt, p_half,   &
-                                Surf_diff, tdt, qdt, rdt, mask=mask,  &
-                                kbot=kbot)
+      ! call vert_diff_driver_up (is, js, Time_next, dt, p_half,   &
+                                ! Surf_diff, tdt, qdt, rdt, mask=mask,  &
+                                ! kbot=kbot)
 
 ! ---> h1g, 2012-08-28, save temperature and moisture tendencies due to surface fluxes at lowest-level
       if( .not. l_host_applies_sfc_fluxes ) then
@@ -1948,8 +1979,8 @@ integer,                intent(in),   optional :: current, previous
                fl_ccrain(is:ie,js:je,:), fl_ccsnow(is:ie,js:je,:),    &
            fl_donmca_rain(is:ie,js:je,:), fl_donmca_snow(is:ie,js:je,:), &
                            gust_cv, area, lon, lat,   &
-                           mask=mask, kbot=kbot,
-                           current=current, previous=previous)
+                           mask=mask, kbot=kbot,   &
+                           current_in=current, previous_in=previous)
                            
         call mpp_clock_end ( moist_processes_clock )
         diff_cu_mo(is:ie, js:je,:) = diff_cu_mo_loc(:,:,:)
@@ -1989,6 +2020,7 @@ integer,                intent(in),   optional :: current, previous
           endif
         end do
 !<--cjg
+      endif
 
 
  end subroutine physics_driver_up
@@ -2088,7 +2120,7 @@ integer :: clubb_term_clock
       call vert_turb_driver_end
       call mpp_clock_end ( turb_term_clock )
       call mpp_clock_begin ( diff_term_clock )
-      call vert_diff_driver_end
+      ! call vert_diff_driver_end
       call mpp_clock_end ( diff_term_clock )
       if (do_radiation) then
         call mpp_clock_begin ( radiation_term_clock )

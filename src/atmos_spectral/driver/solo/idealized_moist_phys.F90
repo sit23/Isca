@@ -74,7 +74,7 @@ character(len=10), parameter :: mod_name='atmosphere'
 
 !=================================================================================================================================
 
-public :: idealized_moist_phys_init , idealized_moist_phys , idealized_moist_phys_end, surf_diff_type
+public :: idealized_moist_phys_init , idealized_moist_phys , idealized_convection_and_lscale_cond, idealized_radiation_and_optional_surface_flux, idealized_moist_phys_end, surf_diff_type
 
 logical :: module_is_initialized =.false.
 logical :: turb = .false.
