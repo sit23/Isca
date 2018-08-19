@@ -560,11 +560,6 @@ endif
       endif
 
 if(mixed_layer_bc) then
-  ! need an initial condition for the mixed layer temperature
-  ! may be overwritten by restart file
-  ! choose an unstable initial condition to allow moisture
-  ! to quickly enter the atmosphere avoiding problems with the convection scheme
-  t_surf = t_surf_init + 1.0
 
   call mixed_layer_init(is, ie, js, je, num_levels, t_surf, bucket_depth, axes, Time, albedo, rad_lon, rad_lat, rad_lonb_2d(:,:), rad_latb_2d(:,:), land, bucket, grid_domain_in) ! t_surf is intent(inout) !s albedo distribution set here.
   
@@ -745,11 +740,9 @@ endif
 rain = 0.0; snow = 0.0; precip = 0.0
 
 
-call idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, grid_tracers, ug, vg, previous, current, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot)
+call idealized_convection_and_lscale_cond( p_half(:,:,:,previous), p_full(:,:,:,previous), z_half(:,:,:,previous), z_full(:,:,:,previous), tg(:,:,:,previous), grid_tracers(:,:,:,previous,:), ug(:,:,:,previous), vg(:,:,:,previous), dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot)
 
-
-
-call idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half(:,:,:,current), p_full(:,:,:,current), z_half(:,:,:,current), z_full(:,:,:,current), ug, vg, tg, grid_tracers, previous, current, dt_ug, dt_vg, dt_tg, dt_tracers, mask, kbot)
+call idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half(:,:,:,current), p_full(:,:,:,current), z_half(:,:,:,current), z_full(:,:,:,current), ug(:,:,:,previous), vg(:,:,:,previous), tg(:,:,:,previous), grid_tracers(:,:,:,previous,:), dt_ug, dt_vg, dt_tg, dt_tracers, .true., mask, kbot, current_in=current)
 
 !----------------------------------------------------------------------
 !    Copied from MiMA physics_driver.f90
@@ -996,12 +989,11 @@ END SUBROUTINE rh_calc
 
 !=================================================================================================================================
 
-subroutine idealized_convection_and_lscale_cond( p_half, p_full, z_half, z_full, tg, grid_tracers, ug, vg, previous, current, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot) 
+subroutine idealized_convection_and_lscale_cond( p_half_prev, p_full_prev, z_half_prev, z_full_prev, tg_prev, grid_tracers_prev, ug_prev, vg_prev, dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot) 
 
 type(time_type),            intent(in)    :: Time
-real, dimension(:,:,:,:),   intent(in)    :: p_half, p_full, z_half, z_full, ug, vg, tg
-real, dimension(:,:,:,:,:), intent(in)    :: grid_tracers
-integer,                    intent(in)    :: previous, current
+real, dimension(:,:,:),   intent(in)    :: p_half_prev, p_full_prev, z_half_prev, z_full_prev, ug_prev, vg_prev, tg_prev
+real, dimension(:,:,:,:), intent(in)    :: grid_tracers_prev
 real, dimension(:,:,:),     intent(inout) :: dt_tg, dt_ug, dt_vg
 real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 real,                       intent(in)    :: delta_t
@@ -1009,7 +1001,7 @@ real,                       intent(in)    :: delta_t
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
 
-real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: mc, dt_ug_conv, dt_vg_conv, tg_tmp, qg_tmp, RH
+real, dimension(size(ug_prev,1), size(ug_prev,2), size(ug_prev,3)) :: mc, dt_ug_conv, dt_vg_conv, tg_tmp, qg_tmp, RH
 
 real, dimension(1,1,1):: tracer, tracertnd
 integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
@@ -1018,9 +1010,9 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
     case(SIMPLE_BETTS_CONV)
 
-       call qe_moist_convection ( delta_t,              tg(:,:,:,previous),      &
-        grid_tracers(:,:,:,previous,nsphum),        p_full(:,:,:,previous),      &
-                              p_half(:,:,:,previous),                coldT,      &
+       call qe_moist_convection ( delta_t,              tg_prev,      &
+        grid_tracers_prev(:,:,:,nsphum),        p_full_prev(:,:,:),      &
+                              p_half_prev(:,:,:),                coldT,      &
                                      rain,                            snow,      &
                                conv_dt_tg,                      conv_dt_qg,      &
                                     q_ref,                        convflag,      &
@@ -1028,8 +1020,8 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
                                       cin,             invtau_q_relaxation,      &
                       invtau_t_relaxation,                           t_ref)
 
-       tg_tmp = conv_dt_tg + tg(:,:,:,previous)
-       qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
+       tg_tmp = conv_dt_tg + tg_prev(:,:,:)
+       qg_tmp = conv_dt_qg + grid_tracers_prev(:,:,:,nsphum)
     !  note the delta's are returned rather than the time derivatives
 
        conv_dt_tg = conv_dt_tg/delta_t
@@ -1046,9 +1038,9 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
     case(FULL_BETTS_MILLER_CONV)
 
-       call betts_miller (          delta_t,           tg(:,:,:,previous),       &
-        grid_tracers(:,:,:,previous,nsphum),       p_full(:,:,:,previous),       &
-                     p_half(:,:,:,previous),                        coldT,       &
+       call betts_miller (          delta_t,           tg_prev(:,:,:),       &
+        grid_tracers_prev(:,:,:,nsphum),       p_full_prev(:,:,:),       &
+                     p_half_prev(:,:,:),                        coldT,       &
                                        rain,                         snow,       &
                                  conv_dt_tg,                   conv_dt_qg,       &
                                       q_ref,                     convflag,       &
@@ -1057,8 +1049,8 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
                         invtau_t_relaxation,          invtau_q_relaxation,       &
                                    capeflag)
 
-       tg_tmp = conv_dt_tg + tg(:,:,:,previous)
-       qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nsphum)
+       tg_tmp = conv_dt_tg + tg_prev(:,:,:)
+       qg_tmp = conv_dt_qg + grid_tracers_prev(:,:,:,nsphum)
     !  note the delta's are returned rather than the time derivatives
 
        conv_dt_tg = conv_dt_tg/delta_t
@@ -1074,12 +1066,12 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
        if(id_cin  > 0) used = send_data(id_cin, cin, Time)
 
     case(DRY_CONV)
-        call dry_convection(Time, tg(:, :, :, previous),                         &
-                            p_full(:,:,:,previous), p_half(:,:,:,previous),      &
+        call dry_convection(Time, tg_prev(:, :, :),                         &
+                            p_full_prev(:,:,:), p_half_prev(:,:,:),      &
                             conv_dt_tg, cape, cin)
 
-        tg_tmp = conv_dt_tg*delta_t + tg(:,:,:,previous)
-        qg_tmp = grid_tracers(:,:,:,previous,nsphum)
+        tg_tmp = conv_dt_tg*delta_t + tg_prev(:,:,:)
+        qg_tmp = grid_tracers_prev(:,:,:,nsphum)
 
         if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
         if(id_cape  > 0) used = send_data(id_cape, cape, Time)
@@ -1088,9 +1080,9 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
     case(RAS_CONV)
 
         call ras   (is,   js,     Time,                                                  &  
-                    tg(:,:,:,previous),   grid_tracers(:,:,:,previous,nsphum),           &
-                    ug(:,:,:,previous),  vg(:,:,:,previous),    p_full(:,:,:,previous),  &
-                    p_half(:,:,:,previous), z_half(:,:,:,previous), coldT,  delta_t,     &
+                    tg_prev(:,:,:),   grid_tracers_prev(:,:,:,nsphum),           &
+                    ug_prev(:,:,:),  vg_prev(:,:,:),    p_full_prev(:,:,:),  &
+                    p_half_prev(:,:,:), z_half_prev(:,:,:), coldT,  delta_t,     &
                     conv_dt_tg,   conv_dt_qg, dt_ug_conv,  dt_vg_conv,                   &
                     rain, snow,   do_strat,                                              &                                              
                     !OPTIONAL 
@@ -1102,8 +1094,8 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
                 
 
           !update tendencies - dT and dq are done after cases
-          tg_tmp = tg(:,:,:,previous) + conv_dt_tg
-          qg_tmp = grid_tracers(:,:,:,previous,nsphum) + conv_dt_qg
+          tg_tmp = tg_prev(:,:,:) + conv_dt_tg
+          qg_tmp = grid_tracers_prev(:,:,:,nsphum) + conv_dt_qg
           dt_ug = dt_ug + dt_ug_conv
           dt_vg = dt_vg + dt_vg_conv
 
@@ -1115,8 +1107,8 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 
     case(NO_CONV)
-       tg_tmp = tg(:,:,:,previous)
-       qg_tmp = grid_tracers(:,:,:,previous,nsphum)
+       tg_tmp = tg_prev(:,:,:)
+       qg_tmp = grid_tracers_prev(:,:,:,nsphum)
 
     case default
       call error_mesg('idealized_moist_phys','Invalid convection scheme.', FATAL)
@@ -1134,7 +1126,7 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
       ! inconsistent with the dry convection scheme, don't run it!
       rain = 0.0; snow = 0.0
       call lscale_cond (         tg_tmp,                          qg_tmp,        &
-                 p_full(:,:,:,previous),          p_half(:,:,:,previous),        &
+                 p_full_prev(:,:,:),          p_half_prev(:,:,:),        &
                                   coldT,                            rain,        &
                                    snow,                      cond_dt_tg,        &
                              cond_dt_qg )
@@ -1151,7 +1143,7 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
       !s Adding relative humidity calculation so as to allow comparison with Frierson's thesis.
       if (id_rh>0) then
-        call rh_calc (p_full(:,:,:,previous),tg_tmp,qg_tmp,RH)
+        call rh_calc (p_full_prev(:,:,:),tg_tmp,qg_tmp,RH)
         used = send_data(id_rh, RH*100., Time)
       endif
 
@@ -1164,23 +1156,23 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 end subroutine idealized_convection_and_lscale_cond
 
-subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug, vg, tg, grid_tracers, &
-                                previous, current, dt_ug, dt_vg, dt_tg, dt_tracers, mask, kbot  )
+subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug_prev, vg_prev, tg_prev, grid_tracers_prev,  dt_ug, dt_vg, dt_tg, dt_tracers, do_surface_flux, mask, kbot, current_in  )
 
 integer,                    intent(in)    :: is, js
 type(time_type),            intent(in)    :: Time
 real,                       intent(in)    :: delta_t
 real, dimension(:,:,:),   intent(in)      :: p_half_curr, p_full_curr, z_half_curr, z_full_curr
-real, dimension(:,:,:,:),   intent(in)    :: ug, vg, tg
-real, dimension(:,:,:,:,:), intent(in)    :: grid_tracers
-integer,                    intent(in)    :: previous, current
+real, dimension(:,:,:),   intent(in)    :: ug_prev, vg_prev, tg_prev
+real, dimension(:,:,:,:), intent(in)    :: grid_tracers_prev
 real, dimension(:,:,:),     intent(inout) :: dt_tg, dt_ug, dt_vg
 real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
+logical,                   intent(in)     :: do_surface_flux
 
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
+integer, intent(in),                 optional :: current_in
 
-real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
+real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
 
     ! Begin the radiation calculation by computing downward fluxes.
     ! This part of the calculation does not depend on the surface temperature.
@@ -1190,10 +1182,10 @@ real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
                            rad_lat(:,:),           &
                            rad_lon(:,:),           &
                            p_half_curr,  &
-                           tg(:,:,:,previous),     &
+                           tg_prev(:,:,:),     &
                            net_surf_sw_down(:,:),  &
                            surf_lw_down(:,:), albedo, &
-                           grid_tracers(:,:,:,previous,nsphum))
+                           grid_tracers_prev(:,:,:,nsphum))
     end if
 
     if(.not.mixed_layer_bc) then
@@ -1207,12 +1199,17 @@ real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
     !!$  t_surf = surface_temperature(tg(:,:,:,previous), p_full(:,:,:,current), p_half(:,:,:,current))
     end if
 
-    if(.not.gp_surface) then 
+    if(do_surface_flux .and. (.not.gp_surface)) then 
+
+      if (.not.present(current_in)) then
+        call error_mesg('idealized_moist_phys','Do surface-flux is true but current_in is not supplied. Stopping.', FATAL)        
+      endif
+
     call surface_flux(                                                          &
-                      tg(:,:,num_levels,previous),                              &
-     grid_tracers(:,:,num_levels,previous,nsphum),                              &
-                      ug(:,:,num_levels,previous),                              &
-                      vg(:,:,num_levels,previous),                              &
+                      tg_prev(:,:,num_levels),                              &
+     grid_tracers_prev(:,:,num_levels,nsphum),                              &
+                      ug_prev(:,:,num_levels),                              &
+                      vg_prev(:,:,num_levels),                              &
                    p_full_curr(:,:,num_levels),                              &
        z_full_curr(:,:,num_levels)-z_surf(:,:),                              &
                  p_half_curr(:,:,num_levels+1),                              &
@@ -1220,7 +1217,7 @@ real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
                                       t_surf(:,:),                              &
                                       q_surf(:,:),                              & ! is intent(inout)
                                            bucket,                              &     ! RG Add bucket
-                        bucket_depth(:,:,current),                              &     ! RG Add bucket
+                        bucket_depth(:,:,current_in),                           &     ! RG Add bucket
                             max_bucket_depth_land,                              &     ! RG Add bucket
                              depth_change_lh(:,:),                              &     ! RG Add bucket
                            depth_change_conv(:,:),                              &     ! RG Add bucket
@@ -1265,7 +1262,7 @@ real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
                          rad_lat(:,:),           &
                          p_half_curr(:,:,:),  &
                          t_surf(:,:),            &
-                         tg(:,:,:,previous),     &
+                         tg_prev(:,:,:),     &
                          dt_tg(:,:,:), albedo)
     end if
 
@@ -1276,9 +1273,9 @@ real, dimension(size(tg,1), size(tg,2), size(tg,3)) :: tg_interp
 #else
 if(do_rrtm_radiation) then
    !need t at half grid
-    tg_interp=tg(:,:,:,previous)
+    tg_interp=tg_prev(:,:,:)
    call interp_temp(z_full_curr(:,:,:),z_half_curr(:,:,:),tg_interp, Time)
-   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full_curr(:,:,:),p_half_curr(:,:,:),albedo,grid_tracers(:,:,:,previous,nsphum),tg_interp,t_surf(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
+   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full_curr(:,:,:),p_half_curr(:,:,:),albedo,grid_tracers_prev(:,:,:,nsphum),tg_interp,t_surf(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
 endif
 #endif
 
@@ -1293,7 +1290,7 @@ endif
                                          Time,                    delta_t, &
                        rad_lat(:,:),         dt_ug(:,:,:      ), &
                             dt_vg(:,:,:     ),                             &
-                           ug(:,:,:,previous),         vg(:,:,:,previous), &
+                           ug_prev(:,:,:),         vg_prev(:,:,:), &
                          p_half_curr(:,:,:),     p_full_curr(:,:,:), &
                          dt_tg, diss_heat_ray )
 

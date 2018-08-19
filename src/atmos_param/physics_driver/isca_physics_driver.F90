@@ -699,7 +699,7 @@ real, dimension(:,:,:),  intent(out),  optional  :: diffm, difft
 !       if(do_radiation .and. do_grey_radiation) & 
 !         call error_mesg('physics_driver_init','do_radiation and do_grey_radiation cannot both be .true.',FATAL)
 
-   call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), grid_domain_in, Surf_diff)
+  call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), grid_domain_in, Surf_diff)
 
 !--------------------------------------------------------------------
 !    write version number and namelist to log file.
@@ -1093,8 +1093,7 @@ subroutine physics_driver_down (is, ie, js, je,                       &
                                 flux_lw,  coszen,  gust,              &
                                 Surf_diff, gavg_rrv,                  &
                                 mask, kbot, diff_cum_mom,             &
-                                moist_convect, diffm, difft,          &
-                                previous_in, current_in  )
+                                moist_convect, diffm, difft )
 
 !---------------------------------------------------------------------
 !    physics_driver_down calculates "first pass" physics tendencies,
@@ -1143,7 +1142,6 @@ integer, dimension(:,:), intent(in)   ,optional :: kbot
 real,  dimension(:,:,:), intent(in)   ,optional :: diff_cum_mom
 logical, dimension(:,:), intent(in)   ,optional :: moist_convect
 real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft 
-integer,                 intent(in)   , optional :: previous_in, current_in
 !-----------------------------------------------------------------------
 !   intent(in) variables:
 !
@@ -1369,7 +1367,7 @@ integer,                 intent(in)   , optional :: previous_in, current_in
 
 
 
-    call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, previous_in, current_in, udt, vdt, tdt, rdt, mask, kbot)      
+    call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, udt, vdt, tdt, rdt, .false., mask, kbot)      
 
 !-------------------------------------------------------------------
 !    process the variables returned from radiation_driver_mod. the 
@@ -1728,8 +1726,7 @@ integer,                 intent(in)   , optional :: previous_in, current_in
                                Surf_diff,                         &
                                lprec,   fprec, gust,              &
                                mask, kbot,                        &
-                               hydrostatic, phys_hydrostatic,     &
-                               current, previous      )
+                               hydrostatic, phys_hydrostatic)
 
 !----------------------------------------------------------------------
 !    physics_driver_up completes the calculation of vertical diffusion 
@@ -1756,7 +1753,6 @@ real,dimension(:,:),    intent(inout)          :: gust
 real,dimension(:,:,:),  intent(in),   optional :: mask
 integer,dimension(:,:), intent(in),   optional :: kbot
 logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
-integer,                intent(in),   optional :: current, previous
 
 !-----------------------------------------------------------------------
 !   intent(in) variables:
@@ -1979,9 +1975,7 @@ integer,                intent(in),   optional :: current, previous
                fl_ccrain(is:ie,js:je,:), fl_ccsnow(is:ie,js:je,:),    &
            fl_donmca_rain(is:ie,js:je,:), fl_donmca_snow(is:ie,js:je,:), &
                            gust_cv, area, lon, lat,   &
-                           mask=mask, kbot=kbot,   &
-                           current_in=current, previous_in=previous)
-                           
+                           mask=mask, kbot=kbot)                           
         call mpp_clock_end ( moist_processes_clock )
         diff_cu_mo(is:ie, js:je,:) = diff_cu_mo_loc(:,:,:)
         radturbten(is:ie,js:je,:) = 0.0

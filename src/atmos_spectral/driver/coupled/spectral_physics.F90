@@ -207,8 +207,8 @@ subroutine spectral_physics_down(Time_prev, Time, Time_next, previous, current, 
 
 type(time_type), intent(in) :: Time_prev, Time, Time_next
 integer, intent(in)         :: previous, current
-real,    intent(in),    dimension(:,:,:    ) :: p_full, z_full
-real,    intent(in),    dimension(:,:,:    ) :: p_half, z_half
+real,    intent(in),    dimension(:,:,:,:  ) :: p_full, z_full
+real,    intent(in),    dimension(:,:,:,:  ) :: p_half, z_half
 real,    intent(in),    dimension(:,:,:    ) :: psg
 real,    intent(in),    dimension(:,:,:,:  ) :: ug, vg, tg
 real,    intent(inout), dimension(:,:,:,:,:) :: grid_tracers
@@ -241,7 +241,8 @@ endif
 if(do_moist_in_phys_up()) then
   call physics_driver_down(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,   &
             rad_lat_2d,    rad_lon_2d,  area_2d,                                 &
-                p_half,      p_full, z_half, z_full,                             &
+                p_half(:,:,:,current),      p_full(:,:,:,current),               &
+                z_half(:,:,:,current), z_full(:,:,:,current),                    &
                     ug(:,:,:,current), vg(:,:,:,current),                        &
                     tg(:,:,:,current), grid_tracers(:,:,:,current,nhum),         &
           grid_tracers(:,:,:,current,:), ug(:,:,:,previous), vg(:,:,:,previous), &
@@ -261,7 +262,8 @@ if(do_moist_in_phys_up()) then
 else
   call physics_driver_down(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,   &
             rad_lat_2d,    rad_lon_2d,  area_2d,                                 &
-                p_half,      p_full, z_half, z_full,                             &
+            p_half(:,:,:,current),      p_full(:,:,:,current),                   &
+            z_half(:,:,:,current), z_full(:,:,:,current),                        &
                     ug(:,:,:,current), vg(:,:,:,current),                        &
                     tg(:,:,:,current), grid_tracers(:,:,:,current,nhum),         &
           grid_tracers(:,:,:,current,:), ug(:,:,:,previous), vg(:,:,:,previous), &
@@ -290,8 +292,8 @@ subroutine spectral_physics_up(Time_prev, Time, Time_next, previous, current, p_
 
 type(time_type), intent(in) :: Time_prev, Time, Time_next
 integer,         intent(in) :: previous, current
-real, intent(in),    dimension(:,:,:    ) :: p_full, z_full, wg_full
-real, intent(in),    dimension(:,:,:    ) :: p_half, z_half
+real, intent(in),    dimension(:,:,:,:  ) :: p_full, z_full, wg_full
+real, intent(in),    dimension(:,:,:,:  ) :: p_half, z_half
 real, intent(in),    dimension(:,:,:,:  ) :: ug, vg, tg
 real, intent(in),    dimension(:,:,:,:,:) :: grid_tracers
 real, intent(in),    dimension(:,:      ) :: frac_land

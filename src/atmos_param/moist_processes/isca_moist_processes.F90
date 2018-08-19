@@ -664,8 +664,7 @@ subroutine moist_processes (is, ie, js, je, Time, dt, land,            &
                             fl_lssnow, fl_ccrain, fl_ccsnow, &
                             fl_donmca_rain, fl_donmca_snow, gust_cv,  &
                             area, lon, lat,                           &
-                            mask, kbot,                               &
-                            current_in, previous_in)
+                            mask, kbot)
 
 !-----------------------------------------------------------------------
 !
@@ -786,8 +785,6 @@ logical, intent(out), dimension(:,:)     :: convect
 
    real, intent(in) , dimension(:,:,:), optional :: mask
    integer, intent(in), dimension(:,:), optional :: kbot
-
-   integer, intent(in), optional                 :: current_in, previous_in
 
 !-----------------------------------------------------------------------
    integer :: secs, days
@@ -1040,7 +1037,7 @@ logical, intent(out), dimension(:,:)     :: convect
 !                             hydrostatic, phys_hydrostatic)
 
 
-    call idealized_convection_and_lscale_cond( phalf, pfull, zhalf, zfull, t, r, u, v, previous_in, current_in, tdt, udt, vdt, rdt, Time, dt, mask, kbot)    
+    call idealized_convection_and_lscale_cond( phalf, pfull, zhalf, zfull, t, r, u, v, tdt, udt, vdt, rdt, Time, dt, mask, kbot)    
 !---------------------------------------------------------------------
 !    end the timing of the convection code section.
 !---------------------------------------------------------------------
