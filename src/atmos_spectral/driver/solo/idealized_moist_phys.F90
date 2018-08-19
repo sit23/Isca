@@ -269,12 +269,12 @@ type(time_type) :: Time_step
 contains
 !=================================================================================================================================
 
-subroutine idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes_in, surf_geopotential_in, Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init, grid_domain_in, surf_diff_init)
+subroutine idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes_in, surf_geopotential_in, Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, grid_domain_in, surf_diff_init)
 integer, intent(in)         :: is_in, ie_in, js_in, je_in, num_levels_in
 integer, dimension(4), intent(in) :: axes_in
 type(time_type), intent(in) :: Time, Time_step_in
 integer, intent(in) :: nhum
-real, intent(in), dimension(:,:) :: rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, t_surf_init, surf_geopotential_in
+real, intent(in), dimension(:,:) :: rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, surf_geopotential_in
 type(domain2D) :: grid_domain_in
 type(surf_diff_type), optional :: surf_diff_init
 

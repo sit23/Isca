@@ -79,7 +79,6 @@ logical :: load_qflux = .false.
 logical :: time_varying_qflux = .false.
 real    :: tconst = 305.0
 real    :: delta_T = 40.0
-logical :: prescribe_initial_dist = .false.
 real    :: albedo_value    = 0.06
 
 !s Surface heat capacity options
@@ -124,7 +123,7 @@ character(len=256) :: flux_lhe_anom_file_name  = 'INPUT/flux_lhe_anom.nc'
 character(len=256) :: flux_lhe_anom_field_name = 'flux_lhe_anom'
 
 namelist/mixed_layer_nml/ evaporation, depth, qflux_amp, qflux_width, tconst,&
-                              delta_T, prescribe_initial_dist,albedo_value,  &
+                              delta_T,albedo_value,  &
                               land_depth,trop_depth,                         &  !mj
                               trop_cap_limit, heat_cap_limit, np_cap_factor, &  !mj
 			                        do_qflux,do_warmpool,        &  !mj
@@ -329,14 +328,10 @@ else if( do_read_sst ) then !s Added so that if we are reading sst values then w
 
    call interpolator( sst_interp, Time, t_surf, trim(sst_file) )
 
-elseif (prescribe_initial_dist) then
+else 
 !  call error_mesg('mixed_layer','mixed_layer restart file not found - initializing from prescribed distribution', WARNING)
 
     t_surf(:,:) = tconst - delta_T*((3.*sin(rad_lat_2d)**2.)-1.)/3.
-
-else
-
-  call error_mesg('mixed_layer','mixed_layer restart file not found - initializing from lowest model level temp', WARNING)
 
 endif
 
