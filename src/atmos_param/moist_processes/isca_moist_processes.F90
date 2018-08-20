@@ -769,7 +769,7 @@ subroutine moist_processes (is, ie, js, je, Time, dt, land,            &
    real, intent(in) , dimension(:,:,:)   :: phalf, pfull, zhalf, zfull, omega, &
                                             diff_t, t, q, u, v, tm, qm, um, vm
    real, dimension(:,:,:), intent(in)    :: radturbten
-   real, intent(inout), dimension(:,:,:,:) :: r, rm                      ! cjg: inout
+   real, intent(in), dimension(:,:,:,:) :: r, rm                      ! cjg: inout
    real, intent(inout),dimension(:,:,:)  :: tdt, qdt, udt, vdt
    real, intent(inout),dimension(:,:,:,:):: rdt
 logical, intent(out), dimension(:,:)     :: convect
@@ -1140,15 +1140,7 @@ end subroutine moist_processes_endts
 !---> h1g
 !subroutine moist_processes_init ( id, jd, kd, lonb, latb, pref, &
 subroutine moist_processes_init ( id, jd, kd, lonb, latb, lon, lat, phalf, pref, &
-                                  axes, Time, doing_donner, &
-                                  doing_uw_conv, num_uw_tracers_out,&
-                                  do_strat_out,     &
-                                  do_clubb_in,      &    ! cjg
-                                  do_cosp_in,  &
-!                                 doing_uw_conv, &
-!                                 do_cosp_in,  &
-                                  donner_meso_is_largescale_in, &
-                                  include_donmca_in_cosp_out)
+                                  axes, Time, doing_donner)
 !<--- h1g
 
 !-----------------------------------------------------------------------
@@ -1158,16 +1150,7 @@ real,dimension(:,:),  intent(in)  :: lon,  lat    ! h1g
 real,dimension(:,:,:),intent(in)  :: phalf        ! h1g
 real, dimension(:),   intent(in)  :: pref
 type(time_type),      intent(in)  :: Time
- logical,              intent(out) :: doing_donner, doing_uw_conv,   &
-                                      do_strat_out
-!logical,              intent(out) :: doing_donner, doing_uw_conv
- integer,              intent(out) :: num_uw_tracers_out
-integer,              intent(in), optional :: do_clubb_in        ! cjg
-logical,              intent(in), optional ::   &
-                                     do_cosp_in, &
-                                     donner_meso_is_largescale_in
-logical,             intent(out), optional ::    &
-                                     include_donmca_in_cosp_out
+ logical,              intent(out) :: doing_donner
 !-----------------------------------------------------------------------
 !
 !      input

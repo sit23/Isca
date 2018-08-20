@@ -21,7 +21,7 @@ use physics_driver_mod,    only: physics_driver_init, physics_driver_down, physi
 
 use moist_processes_mod,   only: moist_processes_init, moist_processes, moist_processes_end
 
-use mcm_moist_processes_mod, only: mcm_moist_processes, mcm_moist_processes_init, mcm_moist_processes_end
+! use mcm_moist_processes_mod, only: mcm_moist_processes, mcm_moist_processes_init, mcm_moist_processes_end
 
 use tracer_type_mod,       only: tracer_type
 
@@ -33,7 +33,7 @@ implicit none
 private
 
 public :: spectral_physics_init, spectral_physics_down, spectral_physics_up, &
-          spectral_physics_end, surf_diff_type, spectral_physics_moist
+          spectral_physics_end, surf_diff_type
 
 character(len=128), parameter :: version = &
 '$Id: spectral_physics.F90,v 13.0 2006/03/28 21:17:25 fms Exp $'
@@ -68,7 +68,9 @@ real, dimension(:,:), intent(in), optional :: surf_geopotential_in
 type(time_type),      intent(in), optional :: time_step_in
 real, allocatable, dimension(:,:,:,:) :: grid_tracers
 
-real, allocatable, dimension(:) :: rad_lon, rad_lat, wts_lat, lon_boundaries, lat_boundaries
+real, allocatable, dimension(:) :: rad_lon, rad_lat, wts_lat
+real, allocatable, dimension(:) :: lon_boundaries, lat_boundaries
+real, allocatable, dimension(:,:) :: lon_boundaries_2d, lat_boundaries_2d
 real, dimension(2) :: radiation_ref_press_surf = (/ 101325., 81060. /)
 
 real, allocatable, dimension(:,:) :: radiation_ref_press, rconvect
@@ -95,6 +97,7 @@ do_mcm_moist_processes = do_mcm_moist_processes_in
 call get_grid_domain(is, ie, js, je)
 allocate(rad_lon(is:ie), rad_lat(js:je), wts_lat(js:je))
 allocate(lon_boundaries(ie-is+2), lat_boundaries(je-js+2))
+allocate(lon_boundaries_2d(is:ie+1, js:je+1), lat_boundaries_2d(is:ie+1, js:je+1))
 
 call get_num_levels(num_levels)
 allocate(radiation_ref_press(num_levels+1,2))
@@ -131,6 +134,14 @@ enddo
 
 call get_grid_boundaries(lon_boundaries, lat_boundaries)
 
+do i = is,ie+1
+  lon_boundaries_2d(i,:) = lon_boundaries(i)
+enddo
+
+do j = js,je+1
+  lat_boundaries_2d(:,j) = lat_boundaries(j)
+enddo
+
 call get_number_tracers(MODEL_ATMOS, num_diag=num_diag)
 if(num_diag > 0) then
   call error_mesg('spectral_physics_init', &
@@ -143,17 +154,17 @@ call get_number_tracers(MODEL_ATMOS, num_prog=num_tracers)
 
 call set_domain(grid_domain)
 
-if(do_mcm_moist_processes) then
-  call mcm_moist_processes_init( ie-is+1, je-js+1, num_levels, axes, Time)
-else
-  call moist_processes_init(ie-is+1, je-js+1, num_levels, lon_boundaries, lat_boundaries, &
-                            radiation_ref_press(:,1), axes, Time, do_donner)
-endif
+! if(do_mcm_moist_processes) then
+!   ! call mcm_moist_processes_init( ie-is+1, je-js+1, num_levels, axes, Time)
+! else
+  call moist_processes_init(ie-is+1, je-js+1, num_levels, lon_boundaries_2d, lat_boundaries_2d, &
+                            rad_lon_2d, rad_lat_2d, p_half, radiation_ref_press(:,1), axes, Time, do_donner)                        
+! endif
 
 allocate(grid_tracers(is:ie, js:je, num_levels, num_tracers))
 grid_tracers = 0.
 
-call physics_driver_init(Time, lon_boundaries, lat_boundaries, axes, radiation_ref_press, grid_tracers, Surf_diff, p_half, grid_domain, is_in=is, ie_in=ie, js_in=js, je_in=je, num_levels_in=num_levels, nhum_in = nhum, surf_geopotential = surf_geopotential_in, Time_step = time_step_in)
+call physics_driver_init(Time, lon_boundaries_2d, lat_boundaries_2d, rad_lon_2d, rad_lat_2d, axes, radiation_ref_press, grid_tracers, Surf_diff, p_half, grid_domain, is_in=is, ie_in=ie, js_in=js, je_in=je, num_levels_in=num_levels, nhum_in = nhum, surf_geopotential = surf_geopotential_in, Time_step = time_step_in)
 
 if(sum(grid_tracers) /= 0.) then
   call error_mesg('spectral_physics_init','This version of the spectral atmospheric model not coded to handle'// &
@@ -201,7 +212,7 @@ end subroutine spectral_physics_init
 
 subroutine spectral_physics_down(Time_prev, Time, Time_next, previous, current,                                   &
                         p_half, p_full, z_half, z_full, psg, ug, vg, tg, grid_tracers,                            &
-                        frac_land, rough_mom, albedo, t_surf, u_star, b_star, q_star, dtau_du, dtau_dv, tau_x, tau_y, &
+                        frac_land, rough_mom, frac_open_sea, albedo, t_surf, u_star, b_star, q_star, dtau_du, dtau_dv, tau_x, tau_y, &
                         albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif,                           &
                         dt_ug, dt_vg, dt_tg, dt_tracers, flux_sw, flux_sw_dir, flux_sw_dif, flux_sw_down_vis_dir, &
                         flux_sw_down_vis_dif, flux_sw_down_total_dir, flux_sw_down_total_dif, flux_sw_vis,        &
@@ -214,7 +225,7 @@ real,    intent(in),    dimension(:,:,:,:  ) :: p_half, z_half
 real,    intent(in),    dimension(:,:,:    ) :: psg
 real,    intent(in),    dimension(:,:,:,:  ) :: ug, vg, tg
 real,    intent(inout), dimension(:,:,:,:,:) :: grid_tracers
-real,    intent(in),    dimension(:,:      ) :: frac_land, rough_mom, albedo, t_surf, u_star, b_star, q_star, dtau_du, dtau_dv
+real,    intent(in),    dimension(:,:      ) :: frac_land, rough_mom, frac_open_sea, albedo, t_surf, u_star, b_star, q_star, dtau_du, dtau_dv
 real,    intent(inout), dimension(:,:      ) :: tau_x, tau_y
 real,    intent(in),    dimension(:,:      ) :: albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif
 real,    intent(inout), dimension(:,:,:    ) :: dt_ug, dt_vg, dt_tg
@@ -250,7 +261,7 @@ if(do_moist_in_phys_up()) then
           grid_tracers(:,:,:,current,:), ug(:,:,:,previous), vg(:,:,:,previous), &
                     tg(:,:,:,previous), grid_tracers(:,:,:,previous,nhum),       &
           grid_tracers(:,:,:,previous,:),                                        &
-             frac_land, rough_mom,      albedo,                                  &
+             frac_land, rough_mom,      frac_open_sea, albedo,                                  &
                albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif,   &
                 t_surf,    u_star,      b_star, q_star,                          &
                dtau_du, dtau_dv,     tau_x,       tau_y,                         &
@@ -260,7 +271,7 @@ if(do_moist_in_phys_up()) then
                flux_sw_down_vis_dif, flux_sw_down_total_dir,                     &
                flux_sw_down_total_dif, flux_sw_vis,                              &
                flux_sw_vis_dir, flux_sw_vis_dif,                                 &
-               flux_lw, coszen, gust, Surf_diff, gavg_rrv, previous_in = previous, current_in = current)
+               flux_lw, coszen, gust, Surf_diff, gavg_rrv)
 else
   call physics_driver_down(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,   &
             rad_lat_2d,    rad_lon_2d,  area_2d,                                 &
@@ -271,7 +282,7 @@ else
           grid_tracers(:,:,:,current,:), ug(:,:,:,previous), vg(:,:,:,previous), &
                     tg(:,:,:,previous), grid_tracers(:,:,:,previous,nhum),       &
           grid_tracers(:,:,:,previous,:),                                        &
-             frac_land, rough_mom,      albedo,                                  &
+             frac_land, rough_mom, frac_open_sea,      albedo,                   &
                albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif,   &
                 t_surf,    u_star,      b_star, q_star,                          &
                dtau_du, dtau_dv,     tau_x,       tau_y,                         &
@@ -282,7 +293,7 @@ else
                flux_sw_down_total_dif, flux_sw_vis,                              &
                flux_sw_vis_dir, flux_sw_vis_dif,                                 &
                flux_lw, coszen, gust, Surf_diff, gavg_rrv, diff_cum_mom=diff_cu_mo, &
-               moist_convect=convect, previous_in = previous, current_in = current)
+               moist_convect=convect)
 endif
 
 return
@@ -290,7 +301,7 @@ end subroutine spectral_physics_down
 !------------------------------------------------------------------------------------------------
 subroutine spectral_physics_up(Time_prev, Time, Time_next, previous, current, p_half, p_full,     &
                                z_half, z_full, wg_full, ug, vg, tg, grid_tracers,                 &
-                               frac_land, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
+                               frac_land, u_star, v_star, q_star, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
 
 type(time_type), intent(in) :: Time_prev, Time, Time_next
 integer,         intent(in) :: previous, current
@@ -298,7 +309,7 @@ real, intent(in),    dimension(:,:,:,:  ) :: p_full, z_full, wg_full
 real, intent(in),    dimension(:,:,:,:  ) :: p_half, z_half
 real, intent(in),    dimension(:,:,:,:  ) :: ug, vg, tg
 real, intent(in),    dimension(:,:,:,:,:) :: grid_tracers
-real, intent(in),    dimension(:,:      ) :: frac_land
+real, intent(in),    dimension(:,:      ) :: frac_land, u_star, v_star, q_star
 real, intent(inout), dimension(:,:,:    ) :: dt_ug, dt_vg, dt_tg
 real, intent(inout), dimension(:,:,:,:  ) :: dt_tracers
 type(surf_diff_type), intent(inout) :: Surf_diff
@@ -311,16 +322,34 @@ end if
 
 call physics_driver_up(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,    &
                        rad_lat_2d, rad_lon_2d, area_2d,                       &
-                       p_half, p_full, z_half, z_full,                        &
-                       wg_full, ug(:,:,:,current), vg(:,:,:,current),         &
+                       p_half(:,:,:,previous), p_full(:,:,:,previous),        &
+                       z_half(:,:,:,previous), z_full(:,:,:,previous),        & 
+                       wg_full(:,:,:,current), ug(:,:,:,current),             &
+                       vg(:,:,:,current),                                     &
                        tg(:,:,:,current), grid_tracers(:,:,:,current,nhum),   &
                        grid_tracers(:,:,:,current,:),                         &
                        ug(:,:,:,previous), vg(:,:,:,previous),                &
                        tg(:,:,:,previous), grid_tracers(:,:,:,previous,nhum), &
                        grid_tracers(:,:,:,previous,:),                        &
-                       frac_land, dt_ug, dt_vg, dt_tg,                        &
+                       frac_land,                                             &
+                       u_star, v_star, q_star,                                &
+                       dt_ug, dt_vg, dt_tg,                                   &
                        dt_tracers(:,:,:,nhum), dt_tracers, Surf_diff,         &
-                       lprec, fprec, gust, current = current, previous = previous)
+                       lprec, fprec, gust)
+
+                      !  subroutine physics_driver_up (is, ie, js, je,                    &
+                      !   Time_prev, Time, Time_next,        &
+                      !   lat, lon, area,                    &
+                      !   p_half, p_full, z_half, z_full,    &
+                      !   omega,                             &
+                      !   u, v, t, q, r, um, vm, tm, qm, rm, &
+                      !   frac_land,                         &
+                      !   u_star, b_star, q_star,            &
+                      !   udt, vdt, tdt, qdt, rdt,           &
+                      !   Surf_diff,                         &
+                      !   lprec,   fprec, gust,              &
+                      !   mask, kbot,                        &
+                      !   hydrostatic, phys_hydrostatic)
 
 return
 end subroutine spectral_physics_up
@@ -388,7 +417,7 @@ call write_data(trim(file), 'convect', rconvect, grid_domain) ! pjp: No interfac
 deallocate(rad_lon_2d, rad_lat_2d, area_2d, diff_cu_mo, convect)
 call physics_driver_end(Time)
 if(do_mcm_moist_processes) then
-  call mcm_moist_processes_end
+  ! call mcm_moist_processes_end
 else
   call moist_processes_end
 endif

@@ -1084,7 +1084,6 @@ subroutine physics_driver_down (is, ie, js, je,                       &
                                 Time_prev, Time, Time_next,           &
                                 lat, lon, area,                       &
                                 p_half, p_full, z_half, z_full,       &
-                                phalfgrey,                            &
                                 u, v, t, q, r, um, vm, tm, qm, rm,    &
                                 frac_land, rough_mom,                 &
                                 frac_open_sea,                        &
@@ -1123,8 +1122,7 @@ real,dimension(:,:),     intent(in)             :: lat, lon, area
 real,dimension(:,:,:),   intent(in)             :: p_half, p_full,   &
                                                    z_half, z_full,   &
                                                    u , v , t , q ,   &
-                                                   um, vm, tm, qm,   &
-                                                   phalfgrey
+                                                   um, vm, tm, qm
 real,dimension(:,:,:,:), intent(inout)          :: r
 real,dimension(:,:,:,:), intent(inout)          :: rm
 real,dimension(:,:),     intent(in)             :: frac_land,   &
@@ -1414,14 +1412,14 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
       call mpp_clock_end ( radiation_clock )
 
-      if(do_grey_radiation) then !rif:(09/10/09) 
-        call grey_radiation(is, js, Time, Time_next, lat, lon, phalfgrey, albedo, t_surf_rad, t, tdt, flux_sw, flux_lw)
-        coszen = 1.0
-        flux_sw_dir     = R1*flux_sw
-        flux_sw_dif     = R2*flux_sw
-        flux_sw_vis_dir = R3*flux_sw
-        flux_sw_vis_dif = R4*flux_sw
-      endif
+      ! if(do_grey_radiation) then !rif:(09/10/09) 
+      !   call grey_radiation(is, js, Time, Time_next, lat, lon, phalfgrey, albedo, t_surf_rad, t, tdt, flux_sw, flux_lw)
+      !   coszen = 1.0
+      !   flux_sw_dir     = R1*flux_sw
+      !   flux_sw_dif     = R2*flux_sw
+      !   flux_sw_vis_dir = R3*flux_sw
+      !   flux_sw_vis_dif = R4*flux_sw
+      ! endif
 
 !----------------------------------------------------------------------
 !    call damping_driver to calculate the various model dampings that
@@ -1756,7 +1754,7 @@ real,dimension(:,:,:),  intent(in)             :: p_half, p_full,   &
                                                   z_half, z_full,     &
                                                   u , v , t , q ,    &
                                                   um, vm, tm, qm
-real,dimension(:,:,:,:),intent(inout)          :: r,rm       ! cjg: inout
+real,dimension(:,:,:,:),intent(in)          :: r,rm       ! cjg: inout
 real,dimension(:,:),    intent(in)             :: frac_land
 real,dimension(:,:),    intent(in)             :: u_star, b_star, q_star
 real,dimension(:,:,:),  intent(inout)          :: udt,vdt,tdt,qdt

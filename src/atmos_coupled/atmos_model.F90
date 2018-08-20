@@ -204,6 +204,7 @@ subroutine update_atmos_model_down( Surface_boundary, Atmos )
   call mpp_clock_begin(atmClock)
 
     call atmosphere_down (Atmos%Time, Surface_boundary%land_frac,        &
+                          Surface_boundary&frac_open_sea,                &
                           Surface_boundary%t,  Surface_boundary%albedo,  &
                           Surface_boundary%albedo_vis_dir,   &
                           Surface_boundary%albedo_nir_dir,   &
@@ -285,7 +286,7 @@ integer :: nhum
     Atmos%Surf_diff%delta_t = Surface_boundary%dt_t
     Atmos%Surf_diff%delta_tr = Surface_boundary%dt_tr
 
-    call atmosphere_up (Atmos%Time,  Surface_boundary%land_frac, Atmos%Surf_diff, &
+    call atmosphere_up (Atmos%Time,  Surface_boundary%land_frac, Surface_boundary%u_star, Surface_boundary%v_star, Surface_boundary%q_star, Atmos%Surf_diff, &
                         Atmos%lprec, Atmos%fprec, Atmos%gust)
 
 !   --- advance time ---

@@ -255,7 +255,7 @@ return
 end subroutine atmosphere_init
 !#################################################################################################################################
 
-subroutine atmosphere_down(Time, frac_land, t_surf, albedo,                                              &
+subroutine atmosphere_down(Time, frac_land, frac_open_sea, t_surf, albedo,                                              &
                       albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif,                    &
                       rough_mom, u_star, b_star, q_star, dtau_du, dtau_dv, tau_x, tau_y,                 &
                       gust, coszen, flux_sw, flux_sw_dir, flux_sw_dif, flux_sw_down_vis_dir,             &
@@ -263,7 +263,7 @@ subroutine atmosphere_down(Time, frac_land, t_surf, albedo,                     
                       flux_sw_vis_dir, flux_sw_vis_dif, flux_lw, Surf_diff )
 
 type(time_type),      intent(in) :: Time
-real,                 intent(in),    dimension(:,:) :: frac_land, t_surf, albedo
+real,                 intent(in),    dimension(:,:) :: frac_land, frac_open_sea, t_surf, albedo
 real,                 intent(in),    dimension(:,:) :: albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif 
 real,                 intent(in),    dimension(:,:) :: rough_mom, u_star, b_star, q_star, dtau_du, dtau_dv
 real,                 intent(inout), dimension(:,:) :: tau_x, tau_y
@@ -297,7 +297,7 @@ call mpp_clock_begin(phyclock)
 !                              previous, current, dt_ug, dt_vg, dt_tg, dt_tracers)
 
 call spectral_physics_down(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, psg,      &
-                        ug, vg, tg, grid_tracers, frac_land, rough_mom, albedo, t_surf, u_star, b_star, q_star,     &
+                        ug, vg, tg, grid_tracers, frac_land, rough_mom, frac_open_sea, albedo, t_surf, u_star, b_star, q_star,     &
                         dtau_du, dtau_dv, tau_x, tau_y, albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif, &
                         dt_ug, dt_vg, dt_tg, dt_tracers, flux_sw, flux_sw_dir, flux_sw_dif,                         &
                         flux_sw_down_vis_dir, flux_sw_down_vis_dif, flux_sw_down_total_dir, flux_sw_down_total_dif, &
@@ -308,10 +308,11 @@ return
 end subroutine atmosphere_down
 !#################################################################################################################################
 
-subroutine atmosphere_up(Time, frac_land, Surf_diff, lprec, fprec, gust)
+subroutine atmosphere_up(Time, frac_land, u_star, v_star, q_star, Surf_diff, lprec, fprec, gust)
 
 type(time_type),      intent(in)                          :: Time
 real,                 intent(in),  dimension(is:ie,js:je) :: frac_land
+real,                 intent(in), dimension(:,:)          :: u_star, v_star, q_star
 type(surf_diff_type), intent(inout)                       :: Surf_diff
 real,                 intent(out), dimension(is:ie,js:je) :: lprec, fprec, gust
 
@@ -324,7 +325,7 @@ endif
 
 call mpp_clock_begin(phyclock)
 call spectral_physics_up(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, wg_full, ug, vg, tg, &
-                         grid_tracers, frac_land, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
+                         grid_tracers, frac_land, u_star, v_star, q_star, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
 call mpp_clock_end(phyclock)
 
 if(previous == current) then
