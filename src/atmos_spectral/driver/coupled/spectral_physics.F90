@@ -301,15 +301,16 @@ end subroutine spectral_physics_down
 !------------------------------------------------------------------------------------------------
 subroutine spectral_physics_up(Time_prev, Time, Time_next, previous, current, p_half, p_full,     &
                                z_half, z_full, wg_full, ug, vg, tg, grid_tracers,                 &
-                               frac_land, u_star, v_star, q_star, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
+                               frac_land, u_star, b_star, q_star, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
 
 type(time_type), intent(in) :: Time_prev, Time, Time_next
 integer,         intent(in) :: previous, current
-real, intent(in),    dimension(:,:,:,:  ) :: p_full, z_full, wg_full
+real, intent(in),    dimension(:,:,:,:  ) :: p_full, z_full
+real, intent(in), dimension(:,:,:)        :: wg_full
 real, intent(in),    dimension(:,:,:,:  ) :: p_half, z_half
 real, intent(in),    dimension(:,:,:,:  ) :: ug, vg, tg
 real, intent(in),    dimension(:,:,:,:,:) :: grid_tracers
-real, intent(in),    dimension(:,:      ) :: frac_land, u_star, v_star, q_star
+real, intent(in),    dimension(:,:      ) :: frac_land, u_star, b_star, q_star
 real, intent(inout), dimension(:,:,:    ) :: dt_ug, dt_vg, dt_tg
 real, intent(inout), dimension(:,:,:,:  ) :: dt_tracers
 type(surf_diff_type), intent(inout) :: Surf_diff
@@ -324,7 +325,7 @@ call physics_driver_up(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,    &
                        rad_lat_2d, rad_lon_2d, area_2d,                       &
                        p_half(:,:,:,previous), p_full(:,:,:,previous),        &
                        z_half(:,:,:,previous), z_full(:,:,:,previous),        & 
-                       wg_full(:,:,:,current), ug(:,:,:,current),             &
+                       wg_full(:,:,:), ug(:,:,:,current),             &
                        vg(:,:,:,current),                                     &
                        tg(:,:,:,current), grid_tracers(:,:,:,current,nhum),   &
                        grid_tracers(:,:,:,current,:),                         &
@@ -332,7 +333,7 @@ call physics_driver_up(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,    &
                        tg(:,:,:,previous), grid_tracers(:,:,:,previous,nhum), &
                        grid_tracers(:,:,:,previous,:),                        &
                        frac_land,                                             &
-                       u_star, v_star, q_star,                                &
+                       u_star, b_star, q_star,                                &
                        dt_ug, dt_vg, dt_tg,                                   &
                        dt_tracers(:,:,:,nhum), dt_tracers, Surf_diff,         &
                        lprec, fprec, gust)

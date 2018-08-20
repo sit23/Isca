@@ -6,10 +6,8 @@ use               fms_mod, only: mpp_pe, mpp_root_pe, error_mesg, FATAL, write_v
                                  stdlog, close_file, open_namelist_file, check_nml_error, file_exist, field_size, &
                                  read_data, write_data, NOTE
 
-use    physics_driver_mod, only: do_moist_in_phys_up
-
 use  spectral_physics_mod, only: spectral_physics_init, spectral_physics_down, spectral_physics_up, &
-                                 spectral_physics_end, surf_diff_type, spectral_physics_moist
+                                 spectral_physics_end, surf_diff_type
 
 use     field_manager_mod, only: MODEL_ATMOS
 
@@ -232,7 +230,7 @@ enddo
 
 !    call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), Surf_diff, grid_domain)
 
-call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes, surf_geopotential_in = surf_geopotential, time_step_in=Time_step)
+call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half(:,:,:,current), do_mcm_moist_processes, surf_geopotential_in = surf_geopotential, time_step_in=Time_step)
 
 if(dry_model) then
   call compute_pressures_and_heights(tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full(:,:,:,current), z_half(:,:,:,current), p_full(:,:,:,current), p_half(:,:,:,current))
@@ -308,11 +306,11 @@ return
 end subroutine atmosphere_down
 !#################################################################################################################################
 
-subroutine atmosphere_up(Time, frac_land, u_star, v_star, q_star, Surf_diff, lprec, fprec, gust)
+subroutine atmosphere_up(Time, frac_land, u_star, b_star, q_star, Surf_diff, lprec, fprec, gust)
 
 type(time_type),      intent(in)                          :: Time
 real,                 intent(in),  dimension(is:ie,js:je) :: frac_land
-real,                 intent(in), dimension(:,:)          :: u_star, v_star, q_star
+real,                 intent(in), dimension(:,:)          :: u_star, b_star, q_star
 type(surf_diff_type), intent(inout)                       :: Surf_diff
 real,                 intent(out), dimension(is:ie,js:je) :: lprec, fprec, gust
 
@@ -325,7 +323,7 @@ endif
 
 call mpp_clock_begin(phyclock)
 call spectral_physics_up(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, wg_full, ug, vg, tg, &
-                         grid_tracers, frac_land, u_star, v_star, q_star, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
+                         grid_tracers, frac_land, u_star, b_star, q_star, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
 call mpp_clock_end(phyclock)
 
 if(previous == current) then
