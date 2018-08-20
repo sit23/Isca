@@ -75,7 +75,7 @@ use fms_mod,                 only: mpp_clock_id, mpp_clock_begin,   &
 use fms_io_mod,              only: restore_state, &
                                    register_restart_field, restart_file_type, &
                                    save_restart, get_mosaic_tile_file
-use constants_mod,           only: RDGAS
+use constants_mod,           only: RDGAS, PI
 
 use diag_manager_mod,        only: register_diag_field, send_data
 
@@ -583,7 +583,8 @@ integer, dimension(:), allocatable :: id_tracer_phys,         &  ! cjg
 !subroutine physics_driver_init (Time, lonb, latb, axes, pref, &
 subroutine physics_driver_init (Time, lonb, latb, lon, lat, axes, pref, &
                                 trs, Surf_diff, phalf, grid_domain_in, mask, kbot, &
-                                diffm, difft  )
+                                diffm, difft, is_in, ie_in, js_in, je_in, num_levels_in, nhum_in, &
+                                surf_geopotential, Time_step  )
 !<--cjg
 !---------------------------------------------------------------------
 !    physics_driver_init is the constructor for physics_driver_mod.
@@ -601,6 +602,10 @@ type(domain2D),          intent(in)              :: grid_domain_in
 real,dimension(:,:,:),   intent(in),   optional  :: mask
 integer,dimension(:,:),  intent(in),   optional  :: kbot
 real, dimension(:,:,:),  intent(out),  optional  :: diffm, difft
+
+integer,                 intent(in),   optional  :: is_in, ie_in, js_in, je_in, num_levels_in, nhum_in
+real, dimension(:,:),    intent(in),   optional  :: surf_geopotential
+type(time_type),         intent(in),   optional  :: Time_step
 
 !---------------------------------------------------------------------
 !  intent(in) variables:
@@ -648,6 +653,9 @@ real, dimension(:,:,:),  intent(out),  optional  :: diffm, difft
                            grey_radiation_init_clock , radiative_gases_init_clock, &
                            radiation_init_clock, tracer_init_clock, &
                            cosp_init_clock
+
+      real, dimension(size(lonb,1), size(lonb,2)) :: rad_lonb, rad_latb
+      real, dimension(size(lon,1), size(lon,2))   :: rad_lon, rad_lat
 
 !---------------------------------------------------------------------
 !  local variables:
@@ -699,7 +707,13 @@ real, dimension(:,:,:),  intent(out),  optional  :: diffm, difft
 !       if(do_radiation .and. do_grey_radiation) & 
 !         call error_mesg('physics_driver_init','do_radiation and do_grey_radiation cannot both be .true.',FATAL)
 
-  call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, grid_domain_in, Surf_diff)
+!CONVERT INCOMING DIMENSIONAL ARRAYS INTO RADIANS
+rad_lat = lat * PI/180.
+rad_latb = latb * PI/180.
+rad_lon = lon * PI/180.
+rad_lonb = lonb * PI/180.
+
+  call idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes, surf_geopotential, Time, Time_step, nhum_in, rad_lon, rad_lat, rad_lonb, rad_latb, grid_domain_in, Surf_diff)
 
 !--------------------------------------------------------------------
 !    write version number and namelist to log file.
@@ -1419,7 +1433,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                            p_full, p_half, z_full, z_half,          &
                            um, vm, tm, qm, rm(:,:,:,1:ntp), &
                            udt, vdt, tdt, qdt, rdt,&
-                           z_pbl , mask=mask, kbot=kbot)
+                           z_pbl , mask, kbot)
      call mpp_clock_end ( damping_clock )
 
 !---------------------------------------------------------------------

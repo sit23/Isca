@@ -56,7 +56,7 @@ contains
 
 !------------------------------------------------------------------------------------------------
 
-subroutine spectral_physics_init(Time, axes, Surf_diff, nhum_in, p_half, do_mcm_moist_processes_in)
+subroutine spectral_physics_init(Time, axes, Surf_diff, nhum_in, p_half, do_mcm_moist_processes_in, surf_geopotential_in, time_step_in)
 
 type(time_type), intent(in) :: Time
 integer, intent(in),    dimension(:) :: axes
@@ -64,6 +64,8 @@ type(surf_diff_type), intent(inout) :: Surf_diff
 integer, intent(in) :: nhum_in
 real, intent(in), dimension(:,:,:) :: p_half
 logical, intent(in) :: do_mcm_moist_processes_in
+real, dimension(:,:), intent(in), optional :: surf_geopotential_in
+type(time_type),      intent(in), optional :: time_step_in
 real, allocatable, dimension(:,:,:,:) :: grid_tracers
 
 real, allocatable, dimension(:) :: rad_lon, rad_lat, wts_lat, lon_boundaries, lat_boundaries
@@ -151,7 +153,7 @@ endif
 allocate(grid_tracers(is:ie, js:je, num_levels, num_tracers))
 grid_tracers = 0.
 
-call physics_driver_init(Time, lon_boundaries, lat_boundaries, axes, radiation_ref_press, grid_tracers, Surf_diff, p_half, grid_domain)
+call physics_driver_init(Time, lon_boundaries, lat_boundaries, axes, radiation_ref_press, grid_tracers, Surf_diff, p_half, grid_domain, is_in=is, ie_in=ie, js_in=js, je_in=je, num_levels_in=num_levels, nhum_in = nhum, surf_geopotential = surf_geopotential_in, Time_step = time_step_in)
 
 if(sum(grid_tracers) /= 0.) then
   call error_mesg('spectral_physics_init','This version of the spectral atmospheric model not coded to handle'// &

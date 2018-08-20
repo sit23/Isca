@@ -232,7 +232,7 @@ enddo
 
 !    call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current), Surf_diff, grid_domain)
 
-call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes)
+call spectral_physics_init(Time, get_axis_id(), Surf_diff, nhum, p_half, do_mcm_moist_processes, surf_geopotential_in = surf_geopotential, time_step_in=Time_step)
 
 if(dry_model) then
   call compute_pressures_and_heights(tg(:,:,:,current), psg(:,:,current), surf_geopotential, z_full(:,:,:,current), z_half(:,:,:,current), p_full(:,:,:,current), p_half(:,:,:,current))
