@@ -116,7 +116,6 @@ exp.namelist = namelist = Namelist({
     #Use a large mixed-layer depth, and the Albedo of the CTRL case in Jucker & Gerber, 2017
     'mixed_layer_nml': {
         'tconst' : 285.,
-        'prescribe_initial_dist':True,
         'evaporation':True,   
         'depth': 2.5,                          #Depth of mixed layer used
         'albedo_value': 0.31,                  #Albedo value used             

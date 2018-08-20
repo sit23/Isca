@@ -79,6 +79,8 @@ use diag_integral_mod,     only: diag_integral_field_init, &
 use rad_utilities_mod,     only: aerosol_type
 use moist_proc_utils_mod,  only: capecalcnew, tempavg, column_diag, rh_calc, pmass
 
+use idealized_moist_phys_mod, only: idealized_convection_and_lscale_cond
+
 ! use moistproc_kernels_mod, only: moistproc_init, moistproc_end, moistproc_mca, &
 !                                  moistproc_ras, moistproc_lscale_cond,         &
 !                                  moistproc_strat_cloud, moistproc_cmt,         &
@@ -99,7 +101,7 @@ private
 
    public   moist_processes, moist_processes_init, moist_processes_end, &
             moist_alloc_init, moist_alloc_end,  set_cosp_precip_sources, &
-            moist_processes_time_vary, moist_processes_endts, &
+            moist_processes_endts, &
             doing_strat, moist_processes_restart
   
 
@@ -1100,19 +1102,19 @@ end subroutine moist_processes
 
 !#####################################################################
  
-subroutine moist_processes_time_vary (dt)
+! subroutine moist_processes_time_vary (dt)
 
-real, intent(in) :: dt
+! real, intent(in) :: dt
 
 
-      if (do_donner_deep) then
-        call donner_deep_time_vary (dt)
-      endif
-      if (do_strat .and. .not. do_legacy_strat_cloud) then
-        call strat_cloud_time_vary (dt, limit_conv_cloud_frac)
-      endif
+!       if (do_donner_deep) then
+!         call donner_deep_time_vary (dt)
+!       endif
+!       if (do_strat .and. .not. do_legacy_strat_cloud) then
+!         call strat_cloud_time_vary (dt, limit_conv_cloud_frac)
+!       endif
 
-end subroutine moist_processes_time_vary
+! end subroutine moist_processes_time_vary
 
 
 !#####################################################################
@@ -1121,9 +1123,9 @@ subroutine moist_processes_endts (is, js)
  
 integer, intent(in) :: is,js
 
-      if (do_donner_deep) then
-        call donner_deep_endts
-      endif 
+      ! if (do_donner_deep) then
+      !   call donner_deep_endts
+      ! endif 
 
 
       call sum_diag_integral_field ('prec', prec_intgl)
@@ -1227,25 +1229,25 @@ integer, intent (out), optional :: clubb_term_clock
 ! ---> h1g, if CLUBB is in moist-process, CLUBB ends here
           if( do_clubb == 2) then
               call mpp_clock_begin ( clubb_term_clock )
-              call clubb_end
+              ! call clubb_end
               call mpp_clock_end ( clubb_term_clock )
           endif
 ! <--- h1g, if CLUBB is in moist-process, CLUBB ends here
-          call MG_microp_3D_end
+          ! call MG_microp_3D_end
         else
-          call strat_cloud_end
+          ! call strat_cloud_end
         end if
       end if
 ! <--- h1g, cjg
 
-      call  detr_ice_num_end
-      if (do_rh_clouds)   call   rh_clouds_end
-      if (do_diag_clouds) call  diag_cloud_end
-      if (do_donner_deep) call donner_deep_end
-      if (do_cmt        ) call cu_mo_trans_end
-      if (do_ras        ) call         ras_end
-      if (do_uw_conv    ) call     uw_conv_end
-      if (do_lin_cld_microphys) call lin_cld_microphys_end
+      ! call  detr_ice_num_end
+      ! if (do_rh_clouds)   call   rh_clouds_end
+      ! if (do_diag_clouds) call  diag_cloud_end
+      ! if (do_donner_deep) call donner_deep_end
+      ! if (do_cmt        ) call cu_mo_trans_end
+      ! if (do_ras        ) call         ras_end
+      ! if (do_uw_conv    ) call     uw_conv_end
+      ! if (do_lin_cld_microphys) call lin_cld_microphys_end
 
       deallocate (max_water_imbal)
       deallocate (max_enthalpy_imbal)
@@ -1275,9 +1277,9 @@ end subroutine moist_processes_end
 subroutine moist_processes_restart(timestamp)
   character(len=*), intent(in), optional :: timestamp
 
-  if (do_strat)       call strat_cloud_restart(timestamp)
-  if (do_diag_clouds) call diag_cloud_restart(timestamp)
-  if (do_donner_deep) call donner_deep_restart(timestamp)
+  ! if (do_strat)       call strat_cloud_restart(timestamp)
+  ! if (do_diag_clouds) call diag_cloud_restart(timestamp)
+  ! if (do_donner_deep) call donner_deep_restart(timestamp)
 
 end subroutine moist_processes_restart
 ! </SUBROUTINE> NAME="moist_processes_restart"

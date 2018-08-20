@@ -92,7 +92,6 @@ use rad_utilities_mod,       only: aerosol_type, radiative_gases_type, &
 use  moist_processes_mod,    only: moist_processes,    &
                                    moist_processes_init,  &
                                    set_cosp_precip_sources, &
-                                   moist_processes_time_vary, &
                                    moist_processes_endts, &
                                    moist_processes_end,  &
                                    moist_alloc_init, &
@@ -145,10 +144,10 @@ use         mpp_domains_mod, only: domain2D !s added to enable land reading
 !                                    radiative_gases_end,     &
 !                                    radiative_gases_restart
 
-! use damping_driver_mod,      only: damping_driver,      &
+use damping_driver_mod,      only: damping_driver, &
 !                                    damping_driver_init, &
 !                                    damping_driver_endts, &
-!                                    damping_driver_end,  &
+                                   damping_driver_end
 !                                    damping_driver_restart
 
 ! use grey_radiation_mod,       only: grey_radiation_init, grey_radiation, &
@@ -189,7 +188,7 @@ character(len=128) :: tagname = '$Name: tikal $'
 !-------  interfaces --------
 
 public  physics_driver_init, physics_driver_down,   &
-        physics_driver_down_endts, physics_driver_up_endts, &
+        ! physics_driver_down_endts, physics_driver_up_endts, &
         physics_driver_up, physics_driver_end, &
         do_moist_in_phys_up, get_diff_t, &
         get_radturbten, zero_radturbten, physics_driver_restart
@@ -773,83 +772,83 @@ rad_lonb = lonb * PI/180.
 ! </SUBROUTINE>
 !
 
-subroutine physics_driver_down_time_vary (Time, Time_next, gavg_rrv, dt)
+! subroutine physics_driver_down_time_vary (Time, Time_next, gavg_rrv, dt)
 
-!---------------------------------------------------------------------
-!    physics_driver_down_time_vary makes sure that all time-dependent, 
-!    spacially-independent calculations are completed before entering window 
-!    or thread loops. Resultant fields are usually saved as module variables in 
-!    the module where needed.
-!-----------------------------------------------------------------------
+! !---------------------------------------------------------------------
+! !    physics_driver_down_time_vary makes sure that all time-dependent, 
+! !    spacially-independent calculations are completed before entering window 
+! !    or thread loops. Resultant fields are usually saved as module variables in 
+! !    the module where needed.
+! !-----------------------------------------------------------------------
 
-type(time_type),         intent(in)             :: Time, Time_next
-real, dimension(:),      intent(in)             :: gavg_rrv
-real,                    intent(in)             :: dt
+! type(time_type),         intent(in)             :: Time, Time_next
+! real, dimension(:),      intent(in)             :: gavg_rrv
+! real,                    intent(in)             :: dt
 
-!---------------------------------------------------------------------      
-      if (do_radiation) then
-!----------------------------------------------------------------------
-!    call define_rad_times to obtain the time to be used in the rad-
-!    iation calculation (Rad_time) and to determine which, if any, 
-!    externally-supplied inputs to radiation_driver must be obtained on 
-!    this timestep.  logical flags are returned indicating the need or 
-!    lack of need for the aerosol fields, the cloud fields, the rad-
-!    iative gas fields, and the basic atmospheric variable fields.
-!----------------------------------------------------------------------
-        call define_rad_times (Time, Time_next, Rad_time, &
-                               need_aerosols, need_clouds, &
-                               need_gases, need_basic)
-        call aerosol_time_vary (Rad_time)
-        call radiative_gases_time_vary (Rad_time, gavg_rrv,  &
-                                                           Rad_gases_tv)
-        call radiation_driver_time_vary (Rad_time, Rad_gases_tv)
+! !---------------------------------------------------------------------      
+!       if (do_radiation) then
+! !----------------------------------------------------------------------
+! !    call define_rad_times to obtain the time to be used in the rad-
+! !    iation calculation (Rad_time) and to determine which, if any, 
+! !    externally-supplied inputs to radiation_driver must be obtained on 
+! !    this timestep.  logical flags are returned indicating the need or 
+! !    lack of need for the aerosol fields, the cloud fields, the rad-
+! !    iative gas fields, and the basic atmospheric variable fields.
+! !----------------------------------------------------------------------
+!         call define_rad_times (Time, Time_next, Rad_time, &
+!                                need_aerosols, need_clouds, &
+!                                need_gases, need_basic)
+!         call aerosol_time_vary (Rad_time)
+!         call radiative_gases_time_vary (Rad_time, gavg_rrv,  &
+!                                                            Rad_gases_tv)
+!         call radiation_driver_time_vary (Rad_time, Rad_gases_tv)
         
-!--------------------------------------------------------------------
-!    define step_to_call_cosp to indicate that this is a radiation
-!    step and therefore one on which COSP should be called in 
-!    physics_driver_up.
-!--------------------------------------------------------------------
-        if (need_basic) then
-          step_to_call_cosp = .true.
-        else
-          step_to_call_cosp = .false.
-        endif
+! !--------------------------------------------------------------------
+! !    define step_to_call_cosp to indicate that this is a radiation
+! !    step and therefore one on which COSP should be called in 
+! !    physics_driver_up.
+! !--------------------------------------------------------------------
+!         if (need_basic) then
+!           step_to_call_cosp = .true.
+!         else
+!           step_to_call_cosp = .false.
+!         endif
 
-      endif
-      call damping_driver_time_vary (dt)
-      call atmos_tracer_driver_time_vary (Time)
+!       endif
+!       call damping_driver_time_vary (dt)
+!       call atmos_tracer_driver_time_vary (Time)
 
 
-!-------------------------------------------------------------------------      
+! !-------------------------------------------------------------------------      
 
-end subroutine physics_driver_down_time_vary
+! end subroutine physics_driver_down_time_vary
 
 
 
 !######################################################################
 
-subroutine physics_driver_down_endts(is,js)
+! subroutine physics_driver_down_endts(is,js)
 
-integer, intent(in)  :: is,js
+! integer, intent(in)  :: is,js
 
-      call damping_driver_endts
-      call atmos_tracer_driver_endts
+!       call damping_driver_endts
+!       call atmos_tracer_driver_endts
 
-      IF (do_radiation) THEN
-         CALL aerosol_endts
-         CALL radiation_driver_endts  (is, js, Rad_gases_tv)
-         CALL radiative_gases_endts
-      END IF
+!       IF (do_radiation) THEN
+!         !  CALL aerosol_endts
+!          CALL radiation_driver_endts  (is, js, Rad_gases_tv)
+!          CALL radiative_gases_endts
+!       END IF
    
 
-!--------------------------------------------------------------------
-!    set a flag to indicate that this check was done and need not be
-!    done again.
-!--------------------------------------------------------------------
-      do_check_args = .false.
+! !--------------------------------------------------------------------
+! !    set a flag to indicate that this check was done and need not be
+! !    done again.
+! !--------------------------------------------------------------------
+!       do_check_args = .false.
 
 
-end subroutine physics_driver_down_endts
+! end subroutine physics_driver_down_endts
 
 !######################################################################
 
@@ -858,7 +857,7 @@ subroutine physics_driver_up_endts (is,js)
 integer, intent(in)  :: is,js
 
       call moist_processes_endts (is,js)
-      call aerosol_endts
+      ! call aerosol_endts
 
 end subroutine physics_driver_up_endts
 
@@ -1480,19 +1479,19 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !-----------------------------------------------------------------------
 !    process any tracer fields.
 !-----------------------------------------------------------------------
-      call mpp_clock_begin ( tracer_clock )
-      call atmos_tracer_driver (is, ie, js, je, Time, lon, lat,  &
-                                area, z_pbl, rough_mom,         &
-                                frac_open_sea,   &
-                                frac_land, p_half, p_full,  &
-                                u, v, t, q, r, &
-                                rm, rdt, dt, &
-                                u_star, b_star, q_star, &
-                                z_half, z_full, t_surf_rad, albedo, &
-                                Time_next, &
-                                flux_sw_down_vis_dir, flux_sw_down_vis_dif, &  
-                                mask, kbot)
-      call mpp_clock_end ( tracer_clock )
+      ! call mpp_clock_begin ( tracer_clock )
+      ! call atmos_tracer_driver (is, ie, js, je, Time, lon, lat,  &
+      !                           area, z_pbl, rough_mom,         &
+      !                           frac_open_sea,   &
+      !                           frac_land, p_half, p_full,  &
+      !                           u, v, t, q, r, &
+      !                           rm, rdt, dt, &
+      !                           u_star, b_star, q_star, &
+      !                           z_half, z_full, t_surf_rad, albedo, &
+      !                           Time_next, &
+      !                           flux_sw_down_vis_dir, flux_sw_down_vis_dif, &  
+      !                           mask, kbot)
+      ! call mpp_clock_end ( tracer_clock )
 
 !-----------------------------------------------------------------------
 !    optionally use an implicit calculation of the vertical diffusion 
@@ -2130,28 +2129,28 @@ integer :: clubb_term_clock
       call mpp_clock_end ( diff_term_clock )
       if (do_radiation) then
         call mpp_clock_begin ( radiation_term_clock )
-        call radiation_driver_end
+        ! call radiation_driver_end
         call mpp_clock_end ( radiation_term_clock )
         call mpp_clock_begin ( radiative_gases_term_clock )
-        call radiative_gases_end
+        ! call radiative_gases_end
         call mpp_clock_end ( radiative_gases_term_clock )
         call mpp_clock_begin ( cloud_spec_term_clock )
-        call cloud_spec_end
+        ! call cloud_spec_end
         call mpp_clock_end ( cloud_spec_term_clock )
         call mpp_clock_begin ( aerosol_term_clock )
-        call aerosol_end
+        ! call aerosol_end
         call mpp_clock_end ( aerosol_term_clock )
       endif
       call mpp_clock_begin ( grey_radiation_term_clock )
 
-      if(do_grey_radiation) call grey_radiation_end 
+      ! if(do_grey_radiation) call grey_radiation_end 
 
       call mpp_clock_end ( grey_radiation_term_clock )
       call mpp_clock_begin ( moist_processes_term_clock )
       call moist_processes_end( clubb_term_clock )
       call mpp_clock_end ( moist_processes_term_clock )
       call mpp_clock_begin ( tracer_term_clock )
-      call atmos_tracer_driver_end
+      ! call atmos_tracer_driver_end
       call mpp_clock_end ( tracer_term_clock )
       call mpp_clock_begin ( damping_term_clock )
       call damping_driver_end
@@ -2235,12 +2234,12 @@ subroutine physics_driver_restart(timestamp)
   call physics_driver_netcdf(timestamp)
   call vert_turb_driver_restart(timestamp)
   if (do_radiation) then
-    call radiation_driver_restart(timestamp)
-    call radiative_gases_restart(timestamp)
+    ! call radiation_driver_restart(timestamp)
+    ! call radiative_gases_restart(timestamp)
   endif
 
 !    call moist_processes_restart(timestamp)
-  call damping_driver_restart(timestamp)
+  ! call damping_driver_restart(timestamp)
 
 end subroutine physics_driver_restart
 ! </SUBROUTINE> NAME="physics_driver_restart"
