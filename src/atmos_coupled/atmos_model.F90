@@ -386,10 +386,10 @@ type (time_type), intent(in) :: Time_init, Time, Time_step
         
 !-----------------------------------------------------------------------
 !  ----- initialize atmospheric model -----
-
+write(6,*) 'initializing atmosphere'
     call atmosphere_init (Atmos%Time_init, Atmos%Time, Atmos%Time_step,&
                           Atmos%Surf_diff )
-    
+write(6,*) 'done initializing atmosphere'    
 !-----------------------------------------------------------------------
 !---- allocate space ----
 

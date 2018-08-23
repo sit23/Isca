@@ -1236,7 +1236,8 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !    local variables:
 
       real, dimension(size(u,1),size(u,2),size(u,3)) :: diff_t_vert, &
-                                                        diff_m_vert
+                                                        diff_m_vert, udt_idm, vdt_idm, tdt_idm
+      real, dimension(size(rdt,1), size(rdt,2), size(rdt,3), size(rdt,4)) :: rdt_idm
       real, dimension(size(u,1),size(u,2))           :: z_pbl 
       type(aerosol_type)                             :: Aerosol
       type(cld_specification_type)                   :: Cld_spec
@@ -1315,6 +1316,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                          'module has not been initialized', FATAL)
       endif
 
+      write(6,*) 'made it to physics driver down'
 !---------------------------------------------------------------------
 !    if COSP is activated, save the surface (skin) temperature for
 !    its use.
@@ -1377,9 +1379,9 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       !   moist_convect, diffm, difft  )      
 
 
-
+      write(6,*) 'made it to idmp call'
     call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, udt, vdt, tdt, rdt, .false., mask, kbot)      
-
+    write(6,*) 'Done idmp call'
 !-------------------------------------------------------------------
 !    process the variables returned from radiation_driver_mod. the 
 !    radiative heating rate is added to the accumulated physics heating
@@ -1391,24 +1393,26 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !    accumulating the radiative and turbulent heating rates, and which
 !    is needed by strat_cloud_mod.
 !-------------------------------------------------------------------
-      tdt     = tdt + Radiation%tdt_rad(:,:,:,1)
+    write(6,*) 'applying tendencies'
+      ! tdt     = tdt + tdt_idm
+    !PROBLEM IS CURRENTLY HERE, where Radiation object is not defined and so getting seg faults. Need to work out relationship between all these variables in order to divide them up. 
       flux_sw = Radiation%flux_sw_surf(:,:,1)
-      flux_sw_dir            = Radiation%flux_sw_surf_dir(:,:,1)
-      flux_sw_dif            = Radiation%flux_sw_surf_dif(:,:,1)
-      flux_sw_down_vis_dir   = Radiation%flux_sw_down_vis_dir(:,:,1)
-      flux_sw_down_vis_dif   = Radiation%flux_sw_down_vis_dif(:,:,1)
-      flux_sw_down_total_dir = Radiation%flux_sw_down_total_dir(:,:,1)
-      flux_sw_down_total_dif = Radiation%flux_sw_down_total_dif(:,:,1)
-      flux_sw_vis            = Radiation%flux_sw_vis(:,:,1)
-      flux_sw_vis_dir        = Radiation%flux_sw_vis_dir(:,:,1)
-      flux_sw_vis_dif        = Radiation%flux_sw_vis_dif(:,:,1)
-      flux_lw = Radiation%flux_lw_surf
-      coszen  = Radiation%coszen_angle
-      lw_tendency(is:ie,js:je,:) = Radiation%tdtlw(:,:,:)
-      radturbten (is:ie,js:je,:) = radturbten(is:ie,js:je,:) + &
-                                   Radiation%tdt_rad(:,:,:,1)
+      ! flux_sw_dir            = Radiation%flux_sw_surf_dir(:,:,1)
+      ! flux_sw_dif            = Radiation%flux_sw_surf_dif(:,:,1)
+      ! flux_sw_down_vis_dir   = Radiation%flux_sw_down_vis_dir(:,:,1)
+      ! flux_sw_down_vis_dif   = Radiation%flux_sw_down_vis_dif(:,:,1)
+      ! flux_sw_down_total_dir = Radiation%flux_sw_down_total_dir(:,:,1)
+      ! flux_sw_down_total_dif = Radiation%flux_sw_down_total_dif(:,:,1)
+      ! flux_sw_vis            = Radiation%flux_sw_vis(:,:,1)
+      ! flux_sw_vis_dir        = Radiation%flux_sw_vis_dir(:,:,1)
+      ! flux_sw_vis_dif        = Radiation%flux_sw_vis_dif(:,:,1)
+      ! flux_lw = Radiation%flux_lw_surf
+      ! coszen  = Radiation%coszen_angle
+      ! lw_tendency(is:ie,js:je,:) = Radiation%tdtlw(:,:,:)
+      ! radturbten (is:ie,js:je,:) = radturbten(is:ie,js:je,:) + &
+      !                              Radiation%tdt_rad(:,:,:,1)
  
-
+      write(6,*) 'DONE applying tendencies'
       call mpp_clock_end ( radiation_clock )
 
       ! if(do_grey_radiation) then !rif:(09/10/09) 
@@ -1424,6 +1428,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !    call damping_driver to calculate the various model dampings that
 !    are desired. 
 !----------------------------------------------------------------------
+      write(6,*) 'about to do damping driver'
       z_pbl(:,:) = pbltop(is:ie,js:je) 
       call mpp_clock_begin ( damping_clock )
       call damping_driver (is, js, lat, Time_next, dt,           &
@@ -1431,7 +1436,8 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                            um, vm, tm, qm, rm(:,:,:,1:ntp), &
                            udt, vdt, tdt, qdt, rdt,&
                            z_pbl , mask, kbot)
-     call mpp_clock_end ( damping_clock )
+      write(6,*) 'done damping driver'
+      call mpp_clock_end ( damping_clock )
 
 !---------------------------------------------------------------------
 !    call vert_turb_driver to calculate diffusion coefficients. save

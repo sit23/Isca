@@ -402,8 +402,9 @@ do nc = 1, num_cpld_calls
 
      if( Atm%pe )then
          call mpp_set_current_pelist(Atm%pelist)
+         write(6,*) 'UPDATING ICE MODEL'
          if (do_ice) call update_ice_model_slow_up( Ocean_ice_boundary, Ice )
-
+         write(6,*) 'DONE UPDATING ICE MODEL'
 !-----------------------------------------------------------------------
 !   ------ atmos/fast-land/fast-ice integration loop -------
 
@@ -412,13 +413,19 @@ do nc = 1, num_cpld_calls
             Time_atmos = Time_atmos + Time_step_atmos
 
           if (do_flux) then
+            write(6,*) 'SURFACE FLUXES'
             call sfc_boundary_layer( REAL(dt_atmos), Time_atmos, &
                                      Atm, Land, Ice, Land_ice_atmos_boundary )
+            write(6,*) 'DONE SURFACE FLUXES'                                     
           end if
 
 !      ---- atmosphere down ----
-            if (do_atmos) &
-              call update_atmos_model_down( Land_ice_atmos_boundary, Atm )
+            if (do_atmos) then
+                write(6,*) 'ATMOS_MODEL DOWN'
+                call update_atmos_model_down( Land_ice_atmos_boundary, Atm )
+                write(6,*) 'DONE ATMOS_MODEL DOWN'
+            endif
+            write(6,*) 'FLUX DOWN FROM ATMOS'            
           call flux_down_from_atmos( Time_atmos, Atm, Land, Ice, &
                Land_ice_atmos_boundary, &
                Atmos_land_boundary, &
@@ -810,6 +817,7 @@ contains
     if( Atm%pe )then
         call mpp_set_current_pelist(Atm%pelist)
 !---- atmosphere ----
+        write(6,*) 'DOING ATMOS MODEL INIT'
         call atmos_model_init( Atm, Time_init, Time, Time_step_atmos )
         call print_memuse_stats( 'atmos_model_init' )
 
@@ -853,8 +861,10 @@ contains
       call print_memuse_stats( 'land_model_init' )
 
 !---- ice -----------
+      write(6,*) 'DOING ICE MODEL INIT'      
       call ice_model_init( Ice, Time_init, Time, Time_step_atmos, Time_step_cpld )
       call print_memuse_stats( 'ice_model_init' )
+      write(6,*) 'DONE ICE MODEL INIT'            
 !       call data_override_init(Atm_domain_in = Atm%domain, Ice_domain_in = Ice%domain, Land_domain_in=Land%domain)
     end if
   if( Ocean%pe )then
@@ -870,10 +880,11 @@ contains
 !   call mpp_broadcast_domain(Ocean%domain)
 !-----------------------------------------------------------------------
 !---- initialize flux exchange module ----
+    write(6,*) 'DOING flux ex INIT'          
    call flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
         atmos_ice_boundary, land_ice_atmos_boundary, &
         land_ice_boundary, ice_ocean_boundary, ocean_ice_boundary )
-
+        write(6,*) 'DONE flux ex INIT'          
     Time_atmos = Time
     Time_ocean = Time
 

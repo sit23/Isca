@@ -274,6 +274,7 @@ if(.not.module_is_initialized) then
   call error_mesg('atmosphere_down','atmosphere module has not been initialized.', FATAL)
 endif
 
+write(6,*) 'reached atmosphere down'
 dt_psg = 0.
 dt_ug  = 0.
 dt_vg  = 0.
@@ -293,7 +294,7 @@ call mpp_clock_begin(phyclock)
 
 !    call idealized_moist_phys(Time, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, &
 !                              previous, current, dt_ug, dt_vg, dt_tg, dt_tracers)
-
+write(6,*) 'doing spectral physics down'
 call spectral_physics_down(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, psg,      &
                         ug, vg, tg, grid_tracers, frac_land, rough_mom, frac_open_sea, albedo, t_surf, u_star, b_star, q_star,     &
                         dtau_du, dtau_dv, tau_x, tau_y, albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif, &
@@ -301,7 +302,7 @@ call spectral_physics_down(Time_prev, Time, Time_next, previous, current, p_half
                         flux_sw_down_vis_dir, flux_sw_down_vis_dif, flux_sw_down_total_dir, flux_sw_down_total_dif, &
                         flux_sw_vis, flux_sw_vis_dir, flux_sw_vis_dif, flux_lw, coszen,gust, Surf_diff)
 call mpp_clock_end(phyclock)
-
+write(6,*) 'Done spectral physics down'
 return
 end subroutine atmosphere_down
 !#################################################################################################################################
