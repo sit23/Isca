@@ -1396,12 +1396,19 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
     write(6,*) 'applying tendencies'
       ! tdt     = tdt + tdt_idm
     !PROBLEM IS CURRENTLY HERE, where Radiation object is not defined and so getting seg faults. Need to work out relationship between all these variables in order to divide them up. 
-      flux_sw = Radiation%flux_sw_surf(:,:,1)
-      ! flux_sw_dir            = Radiation%flux_sw_surf_dir(:,:,1)
-      ! flux_sw_dif            = Radiation%flux_sw_surf_dif(:,:,1)
-      ! flux_sw_down_vis_dir   = Radiation%flux_sw_down_vis_dir(:,:,1)
-      ! flux_sw_down_vis_dif   = Radiation%flux_sw_down_vis_dif(:,:,1)
-      ! flux_sw_down_total_dir = Radiation%flux_sw_down_total_dir(:,:,1)
+      flux_sw = Radiation%flux_sw_surf(:,:,1) !radiation driver #6026 - net surface sw flux (dfsw - usfw @ surface)
+
+      ! flux_sw_dir            = Radiation%flux_sw_surf_dir(:,:,1) !radiation driver - dfsw_dir_sfc 
+
+      ! flux_sw_dif            = Radiation%flux_sw_surf_dif(:,:,1) ! dfsw_dif_sfc - ufsw_dif_sfc
+
+      ! flux_sw_down_vis_dir   = Radiation%flux_sw_down_vis_dir(:,:,1) ! dfsw_vis_sfc_dir
+
+      ! flux_sw_down_vis_dif   = Radiation%flux_sw_down_vis_dif(:,:,1) !dfsw_vis_sfc_dif 
+
+      ! flux_sw_down_total_dir = Radiation%flux_sw_down_total_dir(:,:,1) ! dfsw_dir_sfc Seems to be the same as flux_sw_dir
+
+
       ! flux_sw_down_total_dif = Radiation%flux_sw_down_total_dif(:,:,1)
       ! flux_sw_vis            = Radiation%flux_sw_vis(:,:,1)
       ! flux_sw_vis_dir        = Radiation%flux_sw_vis_dir(:,:,1)
