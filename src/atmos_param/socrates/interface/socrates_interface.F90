@@ -595,6 +595,7 @@ write(stdlog_unit, socrates_rad_nml)
 
           end if
 
+          input_p = input_p * scale_pressures !Included to scale pressure broadening in gravity experiments
 
           ! Do calculation
           CALL read_control(control_calc, spectrum_calc)

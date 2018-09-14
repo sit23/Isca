@@ -267,6 +267,8 @@ real    :: land_evap_prefactor  =  1.0    !s Default is that land makes no diffe
 real    :: flux_heat_gp  =  5.7    !s Default value for Jupiter of 5.7 Wm^-2
 real    :: diabatic_acce =  1.0    !s Diabatic acceleration??
 
+real    :: density_scale = 1.0
+real    :: density_scale_only_sensible_and_mom=1.0
 
 namelist /surface_flux_nml/ no_neg_q,             &
                             use_virtual_temp,     &
@@ -282,7 +284,9 @@ namelist /surface_flux_nml/ no_neg_q,             &
                             land_humidity_prefactor, & !s Added to make land 'dry', i.e. to decrease the evaporative heat flux in areas of land.
                             land_evap_prefactor, & !s Added to make land 'dry', i.e. to decrease the evaporative heat flux in areas of land.
                             flux_heat_gp,         &    !s prescribed lower boundary heat flux on a giant planet
-			    diabatic_acce
+			    diabatic_acce,        &
+                            density_scale,        &
+                            density_scale_only_sensible_and_mom
 
 
 
@@ -509,10 +513,10 @@ subroutine surface_flux_1d (                                           &
      drag_m = cd_m * w_atm
 
      ! density
-     rho = p_atm / (rdgas * tv_atm)
+     rho = density_scale * p_atm / (rdgas * tv_atm)
 
      ! sensible heat flux
-     rho_drag = cp_air * drag_t * rho
+     rho_drag = cp_air * drag_t * rho * density_scale_only_sensible_and_mom
      flux_t = rho_drag * (t_surf0 - th_atm)  ! flux of sensible heat (W/m**2)
      dhdt_surf =  rho_drag                   ! d(sensible heat flux)/d(surface temperature)
      dhdt_atm  = -rho_drag*p_ratio           ! d(sensible heat flux)/d(atmos temperature)
@@ -594,7 +598,7 @@ subroutine surface_flux_1d (                                           &
      drdt_surf = 4*stefan*t_surf**3               ! d(upward longwave)/d(surface temperature)
 
      ! stresses
-     rho_drag   = drag_m * rho
+     rho_drag   = drag_m * rho* density_scale_only_sensible_and_mom
      flux_u     = rho_drag * u_dif   ! zonal      component of stress (Nt/m**2)
      flux_v     = rho_drag * v_dif   ! meridional component of stress
 
@@ -628,8 +632,8 @@ subroutine surface_flux_1d (                                           &
      endwhere
   else
      where(avail)
-        dtaudu_atm = -cd_m*rho*(dw_atmdu*u_dif + w_atm)
-        dtaudv_atm = -cd_m*rho*(dw_atmdv*v_dif + w_atm)
+        dtaudu_atm = -cd_m*rho*(dw_atmdu*u_dif + w_atm)*density_scale_only_sensible_and_mom
+        dtaudv_atm = -cd_m*rho*(dw_atmdv*v_dif + w_atm)*density_scale_only_sensible_and_mom
      endwhere
   endif
 

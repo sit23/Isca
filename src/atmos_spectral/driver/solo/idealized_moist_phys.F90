@@ -106,6 +106,7 @@ integer :: r_conv_scheme = UNSET  ! the selected convection scheme
 logical :: lwet_convection = .false.
 logical :: do_bm = .false.
 logical :: do_ras = .false.
+logical :: do_lscale_cond=.true.
 
 !s Radiation options
 logical :: two_stream_gray = .true.
@@ -150,7 +151,7 @@ namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roug
                                       gp_surface, convection_scheme,          &
                                       bucket, init_bucket_depth, init_bucket_depth_land, & !RG Add bucket 
                                       max_bucket_depth_land, robert_bucket, raw_bucket, &
-                                      do_socrates_radiation
+                                      do_socrates_radiation, do_lscale_cond
 
 
 integer, parameter :: num_time_levels = 2 !RG Add bucket - number of time levels added to allow timestepping in this module
@@ -881,7 +882,7 @@ dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + conv_dt_qg
 
 
 ! Perform large scale convection
-if (r_conv_scheme .ne. DRY_CONV) then
+if (do_lscale_cond) then
   ! Large scale convection is a function of humidity only.  This is
   ! inconsistent with the dry convection scheme, don't run it!
   rain = 0.0; snow = 0.0

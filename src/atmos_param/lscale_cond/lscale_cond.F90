@@ -56,8 +56,9 @@ private
 real    :: hc=1.00
 logical :: do_evap=.false.
 logical :: do_simple =.false.
+real    :: qdel_scaling = 1.0
 
-namelist /lscale_cond_nml/  hc, do_evap, do_simple
+namelist /lscale_cond_nml/  hc, do_evap, do_simple, qdel_scaling
 
 
 !-----------------------------------------------------------------------
@@ -162,7 +163,7 @@ integer  k, kx
 !----------- compute adjustments to temp and spec humidity -------------
    do k = 1,kx
    where (do_adjust(:,:,k))
-      qdel(:,:,k)=(qsat(:,:,k)-qin(:,:,k))/(1.0+hlcp(:,:)*dqsat(:,:,k))
+      qdel(:,:,k)=qdel_scaling * (qsat(:,:,k)-qin(:,:,k))/(1.0+hlcp(:,:)*dqsat(:,:,k))
       tdel(:,:,k)=-hlcp(:,:)*qdel(:,:,k)
    elsewhere
       qdel(:,:,k)=0.0
