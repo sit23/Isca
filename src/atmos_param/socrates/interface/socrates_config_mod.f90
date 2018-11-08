@@ -31,11 +31,14 @@ LOGICAL :: l_planet_grey_surface = .TRUE.
   logical :: account_for_effect_of_ozone=.TRUE. !if False then radiation is fed ozone mixing ratios = 0. If true it's fed mixing ratios based on model ozone field.
   logical :: do_read_ozone = .FALSE. ! read ozone from an external file?
   character(len=256) :: ozone_file_name='ozone' !Name of file containing ozone field - n.b. don't need to include '.nc'
-  character(len=256) :: ozone_field_name='ozone' !Name of ozone variable in ozone file
+  character(len=256) :: ozone_field_name='ozone' !Name of ozone variable in ozone file  
   logical            :: input_o3_file_is_mmr=.true. ! Does the ozone input file contain values as a mass mixing ratio (set to true) or a volume mixing ratio (set to false)?
   logical :: do_read_co2 = .FALSE. ! read ozone from an external file?
   character(len=256) :: co2_file_name='co2' !Name of file containing co2 field - n.b. don't need to include '.nc'
   character(len=256) :: co2_field_name='co2' !Name of co2 variable in co2 file  
+  logical :: do_read_h2o = .FALSE. ! read h2o from an external file?
+  character(len=256) :: h2o_file_name='sphum' !Name of file containing h2o field - n.b. don't need to include '.nc'
+  character(len=256) :: h2o_field_name='sphum' !Name of h2o variable in h2o file  
   real(r_def) :: input_planet_emissivity = 1.0 !Emissivity of surface. Defined as constant all over surface.
   real :: co2_ppmv = 300. !Default CO2 concentration in PPMV
   logical ::  input_co2_mmr=.false. !Socrates wants input concentrations as mmr not vmr, so need to make sure input data supplied is converted if necessary
@@ -117,7 +120,8 @@ LOGICAL :: l_planet_grey_surface = .TRUE.
                              input_planet_emissivity, co2_ppmv, &
                              account_for_effect_of_water, account_for_effect_of_ozone, &
                              do_read_ozone, ozone_file_name, ozone_field_name, input_o3_file_is_mmr, &
-                             do_read_co2, co2_file_name, co2_field_name, input_co2_mmr, &                             
+                             do_read_co2, co2_file_name, co2_field_name, input_co2_mmr, &             
+                             do_read_h2o, h2o_file_name, h2o_field_name,                &
                              solday, do_rad_time_avg, equinox_day,  &
                              store_intermediate_rad, dt_rad_avg, dt_rad, &
                              chunk_size, &
