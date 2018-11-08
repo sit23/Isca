@@ -143,7 +143,7 @@ integer  k, kx
 
 !--- saturation specific humidity (qsat) and deriv wrt temp (dqsat) ---
 
-     call compute_qs (tin, pfull,qsat, hc = hc, dqsdT=dqsat) 
+     call compute_qs (tin, pfull,qsat, q = qin, hc = hc, dqsdT=dqsat) 
 
 !--------- do adjustment where greater than saturated value ------------
 
