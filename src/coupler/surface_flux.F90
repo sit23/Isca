@@ -269,6 +269,11 @@ real    :: diabatic_acce =  1.0    !s Diabatic acceleration??
 
 real    :: density_scale = 1.0
 real    :: density_scale_only_sensible_and_mom=1.0
+real    :: density_scale_only_sensible=1.0
+real    :: density_scale_only_mom=1.0
+
+logical :: constant_surface_winds_to_flux_q = .false.
+real    :: w_atm_specified_constant = 10.0
 
 namelist /surface_flux_nml/ no_neg_q,             &
                             use_virtual_temp,     &
@@ -286,7 +291,11 @@ namelist /surface_flux_nml/ no_neg_q,             &
                             flux_heat_gp,         &    !s prescribed lower boundary heat flux on a giant planet
 			    diabatic_acce,        &
                             density_scale,        &
-                            density_scale_only_sensible_and_mom
+                            density_scale_only_sensible_and_mom,        &
+                            density_scale_only_sensible,        &
+                            density_scale_only_mom, &
+                            constant_surface_winds_to_flux_q, &
+                            w_atm_specified_constant                               
 
 
 
@@ -351,6 +360,7 @@ subroutine surface_flux_1d (                                           &
      w_atm,     u_star,     b_star,     q_star,                        &
      dhdt_surf, dedt_surf,  dedq_surf,  drdt_surf,                     &
      dhdt_atm,  dedq_atm,   dtaudu_atm, dtaudv_atm,                    &
+     q_surf_out,                                                       &
      dt,        land,      seawater,     avail  )
 !</PUBLICROUTINE>
 !  slm Mar 28 2002 -- remove agument drag_q since it is just cd_q*wind
@@ -368,7 +378,7 @@ subroutine surface_flux_1d (                                           &
        dhdt_surf, dedt_surf,  dedq_surf, drdt_surf,          &
        dhdt_atm,  dedq_atm,   dtaudu_atm,dtaudv_atm,         &
        w_atm,     u_star,     b_star,    q_star,             &
-       cd_m,      cd_t,       cd_q
+       cd_m,      cd_t,       cd_q, q_surf_out
   real, intent(inout), dimension(:) :: q_surf
   real, intent(inout), dimension(:) :: bucket_depth                              !RG Add bucket
   real, intent(inout), dimension(:) :: depth_change_lh_1d                        !RG Add bucket
@@ -386,7 +396,7 @@ subroutine surface_flux_1d (                                           &
        e_sat,    e_sat1,   q_sat,     q_sat1,    p_ratio,  &
        t_surf0,  t_surf1,  u_dif,     v_dif,               &
        rho_drag, drag_t,    drag_m,   drag_q,    rho,      &
-       q_atm,    q_surf0,  dw_atmdu,  dw_atmdv,  w_gust
+       q_atm,    q_surf0,  dw_atmdu,  dw_atmdv,  w_gust, w_atm_use
 
   integer :: i, nbad
 
@@ -447,6 +457,8 @@ subroutine surface_flux_1d (                                           &
   end where
   endif
 
+  q_surf_out = q_surf0
+
   ! generate information needed by monin_obukhov
   where (avail)
      p_ratio = (p_surf/p_atm)**kappa
@@ -504,19 +516,25 @@ subroutine surface_flux_1d (                                           &
                              seawater, cd_m, cd_t, cd_q, u_star, b_star     )
   end if
 
+  if (constant_surface_winds_to_flux_q) then
+    w_atm_use = w_atm_specified_constant     
+   else
+     w_atm_use = w_atm
+   endif  
+
   where (avail)
      ! scale momentum drag coefficient on orographic roughness
      cd_m = cd_m*(log(z_atm/rough_mom+1)/log(z_atm/rough_scale+1))**2
      ! surface layer drag coefficients
      drag_t = cd_t * w_atm
-     drag_q = cd_q * w_atm
+     drag_q = cd_q * w_atm_use
      drag_m = cd_m * w_atm
 
      ! density
      rho = density_scale * p_atm / (rdgas * tv_atm)
 
      ! sensible heat flux
-     rho_drag = cp_air * drag_t * rho * density_scale_only_sensible_and_mom
+     rho_drag = cp_air * drag_t * rho * density_scale_only_sensible_and_mom* density_scale_only_sensible
      flux_t = rho_drag * (t_surf0 - th_atm)  ! flux of sensible heat (W/m**2)
      dhdt_surf =  rho_drag                   ! d(sensible heat flux)/d(surface temperature)
      dhdt_atm  = -rho_drag*p_ratio           ! d(sensible heat flux)/d(atmos temperature)
@@ -598,7 +616,7 @@ subroutine surface_flux_1d (                                           &
      drdt_surf = 4*stefan*t_surf**3               ! d(upward longwave)/d(surface temperature)
 
      ! stresses
-     rho_drag   = drag_m * rho* density_scale_only_sensible_and_mom
+     rho_drag   = drag_m * rho* density_scale_only_sensible_and_mom * density_scale_only_mom
      flux_u     = rho_drag * u_dif   ! zonal      component of stress (Nt/m**2)
      flux_v     = rho_drag * v_dif   ! meridional component of stress
 
@@ -652,6 +670,7 @@ subroutine surface_flux_0d (                                                 &
      w_atm_0,     u_star_0,     b_star_0,     q_star_0,                      &
      dhdt_surf_0, dedt_surf_0,  dedq_surf_0,  drdt_surf_0,                   &
      dhdt_atm_0,  dedq_atm_0,   dtaudu_atm_0, dtaudv_atm_0,                  &
+     q_surf_out_0,                                                           &
      dt,          land_0,       seawater_0,  avail_0  )
 
   ! ---- arguments -----------------------------------------------------------
@@ -666,7 +685,7 @@ subroutine surface_flux_0d (                                                 &
        dhdt_surf_0, dedt_surf_0,  dedq_surf_0, drdt_surf_0,            &
        dhdt_atm_0,  dedq_atm_0,   dtaudu_atm_0,dtaudv_atm_0,           &
        w_atm_0,     u_star_0,     b_star_0,    q_star_0,               &
-       cd_m_0,      cd_t_0,       cd_q_0
+       cd_m_0,      cd_t_0,       cd_q_0,      q_surf_out_0
   real, intent(inout) :: q_surf_0
   real, intent(in)    :: dt
 
@@ -683,7 +702,7 @@ subroutine surface_flux_0d (                                                 &
        dhdt_surf, dedt_surf,  dedq_surf, drdt_surf,          &
        dhdt_atm,  dedq_atm,   dtaudu_atm,dtaudv_atm,         &
        w_atm,     u_star,     b_star,    q_star,             &
-       cd_m,      cd_t,       cd_q
+       cd_m,      cd_t,       cd_q,      q_surf_out
   real, dimension(1) :: q_surf
   real, dimension(1) :: bucket_depth                                 !RG Add bucket 
   real, dimension(1) :: depth_change_lh_1d                           !RG Add bucket
@@ -725,6 +744,7 @@ subroutine surface_flux_0d (                                                 &
        w_atm,     u_star,     b_star,     q_star,                        &
        dhdt_surf, dedt_surf,  dedq_surf,  drdt_surf,                     &
        dhdt_atm,  dedq_atm,   dtaudu_atm, dtaudv_atm,                    &
+       q_surf_out,                                                       &
        dt,        land,      seawater, avail  )
 
   flux_t_0     = flux_t(1)
@@ -748,6 +768,7 @@ subroutine surface_flux_0d (                                                 &
   cd_m_0       = cd_m(1)
   cd_t_0       = cd_t(1)
   cd_q_0       = cd_q(1)
+  q_surf_out_0 = q_surf_out(1)
 
 end subroutine surface_flux_0d
 
@@ -763,6 +784,7 @@ subroutine surface_flux_2d (                                           &
      w_atm,     u_star,     b_star,     q_star,                        &
      dhdt_surf, dedt_surf,  dedq_surf,  drdt_surf,                     &
      dhdt_atm,  dedq_atm,   dtaudu_atm, dtaudv_atm,                    &
+     q_surf_out,                                                       &
      dt,        land,       seawater,  avail  )
 
   ! ---- arguments -----------------------------------------------------------
@@ -777,7 +799,7 @@ subroutine surface_flux_2d (                                           &
        dhdt_surf, dedt_surf,  dedq_surf, drdt_surf,          &
        dhdt_atm,  dedq_atm,   dtaudu_atm,dtaudv_atm,         &
        w_atm,     u_star,     b_star,    q_star,             &
-       cd_m,      cd_t,       cd_q
+       cd_m,      cd_t,       cd_q,      q_surf_out
   real, intent(inout), dimension(:,:) :: q_surf
   logical, intent(in) :: bucket !RG Add bucket
   real, intent(inout), dimension(:,:) :: bucket_depth ! RG Add bucket
@@ -802,6 +824,7 @@ subroutine surface_flux_2d (                                           &
           w_atm(:,j),     u_star(:,j),     b_star(:,j),     q_star(:,j),                                  &
           dhdt_surf(:,j), dedt_surf(:,j),  dedq_surf(:,j),  drdt_surf(:,j),                               &
           dhdt_atm(:,j),  dedq_atm(:,j),   dtaudu_atm(:,j), dtaudv_atm(:,j),                              &
+          q_surf_out(:,j),                                                                                &
           dt,             land(:,j),       seawater(:,j),  avail(:,j)  )
   end do
 end subroutine surface_flux_2d

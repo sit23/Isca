@@ -192,6 +192,7 @@ real, allocatable, dimension(:,:)   ::                                        &
      dedq_atm,             &   ! d(latent heat flux)/d(atmospheric mixing rat.)
      dtaudv_atm,           &   ! d(stress component)/d(atmos wind)
      dtaudu_atm,           &   ! d(stress component)/d(atmos wind)
+     q_surf_out,           &   ! Saturated specific humidity of mixed-layer
      fracland,             &   ! fraction of land in gridbox
      rough,                &   ! roughness for vert_turb_driver
      albedo,               &   !s albedo now defined in mixed_layer_init
@@ -261,7 +262,16 @@ integer ::           &
      id_diss_heat_ray,&  ! Heat dissipated by rayleigh bottom drag if gp_surface=.True.
      id_z_tg,        &   ! Relative humidity
      id_cape,        &
-     id_cin
+     id_cin,         &
+     id_w_atm,       &
+     id_drag_m,      &
+     id_drag_t,      &
+     id_drag_q,      &
+     id_cd_m,        &
+     id_cd_t,        &
+     id_cd_q,        &
+     id_rho_drag,    &
+     id_q_surf0, id_flux_q_surf_part, id_flux_q_atm_part, id_flux_u, id_flux_v
 
 integer, allocatable, dimension(:,:) :: convflag ! indicates which qe convection subroutines are used
 real,    allocatable, dimension(:,:) :: rad_lat, rad_lon
@@ -443,6 +453,7 @@ allocate(dhdt_atm    (is:ie, js:je))
 allocate(dedq_atm    (is:ie, js:je))
 allocate(dtaudv_atm  (is:ie, js:je))
 allocate(dtaudu_atm  (is:ie, js:je))
+allocate(q_surf_out   (is:ie, js:je))
 allocate(land        (is:ie, js:je)); land = .false.
 allocate(land_ones   (is:ie, js:je)); land_ones = 0.0
 allocate(avail       (is:ie, js:je)); avail = .true.
@@ -552,10 +563,26 @@ endif
 
 if (gp_surface) then
 call rayleigh_bottom_drag_init(get_axis_id(), Time)
-axes = get_axis_id()
-id_diss_heat_ray = register_diag_field(mod_name, 'diss_heat_ray', &
-                   axes(1:3), Time, 'dissipated heat from Rayleigh drag', 'K/s')
+  axes = get_axis_id()
+  id_diss_heat_ray = register_diag_field(mod_name, 'diss_heat_ray', &
+                     axes(1:3), Time, 'dissipated heat from Rayleigh drag', 'K/s')
+else
+  axes = get_axis_id()
+  id_w_atm = register_diag_field(mod_name, 'w_atm', axes(1:2), Time, 'surface speed for surface fluxes', 'm/s')
+  id_drag_m = register_diag_field(mod_name, 'drag_m', axes(1:2), Time, 'momentum drag_m from surface_flux', '.')
+  id_drag_t = register_diag_field(mod_name, 'drag_t', axes(1:2), Time, 't drag_t from surface_flux', '.')
+  id_drag_q = register_diag_field(mod_name, 'drag_q', axes(1:2), Time, 'q drag_q from surface_flux', '.')
+  id_cd_m = register_diag_field(mod_name, 'cd_m', axes(1:2), Time, 'momentum cd_m from surface_flux', '.')
+  id_cd_t = register_diag_field(mod_name, 'cd_t', axes(1:2), Time, 'momentum cd_t from surface_flux', '.')
+  id_cd_q = register_diag_field(mod_name, 'cd_q', axes(1:2), Time, 'momentum cd_q from surface_flux', '.')
+  id_rho_drag = register_diag_field(mod_name, 'rho_drag', axes(1:2), Time, 'rho_drag from sensible heat', '.')
+  id_q_surf0 = register_diag_field(mod_name, 'q_surf0', axes(1:2), Time, 'q_surf0 from surface flux', '.')
+  id_flux_q_surf_part = register_diag_field(mod_name, 'flux_q_surf_part', axes(1:2), Time, 'flux_q_surf_part', '.')
+  id_flux_q_atm_part = register_diag_field(mod_name, 'flux_q_atm_part', axes(1:2), Time, 'flux_q_atm_part', '.')
+  id_flux_u = register_diag_field(mod_name, 'flux_u', axes(1:2), Time, 'flux zonal momentum', '.')
+  id_flux_v = register_diag_field(mod_name, 'flux_v', axes(1:2), Time, 'flux meridional momentum', '.')  
 endif
+
 
 
 !    initialize damping_driver_mod.
@@ -745,7 +772,7 @@ real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 
 real :: delta_t
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv
-
+real, dimension(size(ug,1), size(ug,2)) :: flux_q_surf_part, flux_q_atm_part
 
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
@@ -980,10 +1007,33 @@ call surface_flux(                                                          &
                                 dedq_atm(:,:),                              & ! is intent(out)
                               dtaudu_atm(:,:),                              & ! is intent(out)
                               dtaudv_atm(:,:),                              & ! is intent(out)
+                              q_surf_out(:,:),                              & ! is intent(out)                              
                                       delta_t,                              &
                                     land(:,:),                              &
                                .not.land(:,:),                              &
                                    avail(:,:)  )
+
+  if(id_w_atm > 0) used = send_data(id_w_atm, w_atm, Time)
+  if(id_drag_m > 0) used = send_data(id_drag_m, drag_m*w_atm, Time)
+  if(id_drag_t > 0) used = send_data(id_drag_t, drag_t*w_atm, Time)
+  if(id_drag_q > 0) used = send_data(id_drag_q, drag_q*w_atm, Time)  
+
+  if(id_cd_m > 0) used = send_data(id_cd_m, drag_m, Time)
+  if(id_cd_t > 0) used = send_data(id_cd_t, drag_t, Time)
+  if(id_cd_q > 0) used = send_data(id_cd_q, drag_q, Time)  
+
+  if(id_rho_drag > 0) used = send_data(id_rho_drag, dhdt_surf, Time)  
+  if(id_q_surf0 > 0) used = send_data(id_q_surf0, q_surf_out, Time)  
+
+  flux_q_surf_part = dhdt_surf * q_surf_out
+  flux_q_atm_part = dhdt_surf * grid_tracers(:,:,num_levels,previous,nsphum)
+
+  if(id_flux_q_surf_part > 0) used = send_data(id_flux_q_surf_part, flux_q_surf_part, Time)  
+  if(id_flux_q_atm_part > 0) used = send_data(id_flux_q_atm_part, flux_q_atm_part, Time)  
+
+  if(id_flux_u > 0) used = send_data(id_flux_u, flux_u, Time)
+  if(id_flux_v > 0) used = send_data(id_flux_v, flux_v, Time)  
+
 endif
 
 ! Now complete the radiation calculation by computing the upward and net fluxes.
