@@ -1,0 +1,15 @@
+echo loadmodules for emps-gv machines new env
+
+module purge
+module load hdf5/1.8.11
+module load netcdf-4.3.3.1-openmpi-intel
+module load git/2.1.2
+
+export netcdf_f_libs=`nf-config --flibs`
+export netcdf_f_flags=`nf-config --fflags --flibs`
+export netcdf_c_flags=`nc-config --cflags --libs`
+
+export GFDL_MKMF_TEMPLATE=ia64
+
+export F90=mpifort
+export CC=mpicc
