@@ -11,16 +11,16 @@ ppdir=./                 # path to directory containing the tool for combining d
 
 # 2. Load the necessary tools into the environment
 source $GFDL_BASE/src/extra/env/$GFDL_ENV
-netcdf_flags=`nc-config --cflags --libs`
+netcdf_c_flags_use=${netcdf_c_flags:-`nc-config --cflags --libs`}
 #--------------------------------------------------------------------------------------------------------
 # compile combine tool
 #cd $ppdir
-$CC -O -c mppnccombine.c $netcdf_flags
+$CC -O -c mppnccombine.c $netcdf_c_flags_use
 if [ $? != 0 ]; then
     echo "ERROR: could not compile combine tool"
     exit 1
 fi
-$CC -O -o mppnccombine.x mppnccombine.o $netcdf_flags
+$CC -O -o mppnccombine.x mppnccombine.o $netcdf_c_flags_use
 if [ $? != 0 ]; then
     echo "ERROR: could not compile combine tool"
     exit 1
