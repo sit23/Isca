@@ -271,7 +271,7 @@ integer ::           &
      id_cd_t,        &
      id_cd_q,        &
      id_rho_drag,    &
-     id_q_surf0, id_flux_q_surf_part, id_flux_q_atm_part, id_flux_u, id_flux_v
+     id_q_surf0, id_flux_q_surf_part, id_flux_q_atm_part, id_flux_u, id_flux_v, id_flux_t_surf_part, id_flux_t_atm_part
 
 integer, allocatable, dimension(:,:) :: convflag ! indicates which qe convection subroutines are used
 real,    allocatable, dimension(:,:) :: rad_lat, rad_lon
@@ -581,6 +581,8 @@ else
   id_flux_q_atm_part = register_diag_field(mod_name, 'flux_q_atm_part', axes(1:2), Time, 'flux_q_atm_part', '.')
   id_flux_u = register_diag_field(mod_name, 'flux_u', axes(1:2), Time, 'flux zonal momentum', '.')
   id_flux_v = register_diag_field(mod_name, 'flux_v', axes(1:2), Time, 'flux meridional momentum', '.')  
+  id_flux_t_surf_part = register_diag_field(mod_name, 'flux_t_surf_part', axes(1:2), Time, 'flux_t_surf_part', '.')
+  id_flux_t_atm_part = register_diag_field(mod_name, 'flux_t_atm_part', axes(1:2), Time, 'flux_t_atm_part', '.')  
 endif
 
 
@@ -772,7 +774,7 @@ real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 
 real :: delta_t
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv
-real, dimension(size(ug,1), size(ug,2)) :: flux_q_surf_part, flux_q_atm_part
+real, dimension(size(ug,1), size(ug,2)) :: flux_q_surf_part, flux_q_atm_part, flux_t_surf_part, flux_t_atm_part
 
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
@@ -1030,6 +1032,12 @@ call surface_flux(                                                          &
 
   if(id_flux_q_surf_part > 0) used = send_data(id_flux_q_surf_part, flux_q_surf_part, Time)  
   if(id_flux_q_atm_part > 0) used = send_data(id_flux_q_atm_part, flux_q_atm_part, Time)  
+
+  flux_t_surf_part = dhdt_surf * t_surf
+  flux_t_atm_part = dhdt_surf * tg(:,:,num_levels,previous)
+
+  if(id_flux_t_surf_part > 0) used = send_data(id_flux_t_surf_part, flux_t_surf_part, Time)  
+  if(id_flux_t_atm_part > 0) used = send_data(id_flux_t_atm_part, flux_t_atm_part, Time)  
 
   if(id_flux_u > 0) used = send_data(id_flux_u, flux_u, Time)
   if(id_flux_v > 0) used = send_data(id_flux_v, flux_v, Time)  
