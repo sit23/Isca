@@ -293,6 +293,13 @@
       real(kind=rb), intent(out) :: swhrc(:,:)        ! Clear sky shortwave radiative heating rate (K/d)
                                                       !    Dimensions: (ncol,nlay)
 
+
+      real(kind=rb) :: swnflx(nlay+2)         ! Total sky shortwave net flux (W/m2) #NEED THIS
+      real(kind=rb) :: dirdflux(nlay+2)       ! Direct downward shortwave surface flux #NEED THIS
+      real(kind=rb) :: uvdflx(nlay+2)         ! Total sky downward shortwave flux, UV/vis  #NEED UPWARD AND THIS
+      real(kind=rb) :: dirdnuv(nlay+2)        ! Direct downward shortwave flux, UV/vis #NEED THIS
+      real(kind=rb) :: difdnuv(nlay+2)        ! Diffuse downward shortwave flux, UV/vis #NEED UPWARD COMPONENT AND THIS
+      real(kind=rb) :: difdnir(nlay+2)        ! Diffuse downward shortwave flux, near-IR #NEED UPWARD COMPONENT AND THIS      
 ! ----- Local -----
 
 ! Control
@@ -414,32 +421,25 @@
       real(kind=rb) :: znicddir(nlay+2)       ! temporary clear sky near-IR downward direct shortwave flux (w/m2)
 
 ! Optional output fields 
-      real(kind=rb) :: swnflx(nlay+2)         ! Total sky shortwave net flux (W/m2)
-      real(kind=rb) :: swnflxc(nlay+2)        ! Clear sky shortwave net flux (W/m2)
-      real(kind=rb) :: dirdflux(nlay+2)       ! Direct downward shortwave surface flux
-      real(kind=rb) :: difdflux(nlay+2)       ! Diffuse downward shortwave surface flux
-      real(kind=rb) :: uvdflx(nlay+2)         ! Total sky downward shortwave flux, UV/vis  
-      real(kind=rb) :: nidflx(nlay+2)         ! Total sky downward shortwave flux, near-IR 
-      real(kind=rb) :: dirdnuv(nlay+2)        ! Direct downward shortwave flux, UV/vis
-      real(kind=rb) :: difdnuv(nlay+2)        ! Diffuse downward shortwave flux, UV/vis
-      real(kind=rb) :: dirdnir(nlay+2)        ! Direct downward shortwave flux, near-IR
-      real(kind=rb) :: difdnir(nlay+2)        ! Diffuse downward shortwave flux, near-IR
+      real(kind=rb) :: swnflxc(nlay+2)        ! Clear sky shortwave net flux (W/m2) #DON'T need this
+      real(kind=rb) :: difdflux(nlay+2)       ! Diffuse downward shortwave surface flux #DON'T need this
+      real(kind=rb) :: nidflx(nlay+2)         ! Total sky downward shortwave flux, near-IR  #DON'T need this
+      real(kind=rb) :: dirdnir(nlay+2)        ! Direct downward shortwave flux, near-IR #DON'T need this
 
 ! Output - inactive
-!      real(kind=rb) :: zuvfu(nlay+2)         ! temporary upward UV shortwave flux (w/m2)
-!      real(kind=rb) :: zuvfd(nlay+2)         ! temporary downward UV shortwave flux (w/m2)
+!      real(kind=rb) :: zuvfu(nlay+2)         ! temporary upward UV shortwave flux (w/m2) !maybe combined with zvsfd to make uvdflx
+!      real(kind=rb) :: zuvfd(nlay+2)         ! temporary downward UV shortwave flux (w/m2) !Equated with uvdflx
 !      real(kind=rb) :: zuvcu(nlay+2)         ! temporary clear sky upward UV shortwave flux (w/m2)
 !      real(kind=rb) :: zuvcd(nlay+2)         ! temporary clear sky downward UV shortwave flux (w/m2)
 !      real(kind=rb) :: zvsfu(nlay+2)         ! temporary upward visible shortwave flux (w/m2)
-!      real(kind=rb) :: zvsfd(nlay+2)         ! temporary downward visible shortwave flux (w/m2)
+!      real(kind=rb) :: zvsfd(nlay+2)         ! temporary downward visible shortwave flux (w/m2) #I think this is combined with zuvfu to make uvdflx
 !      real(kind=rb) :: zvscu(nlay+2)         ! temporary clear sky upward visible shortwave flux (w/m2)
 !      real(kind=rb) :: zvscd(nlay+2)         ! temporary clear sky downward visible shortwave flux (w/m2)
 !      real(kind=rb) :: znifu(nlay+2)         ! temporary upward near-IR shortwave flux (w/m2)
 !      real(kind=rb) :: znifd(nlay+2)         ! temporary downward near-IR shortwave flux (w/m2)
 !      real(kind=rb) :: znicu(nlay+2)         ! temporary clear sky upward near-IR shortwave flux (w/m2)
 !      real(kind=rb) :: znicd(nlay+2)         ! temporary clear sky downward near-IR shortwave flux (w/m2)
-
-
+      
 ! Initializations
 
       zepsec = 1.e-06_rb
@@ -703,7 +703,7 @@
             difdflux(i) = swdflx(iplon,i) - dirdflux(i)
 !  UV/visible direct/diffuse fluxes
             dirdnuv(i) = zuvfddir(i)
-            difdnuv(i) = zuvfd(i) - dirdnuv(i)
+            difdnuv(i) = zuvfd(i) - dirdnuv(i)  !So total uvdflx = difdnuv + dirdnuv So the downward uv flux is the diffuse plus the direct. Now just need to work out what total sky, clear sky etc means.
 !  Near-IR direct/diffuse fluxes
             dirdnir(i) = znifddir(i)
             difdnir(i) = znifd(i) - dirdnir(i)

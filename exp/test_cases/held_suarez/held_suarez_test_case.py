@@ -2,7 +2,7 @@ import numpy as np
 
 from isca import DryCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
 
-NCORES = 16
+NCORES = 2
 RESOLUTION = 'T42', 25  # T42 horizontal resolution, 25 levels in pressure
 
 # a CodeBase can be a directory on the computer,

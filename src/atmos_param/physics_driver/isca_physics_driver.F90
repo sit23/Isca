@@ -319,7 +319,7 @@ namelist / physics_driver_nml / do_radiation, &
                                 do_moist_processes, tau_diff,      &
                                 diff_min, diffusion_smooth, &
                                 use_cloud_tracers_in_radiation, &
-                                do_grey_radiation, R1, R2, R3, R4,  &
+                                R1, R2, R3, R4,  &
                                 override_aerosols_radiation,  &
                                 override_aerosols_cloud,    &
                                 cosp_precip_sources,    &
@@ -712,7 +712,60 @@ rad_latb = latb * PI/180.
 rad_lon = lon * PI/180.
 rad_lonb = lonb * PI/180.
 
-  call idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes, surf_geopotential, Time, Time_step, nhum_in, rad_lon, rad_lat, rad_lonb, rad_latb, grid_domain_in, Surf_diff)
+  call idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes, surf_geopotential, Time, Time_step, nhum_in, rad_lon, rad_lat, rad_lonb, rad_latb, grid_domain_in, Surf_diff, do_grey_radiation=do_grey_radiation)
+
+  id = size(lonb,1)-1 
+  jd = size(latb,2)-1 
+  kd = num_levels_in
+  call get_number_tracers (MODEL_ATMOS, num_tracers=nt, &
+  num_prog=ntp)
+
+  call  moist_processes_init (id, jd, kd, lonb, latb, lon, lat, phalf, pref(:,1),&
+  axes, Time, doing_donner)
+
+  write(6,*) 'checking nt ntp', nt, ntp
+  call moist_alloc_init (id,jd,kd,nt,ntp) ! Are these the right way around? nt and ntp correct?
+
+
+!---------------------------------------------------------------------
+!    allocate space for the module variables.
+!---------------------------------------------------------------------
+  allocate ( diff_t     (id, jd, kd) ) ; diff_t = 0.0
+  allocate ( diff_m     (id, jd, kd) ) ; diff_m = 0.0
+  allocate ( diff_cu_mo (id, jd, kd) ) ; diff_cu_mo = 0.0
+  allocate ( pbltop     (id, jd) )     ; pbltop     = -999.0
+  allocate ( cush       (id, jd) )     ; cush=-1. !miz
+  allocate ( cbmf       (id, jd) )     ; cbmf=0.0 !miz
+  allocate ( convect    (id, jd) )     ; convect = .false.
+  allocate ( radturbten (id, jd, kd))  ; radturbten = 0.0
+  allocate ( lw_tendency(id, jd, kd))  ; lw_tendency = 0.0
+  allocate ( r_convect  (id, jd) )     ; r_convect   = 0.0
+
+
+  allocate (fl_lsrain  (id, jd, kd))
+  allocate (fl_lssnow  (id, jd, kd))
+  allocate (fl_lsgrpl  (id, jd, kd))
+  allocate (fl_ccrain  (id, jd, kd))
+  allocate (fl_ccsnow  (id, jd, kd))
+  allocate (fl_donmca_snow  (id, jd, kd))
+  allocate (fl_donmca_rain  (id, jd, kd))
+  allocate (mr_ozone   (id, jd, kd))
+  allocate (daytime    (id, jd    ))
+  allocate ( temp_last (id, jd, kd))
+  allocate ( q_last    (id, jd, kd))
+  fl_lsrain = 0.
+  fl_lssnow = 0.
+  fl_lsgrpl = 0.
+  fl_ccrain = 0.
+  fl_ccsnow = 0.
+  fl_donmca_rain = 0.
+  fl_donmca_snow = 0.
+  mr_ozone  = 0.
+  daytime =   0.
+  temp_last = 0.
+  q_last    = 0. 
+
+
 
 !--------------------------------------------------------------------
 !    write version number and namelist to log file.
@@ -725,11 +778,7 @@ rad_lonb = lonb * PI/180.
 !---------------------------------------------------------------------
 !    define the model dimensions on the local processor.
 !---------------------------------------------------------------------
-      id = size(lonb,1)-1 
-      jd = size(latb,2)-1 
-      kd = size(trs,3)
-      call get_number_tracers (MODEL_ATMOS, num_tracers=nt, &
-                               num_prog=ntp)
+
 
 !---------------------------------------------------------------------
 
@@ -1253,6 +1302,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       integer          ::    sec, day, n
       real             ::    dt, alpha, dt2
       logical          ::    used
+      real, dimension(size(u,1),size(u,2))           :: net_surf_sw_down_grey
 
 !---------------------------------------------------------------------
 !   local variables:
@@ -1380,7 +1430,12 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
 
       write(6,*) 'made it to idmp call'
-    call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, udt, vdt, tdt, rdt, .false., mask, kbot)      
+    if (do_grey_radiation) then
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, udt, vdt, tdt, rdt, .false., mask, kbot, net_surf_sw_down_grey=net_surf_sw_down_grey )  
+    else
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, udt, vdt, tdt, rdt, .false., mask, kbot )
+    endif
+    
     write(6,*) 'Done idmp call'
 !-------------------------------------------------------------------
 !    process the variables returned from radiation_driver_mod. the 
@@ -1396,40 +1451,64 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
     write(6,*) 'applying tendencies'
       ! tdt     = tdt + tdt_idm
     !PROBLEM IS CURRENTLY HERE, where Radiation object is not defined and so getting seg faults. Need to work out relationship between all these variables in order to divide them up. 
-      flux_sw = Radiation%flux_sw_surf(:,:,1) !radiation driver #6026 - net surface sw flux (dfsw - usfw @ surface)
 
-      ! flux_sw_dir            = Radiation%flux_sw_surf_dir(:,:,1) !radiation driver - dfsw_dir_sfc 
+    ! real(kind=rb) :: swnflx(nlay+2)         ! Total sky shortwave net flux (W/m2) #NEED THIS
+    ! real(kind=rb) :: swnflxc(nlay+2)        ! Clear sky shortwave net flux (W/m2) #DON'T need this
+    ! real(kind=rb) :: dirdflux(nlay+2)       ! Direct downward shortwave surface flux #NEED THIS
+    ! real(kind=rb) :: difdflux(nlay+2)       ! Diffuse downward shortwave surface flux #DON'T need this
+    ! real(kind=rb) :: uvdflx(nlay+2)         ! Total sky downward shortwave flux, UV/vis  #NEED UPWARD AND THIS
+    ! real(kind=rb) :: nidflx(nlay+2)         ! Total sky downward shortwave flux, near-IR  #DON'T need this
+    ! real(kind=rb) :: dirdnuv(nlay+2)        ! Direct downward shortwave flux, UV/vis #NEED THIS
+    ! real(kind=rb) :: difdnuv(nlay+2)        ! Diffuse downward shortwave flux, UV/vis #NEED UPWARD COMPONENT AND THIS
+    ! real(kind=rb) :: dirdnir(nlay+2)        ! Direct downward shortwave flux, near-IR #DON'T need this
+    ! real(kind=rb) :: difdnir(nlay+2)        ! Diffuse downward shortwave flux, near-IR #NEED UPWARD COMPONENT AND THIS
 
-      ! flux_sw_dif            = Radiation%flux_sw_surf_dif(:,:,1) ! dfsw_dif_sfc - ufsw_dif_sfc
 
-      ! flux_sw_down_vis_dir   = Radiation%flux_sw_down_vis_dir(:,:,1) ! dfsw_vis_sfc_dir
+      ! flux_sw = Radiation%flux_sw_surf(:,:,1) !radiation driver #6026 - net surface sw flux (dfsw - usfw @ surface) ## use swnflx RRTM ##
 
-      ! flux_sw_down_vis_dif   = Radiation%flux_sw_down_vis_dif(:,:,1) !dfsw_vis_sfc_dif 
+      ! flux_sw_dir            = Radiation%flux_sw_surf_dir(:,:,1) !radiation driver - dfsw_dir_sfc  ## use dirdflux RRTM    ##
 
-      ! flux_sw_down_total_dir = Radiation%flux_sw_down_total_dir(:,:,1) ! dfsw_dir_sfc Seems to be the same as flux_sw_dir
+      ! flux_sw_dif            = Radiation%flux_sw_surf_dif(:,:,1) ! dfsw_dif_sfc - ufsw_dif_sfc ## difdnuv+difdnir (total diffuse fluxes)    ##
+
+      ! flux_sw_down_vis_dir   = Radiation%flux_sw_down_vis_dir(:,:,1) ! dfsw_vis_sfc_dir ##  dirdnuv    ##
+
+      ! flux_sw_down_vis_dif   = Radiation%flux_sw_down_vis_dif(:,:,1) !dfsw_vis_sfc_dif ##   difdnuv  ##
+
+      ! flux_sw_down_total_dir = Radiation%flux_sw_down_total_dir(:,:,1) ! dfsw_dir_sfc Seems to be the same as flux_sw_dir ##  dirdflux   ##
+
+      ! flux_sw_down_total_dif = Radiation%flux_sw_down_total_dif(:,:,1) ! dfsw_dif_sfc Just the down component of flux_sw_dif ##  difdnuv+difdnir **NEED TO GET JUST DOWN COMPONENT OF THIS TO MAKE IT WORK**   ##
+
+      ! flux_sw_vis            = Radiation%flux_sw_vis(:,:,1) ! dfsw_vis_sfc - ufsw_vis_sfc ##  uvdflx ** need upward flux component too   ##
 
 
-      ! flux_sw_down_total_dif = Radiation%flux_sw_down_total_dif(:,:,1)
-      ! flux_sw_vis            = Radiation%flux_sw_vis(:,:,1)
-      ! flux_sw_vis_dir        = Radiation%flux_sw_vis_dir(:,:,1)
-      ! flux_sw_vis_dif        = Radiation%flux_sw_vis_dif(:,:,1)
-      ! flux_lw = Radiation%flux_lw_surf
-      ! coszen  = Radiation%coszen_angle
+      ! flux_sw_vis_dir        = Radiation%flux_sw_vis_dir(:,:,1) ! dfsw_vis_sfc_dir ##  dirdnuv    ##
+
+      
+      ! flux_sw_vis_dif        = Radiation%flux_sw_vis_dif(:,:,1) !dfsw_vis_sfc_dif - ufsw_vis_sfc_dif ##  difdnuv  ** NEED UPWARD COMPONENT   ##
+
+
+      ! flux_lw = Radiation%flux_lw_surf !STEFAN*Atmos_input%temp(:,:,kmax+1)**4 - Lw_output(1)%flxnet(:,:,kmax+1) ##     ##
+
+      ! coszen  = Radiation%coszen_angle !coszen_angle
       ! lw_tendency(is:ie,js:je,:) = Radiation%tdtlw(:,:,:)
+
+
       ! radturbten (is:ie,js:je,:) = radturbten(is:ie,js:je,:) + &
       !                              Radiation%tdt_rad(:,:,:,1)
  
       write(6,*) 'DONE applying tendencies'
       call mpp_clock_end ( radiation_clock )
 
-      ! if(do_grey_radiation) then !rif:(09/10/09) 
-      !   call grey_radiation(is, js, Time, Time_next, lat, lon, phalfgrey, albedo, t_surf_rad, t, tdt, flux_sw, flux_lw)
-      !   coszen = 1.0
-      !   flux_sw_dir     = R1*flux_sw
-      !   flux_sw_dif     = R2*flux_sw
-      !   flux_sw_vis_dir = R3*flux_sw
-      !   flux_sw_vis_dif = R4*flux_sw
-      ! endif
+      write(6,*) 'do grey radiation =', do_grey_radiation, maxval(net_surf_sw_down_grey)
+
+      if(do_grey_radiation) then !rif:(09/10/09) 
+        ! call grey_radiation(is, js, Time, Time_next, lat, lon, phalfgrey, albedo, t_surf_rad, t, tdt, net_surf_sw_down_grey, flux_lw)
+        coszen = 1.0
+        flux_sw_dir     = R1*net_surf_sw_down_grey
+        flux_sw_dif     = R2*net_surf_sw_down_grey
+        flux_sw_vis_dir = R3*net_surf_sw_down_grey
+        flux_sw_vis_dif = R4*net_surf_sw_down_grey
+      endif
 
 !----------------------------------------------------------------------
 !    call damping_driver to calculate the various model dampings that
@@ -1437,6 +1516,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !----------------------------------------------------------------------
       write(6,*) 'about to do damping driver'
       z_pbl(:,:) = pbltop(is:ie,js:je) 
+      write(6,*) maxval(pbltop(is:ie, js:je)), 'max pbltop'
       call mpp_clock_begin ( damping_clock )
       call damping_driver (is, js, lat, Time_next, dt,           &
                            p_full, p_half, z_full, z_half,          &
@@ -1451,18 +1531,19 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !    the planetary boundary layer height on return.
 !---------------------------------------------------------------------
 
-      if (id_tdt_phys_turb > 0) then
-        used = send_data ( id_tdt_phys_turb, -2.0*tdt(:,:,:), &
-                           Time_next, is, js, 1, rmask=mask )
-      endif
+      ! if (id_tdt_phys_turb > 0) then
+      !   used = send_data ( id_tdt_phys_turb, -2.0*tdt(:,:,:), &
+      !                      Time_next, is, js, 1, rmask=mask )
+      ! endif
 
-      do n=1,nt
-        if (id_tracer_phys_turb(n) > 0) then
-          used = send_data ( id_tracer_phys_turb(n), -2.0*rdt(:,:,:,n), &
-                             Time_next, is, js, 1, rmask=mask )
-        endif
-      end do
+      ! do n=1,nt
+      !   if (id_tracer_phys_turb(n) > 0) then
+      !     used = send_data ( id_tracer_phys_turb(n), -2.0*rdt(:,:,:,n), &
+      !                        Time_next, is, js, 1, rmask=mask )
+      !   endif
+      ! end do
 
+      write(6,*) 'about to do vert turb driver'
       call mpp_clock_begin ( turb_clock )
       call vert_turb_driver (is, js, Time, Time_next, dt,            &
                              lw_tendency(is:ie,js:je,:), frac_land,  &
@@ -1476,18 +1557,18 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                              mask=mask, kbot=kbot             )
      call mpp_clock_end ( turb_clock )
      pbltop(is:ie,js:je) = z_pbl(:,:)
+     write(6,*) 'Done vert turb driver'
+      ! if (id_tdt_phys_turb > 0) then
+      !   used = send_data ( id_tdt_phys_turb, +2.0*tdt(:,:,:), &
+      !                      Time_next, is, js, 1, rmask=mask )
+      ! endif
 
-      if (id_tdt_phys_turb > 0) then
-        used = send_data ( id_tdt_phys_turb, +2.0*tdt(:,:,:), &
-                           Time_next, is, js, 1, rmask=mask )
-      endif
-
-      do n=1,nt
-        if (id_tracer_phys_turb(n) > 0) then
-          used = send_data ( id_tracer_phys_turb(n), +2.0*rdt(:,:,:,n), &
-                             Time_next, is, js, 1, rmask=mask )
-        endif
-      end do
+      ! do n=1,nt
+      !   if (id_tracer_phys_turb(n) > 0) then
+      !     used = send_data ( id_tracer_phys_turb(n), +2.0*rdt(:,:,:,n), &
+      !                        Time_next, is, js, 1, rmask=mask )
+      !   endif
+      ! end do
 
 !-----------------------------------------------------------------------
 !    process any tracer fields.
@@ -1549,17 +1630,17 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !    pheric vertical diffusion.
 !-----------------------------------------------------------------------
 
-      if (id_tdt_phys_vdif_dn > 0) then
-        used = send_data ( id_tdt_phys_vdif_dn, -2.0*tdt(:,:,:), &
-                           Time_next, is, js, 1, rmask=mask )
-      endif
+      ! if (id_tdt_phys_vdif_dn > 0) then
+      !   used = send_data ( id_tdt_phys_vdif_dn, -2.0*tdt(:,:,:), &
+      !                      Time_next, is, js, 1, rmask=mask )
+      ! endif
 
-      do n=1,nt
-        if (id_tracer_phys_vdif_dn(n) > 0) then
-          used = send_data ( id_tracer_phys_vdif_dn(n), -2.0*rdt(:,:,:,n), &
-                             Time_next, is, js, 1, rmask=mask )
-        endif
-      end do
+      ! do n=1,nt
+      !   if (id_tracer_phys_vdif_dn(n) > 0) then
+      !     used = send_data ( id_tracer_phys_vdif_dn(n), -2.0*rdt(:,:,:,n), &
+      !                        Time_next, is, js, 1, rmask=mask )
+      !   endif
+      ! end do
 
       call mpp_clock_begin ( diff_down_clock )
       radturbten(is:ie,js:je,:) = radturbten(is:ie,js:je,:) - tdt(:,:,:)
@@ -1587,17 +1668,17 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
     !                               mask=mask, kbot=kbot           )
     !   endif
 
-      if (id_tdt_phys_vdif_dn > 0) then
-        used = send_data ( id_tdt_phys_vdif_dn, +2.0*tdt(:,:,:), &
-                           Time_next, is, js, 1, rmask=mask )
-      endif
+      ! if (id_tdt_phys_vdif_dn > 0) then
+      !   used = send_data ( id_tdt_phys_vdif_dn, +2.0*tdt(:,:,:), &
+      !                      Time_next, is, js, 1, rmask=mask )
+      ! endif
 
-      do n=1,nt
-        if (id_tracer_phys_vdif_dn(n) > 0) then
-          used = send_data ( id_tracer_phys_vdif_dn(n), +2.0*rdt(:,:,:,n), &
-                             Time_next, is, js, 1, rmask=mask )
-        endif
-      end do
+      ! do n=1,nt
+      !   if (id_tracer_phys_vdif_dn(n) > 0) then
+      !     used = send_data ( id_tracer_phys_vdif_dn(n), +2.0*rdt(:,:,:,n), &
+      !                        Time_next, is, js, 1, rmask=mask )
+      !   endif
+      ! end do
 
 !---------------------------------------------------------------------
 !    if desired, return diff_m and diff_t to calling routine.
@@ -1611,6 +1692,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
      call mpp_clock_end ( diff_down_clock )
 
+     write(6,*) 'Finished physics driver down'
  end subroutine physics_driver_down
 
 
@@ -1914,17 +1996,17 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
 !    calculation.
 !------------------------------------------------------------------
 
-      if (id_tdt_phys_vdif_up > 0) then
-        used = send_data ( id_tdt_phys_vdif_up, -2.0*tdt(:,:,:), &
-                           Time_next, is, js, 1, rmask=mask )
-      endif
+      ! if (id_tdt_phys_vdif_up > 0) then
+      !   used = send_data ( id_tdt_phys_vdif_up, -2.0*tdt(:,:,:), &
+      !                      Time_next, is, js, 1, rmask=mask )
+      ! endif
 
-      do n=1,nt
-        if (id_tracer_phys_vdif_up(n) > 0) then
-          used = send_data ( id_tracer_phys_vdif_up(n), -2.0*rdt(:,:,:,n), &
-                             Time_next, is, js, 1, rmask=mask )
-        endif
-      end do
+      ! do n=1,nt
+      !   if (id_tracer_phys_vdif_up(n) > 0) then
+      !     used = send_data ( id_tracer_phys_vdif_up(n), -2.0*rdt(:,:,:,n), &
+      !                        Time_next, is, js, 1, rmask=mask )
+      !   endif
+      ! end do
 
 ! ---> h1g, 2012-08-28, save temperature and moisture tendencies due to surface fluxes at lowest-level
       if( .not. l_host_applies_sfc_fluxes ) then
@@ -1951,17 +2033,17 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
       radturbten(is:ie,js:je,:) = radturbten(is:ie,js:je,:) + tdt(:,:,:)
       call mpp_clock_end ( diff_up_clock )
 
-      if (id_tdt_phys_vdif_up > 0) then
-        used = send_data ( id_tdt_phys_vdif_up, +2.0*tdt(:,:,:), &
-                           Time_next, is, js, 1, rmask=mask )
-      endif
+      ! if (id_tdt_phys_vdif_up > 0) then
+      !   used = send_data ( id_tdt_phys_vdif_up, +2.0*tdt(:,:,:), &
+      !                      Time_next, is, js, 1, rmask=mask )
+      ! endif
 
-      do n=1,nt
-        if (id_tracer_phys_vdif_up(n) > 0) then
-          used = send_data ( id_tracer_phys_vdif_up(n), +2.0*rdt(:,:,:,n), &
-                             Time_next, is, js, 1, rmask=mask )
-        endif
-      end do
+      ! do n=1,nt
+      !   if (id_tracer_phys_vdif_up(n) > 0) then
+      !     used = send_data ( id_tracer_phys_vdif_up(n), +2.0*rdt(:,:,:,n), &
+      !                        Time_next, is, js, 1, rmask=mask )
+      !   endif
+      ! end do
 
 !-----------------------------------------------------------------------
 !    if the fms integration path is being followed, call moist processes
@@ -1970,20 +2052,20 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
 !-----------------------------------------------------------------------
       if (do_moist_processes) then
 
-        if (id_tdt_phys_moist > 0) then
-          used = send_data ( id_tdt_phys_moist, -2.0*tdt(:,:,:), &
-                             Time_next, is, js, 1, rmask=mask )
-        endif
+        ! if (id_tdt_phys_moist > 0) then
+        !   used = send_data ( id_tdt_phys_moist, -2.0*tdt(:,:,:), &
+        !                      Time_next, is, js, 1, rmask=mask )
+        ! endif
 
-        do n=1,nt
-          if (id_tracer_phys_moist(n) > 0) then
-            used = send_data ( id_tracer_phys_moist(n), -2.0*rdt(:,:,:,n), &
-                               Time_next, is, js, 1, rmask=mask )
-          endif
-        end do
+        ! do n=1,nt
+        !   if (id_tracer_phys_moist(n) > 0) then
+        !     used = send_data ( id_tracer_phys_moist(n), -2.0*rdt(:,:,:,n), &
+        !                        Time_next, is, js, 1, rmask=mask )
+        !   endif
+        ! end do
 
         call mpp_clock_begin ( moist_processes_clock )
-        
+        write(6, *) 'about to do moist processes'
         call moist_processes (is, ie, js, je, Time_next, dt, frac_land, &
                            p_half, p_full, z_half, z_full, omega,    &
                            diff_t(is:ie,js:je,:),                    &
@@ -1999,7 +2081,9 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
                fl_ccrain(is:ie,js:je,:), fl_ccsnow(is:ie,js:je,:),    &
            fl_donmca_rain(is:ie,js:je,:), fl_donmca_snow(is:ie,js:je,:), &
                            gust_cv, area, lon, lat,   &
-                           mask=mask, kbot=kbot)                           
+                           mask=mask, kbot=kbot)      
+                           
+        write(6, *) 'Done moist processes'                           
         call mpp_clock_end ( moist_processes_clock )
         diff_cu_mo(is:ie, js:je,:) = diff_cu_mo_loc(:,:,:)
         radturbten(is:ie,js:je,:) = 0.0
@@ -2010,33 +2094,33 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
 !---------------------------------------------------------------------
         gust = sqrt( gust*gust + gust_cv*gust_cv)
 
-        if (id_tdt_phys_moist > 0) then
-          used = send_data ( id_tdt_phys_moist, +2.0*tdt(:,:,:), &
-                             Time_next, is, js, 1, rmask=mask )
-        endif
+!         if (id_tdt_phys_moist > 0) then
+!           used = send_data ( id_tdt_phys_moist, +2.0*tdt(:,:,:), &
+!                              Time_next, is, js, 1, rmask=mask )
+!         endif
 
-        do n=1,nt
-          if (id_tracer_phys_moist(n) > 0) then
-            used = send_data ( id_tracer_phys_moist(n), +2.0*rdt(:,:,:,n), &
-                               Time_next, is, js, 1, rmask=mask )
-          endif
-        end do
+!         do n=1,nt
+!           if (id_tracer_phys_moist(n) > 0) then
+!             used = send_data ( id_tracer_phys_moist(n), +2.0*rdt(:,:,:,n), &
+!                                Time_next, is, js, 1, rmask=mask )
+!           endif
+!         end do
 
-        if (id_tdt_phys > 0) then
-           used = send_data ( id_tdt_phys, tdt(:,:,:), &
-                              Time_next, is, js, 1, rmask=mask )
-        endif
-!--> cjg
-!       if (id_qdt_phys > 0) then
-!          used = send_data ( id_qdt_phys, qdt(:,:,:), &
-!                             Time_next, is, js, 1, rmask=mask )
-!       endif
-        do n=1,nt
-          if (id_tracer_phys(n) > 0) then
-            used = send_data ( id_tracer_phys(n), rdt(:,:,:,n), &
-                               Time_next, is, js, 1, rmask=mask )
-          endif
-        end do
+!         if (id_tdt_phys > 0) then
+!            used = send_data ( id_tdt_phys, tdt(:,:,:), &
+!                               Time_next, is, js, 1, rmask=mask )
+!         endif
+! !--> cjg
+! !       if (id_qdt_phys > 0) then
+! !          used = send_data ( id_qdt_phys, qdt(:,:,:), &
+! !                             Time_next, is, js, 1, rmask=mask )
+! !       endif
+!         do n=1,nt
+!           if (id_tracer_phys(n) > 0) then
+!             used = send_data ( id_tracer_phys(n), rdt(:,:,:,n), &
+!                                Time_next, is, js, 1, rmask=mask )
+!           endif
+!         end do
 !<--cjg
       endif
 

@@ -323,8 +323,10 @@ if(.not.module_is_initialized) then
 endif
 
 call mpp_clock_begin(phyclock)
+write(6,*) 'doing spectral physics up'
 call spectral_physics_up(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, wg_full, ug, vg, tg, &
                          grid_tracers, frac_land, u_star, b_star, q_star, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
+write(6,*) 'done spectral physics up'                         
 call mpp_clock_end(phyclock)
 
 if(previous == current) then

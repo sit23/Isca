@@ -286,9 +286,11 @@ integer :: nhum
     Atmos%Surf_diff%delta_t = Surface_boundary%dt_t
     Atmos%Surf_diff%delta_tr = Surface_boundary%dt_tr
 
+   write(6,*) 'about to do atmosphere up'
     call atmosphere_up (Atmos%Time,  Surface_boundary%land_frac, Surface_boundary%u_star, Surface_boundary%b_star, Surface_boundary%q_star, Atmos%Surf_diff, &
                         Atmos%lprec, Atmos%fprec, Atmos%gust)
 
+   write(6,*) 'Done atmosphere up'                        
 !   --- advance time ---
 
     Atmos % Time = Atmos % Time + Atmos % Time_step

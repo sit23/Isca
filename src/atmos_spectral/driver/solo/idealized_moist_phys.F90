@@ -269,7 +269,7 @@ type(time_type) :: Time_step
 contains
 !=================================================================================================================================
 
-subroutine idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes_in, surf_geopotential_in, Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, grid_domain_in, surf_diff_init)
+subroutine idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes_in, surf_geopotential_in, Time, Time_step_in, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, grid_domain_in, surf_diff_init, do_grey_radiation)
 integer, intent(in)         :: is_in, ie_in, js_in, je_in, num_levels_in
 integer, dimension(4), intent(in) :: axes_in
 type(time_type), intent(in) :: Time, Time_step_in
@@ -277,6 +277,7 @@ integer, intent(in) :: nhum
 real, intent(in), dimension(:,:) :: rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, surf_geopotential_in
 type(domain2D) :: grid_domain_in
 type(surf_diff_type), optional :: surf_diff_init
+logical, intent(out), optional :: do_grey_radiation
 
 integer :: io, nml_unit, stdlog_unit, seconds, days, id, jd, kd
 real, dimension (size(rad_lonb_2d,1)-1, size(rad_latb_2d,2)-1) :: sgsmtn !s added for damping_driver
@@ -318,7 +319,7 @@ d378 = 1.-d622
 
 !s need to make sure that gray radiation and rrtm radiation are not both called.
 if(two_stream_gray .and. do_rrtm_radiation) &
-   call error_mesg('physics_driver_init','do_grey_radiation and do_rrtm_radiation cannot both be .true.',FATAL)
+   call error_mesg('physics_driver_init','two_stream_gray and do_rrtm_radiation cannot both be .true.',FATAL)
 
 if(uppercase(trim(convection_scheme)) == 'NONE') then
   r_conv_scheme = NO_CONV
@@ -674,6 +675,8 @@ end select
 
 
 if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, axes, Time, rad_lonb_2d, rad_latb_2d, dt_real)
+
+do_grey_radiation=two_stream_gray
 
 #ifdef RRTM_NO_COMPILE
     if (do_rrtm_radiation) then
@@ -1156,7 +1159,7 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 end subroutine idealized_convection_and_lscale_cond
 
-subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug_prev, vg_prev, tg_prev, grid_tracers_prev,  dt_ug, dt_vg, dt_tg, dt_tracers, do_surface_flux, mask, kbot, current_in  )
+subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug_prev, vg_prev, tg_prev, grid_tracers_prev,  dt_ug, dt_vg, dt_tg, dt_tracers, do_surface_flux, mask, kbot, current_in, net_surf_sw_down_grey  )
 
 integer,                    intent(in)    :: is, js
 type(time_type),            intent(in)    :: Time
@@ -1171,6 +1174,7 @@ logical,                   intent(in)     :: do_surface_flux
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
 integer, intent(in),                 optional :: current_in
+real, intent(out) , dimension(:,:), optional :: net_surf_sw_down_grey
 
 real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
 
@@ -1186,6 +1190,9 @@ real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
                            net_surf_sw_down(:,:),  &
                            surf_lw_down(:,:), albedo, &
                            grid_tracers_prev(:,:,:,nsphum))
+
+
+          net_surf_sw_down_grey=net_surf_sw_down
     end if
 
     if(.not.mixed_layer_bc) then

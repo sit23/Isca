@@ -430,14 +430,18 @@ do nc = 1, num_cpld_calls
                Land_ice_atmos_boundary, &
                Atmos_land_boundary, &
                Atmos_ice_boundary )
+               write(6,*) 'DONE Flux DOWN from atmos'
 
 
 !      --------------------------------------------------------------
 
 !      ---- land model ----
+               write(6,*) 'about to do land model fast'
 
           if (do_land) &
             call update_land_model_fast( Atmos_land_boundary, Land )
+
+            write(6,*) 'about to do ice model fast'
 
 !      ---- ice model ----
           if (do_ice) &
@@ -445,9 +449,12 @@ do nc = 1, num_cpld_calls
 
 !      --------------------------------------------------------------
 !      ---- atmosphere up ----
+            write(6,*) 'about to do flux up to atmos'
 
            call flux_up_to_atmos( Time_atmos, Land, Ice, Land_ice_atmos_boundary, &
                 & Atmos_land_boundary, Atmos_ice_boundary )
+
+                write(6,*) 'about to atmos model up'
                 
             if (do_atmos) &
               call update_atmos_model_up( Land_ice_atmos_boundary, Atm )
@@ -462,11 +469,14 @@ do nc = 1, num_cpld_calls
 !
 !     need flux call to put runoff and p_surf on ice grid
 !
+       write(6,*) 'Doing flux land to ice'
+
        call flux_land_to_ice( Time, Land, Ice, Land_ice_boundary )
 
        Atmos_ice_boundary%p = 0.0 ! call flux_atmos_to_ice_slow ?
 
 !   ------ slow-ice model ------
+       write(6,*) 'about to do slow ice model'
 
        if (do_ice) call update_ice_model_slow_dn( Atmos_ice_boundary, &
                                                   Land_ice_boundary, Ice )
@@ -477,6 +487,8 @@ do nc = 1, num_cpld_calls
        call mpp_set_current_pelist()
        call flux_ice_to_ocean( Time, Ice, Ocean, Ice_ocean_boundary )
    end if
+
+   write(6,*) 'about to do update ocean model'
 
     if( Ocean%pe )then
         call mpp_set_current_pelist(Ocean%pelist)
