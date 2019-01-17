@@ -5,7 +5,7 @@ import numpy as np
 from isca import SocratesCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
 from isca.util import exp_progress
 
-NCORES = 16
+NCORES = 8
 base_dir = os.path.dirname(os.path.realpath(__file__))
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
@@ -23,7 +23,7 @@ cb = SocratesCodeBase.from_directory(GFDL_BASE)
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
 
-exp = Experiment('soc_test_aquaplanet_with_clouds_post_jm_suggestions_amip_ssts_land_low_albedo_with_land', codebase=cb)
+exp = Experiment('soc_test_with_clouds_post_jm_suggestions_amip_ssts_land_mid_albedo', codebase=cb)
 exp.clear_rundir()
 
 inputfiles = [os.path.join(GFDL_BASE,'input/rrtm_input_files/ozone_1990.nc'),
@@ -153,10 +153,9 @@ exp.namelist = namelist = Namelist({
         'prescribe_initial_dist':True,
         'evaporation':True,  
         'depth': 20.0,                          #Depth of mixed layer used
-        'albedo_value': 0.2,                  #Albedo value used      
         'land_option': 'input',              #Tell mixed layer to get land mask from input file
         'land_h_capacity_prefactor': 0.1,    #What factor to multiply mixed-layer depth by over land. 
-        'albedo_value': 0.1,                #Ocean albedo value
+        'albedo_value': 0.2,                #Ocean albedo value
         'land_albedo_prefactor': 1.3,        #What factor to multiply ocean albedo by over land     
         'do_qflux' : False, #Don't use the prescribed analytical formula for q-fluxes
         'do_read_sst' : True, #Read in sst values from input file
@@ -230,5 +229,5 @@ if __name__=="__main__":
         cb.compile(debug=False)
         exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=False)#, run_idb=True)
 
-        for i in range(2,241):
+        for i in range(2,121):
             exp.run(i, num_cores=NCORES)

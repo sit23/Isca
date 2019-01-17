@@ -8,9 +8,9 @@ import subprocess
 
 start_time=time.time()
 base_dir='/scratch/sit204/data_isca/'
-exp_name_list = ['soc_test_aquaplanet_with_clouds_post_jm_suggestions_amip_ssts_land_low_albedo']
+exp_name_list = ['soc_test_with_clouds_post_jm_suggestions_amip_ssts_land_mid_albedo']
 avg_or_daily_list=['monthly']
-start_file=96
+start_file=61
 end_file=120
 nfiles=(end_file-start_file)+1
 
