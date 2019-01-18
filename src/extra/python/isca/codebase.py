@@ -288,6 +288,21 @@ class GreyCodeBase(CodeBase):
         super(GreyCodeBase, self).__init__(*args, **kwargs)
         self.disable_rrtm()
 
+class ColumnCodeBase(CodeBase):
+    """This contains code that will allow one to use all model physics in a single column configuration (i.e. without calling the dynamical core)
+    """
+    #path_names_file = P(_module_directory, 'templates', 'moist_path_names')
+    name = 'column'
+    executable_name = 'column_isca.x'
+
+    def column_model(self):
+        self.compile_flags.append('-DCOLUMN_MODEL')
+        self.log.info('USING SINGLE COLUMN MODEL')
+
+    def __init__(self, *args, **kwargs):
+        super(ColumnCodeBase, self).__init__(*args, **kwargs)
+        self.column_model()
+
 
 class DryCodeBase(GreyCodeBase):
     """The Held-Suarez model.
