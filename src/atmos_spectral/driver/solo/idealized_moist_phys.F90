@@ -909,7 +909,7 @@ do i_conv=1, num_conv_schemes_to_run
        
     case(DRY_CONV)
         call dry_convection(Time, tg_tmp,                         &
-                            p_full(:,:,:,previous), p_half(:,:,:,previous),      &
+                            p_full(:,:,:,previous), p_half(:,:,:,previous), rad_lat(:,:),    &
                             conv_dt_tg, cape_dry, cin_dry)
 
         tg_tmp = conv_dt_tg*delta_t + tg_tmp
@@ -953,7 +953,7 @@ do i_conv=1, num_conv_schemes_to_run
       conv_dt_tg = 0.0
       tg_tmp = tg(:,:,:,previous)
       qg_tmp = grid_tracers(:,:,:,previous,nsphum)
-      
+
     case default
       call error_mesg('idealized_moist_phys','Invalid convection scheme.', FATAL)
 

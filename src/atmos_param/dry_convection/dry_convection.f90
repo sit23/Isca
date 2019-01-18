@@ -21,7 +21,7 @@ module dry_convection_mod
   use           fms_mod, only: error_mesg, FATAL, stdlog, mpp_pe,             &
                                mpp_root_pe, open_namelist_file, close_file,   &
                                check_nml_error
-  use     constants_mod, only: rdgas, cp_air
+  use     constants_mod, only: rdgas, cp_air, omega
   use  time_manager_mod, only: time_type
   use  diag_manager_mod, only: register_diag_field, send_data
 
@@ -33,16 +33,16 @@ module dry_convection_mod
 !                             ---  namelist ---
   real :: tau, &            !< relaxation timescale [seconds]
           gamma             !< prescibed lapse rate [non-dim]
-          
-  integer :: max_height_level_set = -1
 
-  namelist /dry_convection_nml/ tau, gamma, max_height_level_set
+  logical :: use_intertial_timescale = .false.          
+
+  namelist /dry_convection_nml/ tau, gamma, use_intertial_timescale
 
   integer :: i, j, jit, k, num_levels
   real :: cons1 = 0.  !< Potential temperature exponent (R/Cp)
 
   integer :: id_cape, id_cin, id_lzb, id_lcl, id_tp, id_n_tp, &
-       id_dp, id_amb, id_dt, max_height_level
+       id_dp, id_amb, id_dt
 
   character(len=14), parameter :: mod_name='dry_convection'
   real :: missing_value = -1.e-10
@@ -119,7 +119,7 @@ module dry_convection_mod
 !! @param[out] dt_tg Calculated temperature tendency
 !! @param[out] cape Convective Available Potential Energy
 !! @param[out] cin Convective Inhibition
-  subroutine dry_convection(Time, tg, p_full, p_half, dt_tg, cape, cin)
+  subroutine dry_convection(Time, tg, p_full, p_half, lat, dt_tg, cape, cin)
 
     type(time_type), intent(in) :: Time
 
@@ -127,6 +127,8 @@ module dry_convection_mod
          tg,               &   ! temperature
          p_full,           &   ! pressure on full model levels
          p_half                ! pressure on half model levels
+
+    real, intent(in), dimension(:,:) :: rad_lat
 
     real, intent(out), dimension(:,:,:) ::                                    &
          dt_tg                 ! temperature tendency
@@ -152,15 +154,9 @@ module dry_convection_mod
     logical :: used
 
     num_levels = size(tg,3)
-    
-    if (max_height_level_set < 0) then
-        max_height_level = 1
-    else
-        max_height_level = max_height_level_set
-    end if
 
     ! half-level spacings:
-    do k=max_height_level, num_levels
+    do k=1, num_levels
        dp_half(:,:,k) = p_half(:,:,k+1) - p_half(:,:,k)
     end do
 
@@ -183,7 +179,7 @@ module dry_convection_mod
     do i=1, size(tg,1)
        do j=1, size(tg,2)
 
-          do k=max_height_level, num_levels
+          do k=1, num_levels
              if(k>=lzb(i,j).and. k<=btm(i,j)) then
                 ! in convecting region between ground and LZB
                 ener_int(i,j) = ener_int(i,j) +                               &
@@ -206,7 +202,13 @@ module dry_convection_mod
     end do
 
     ! temperature tendency
-    dt_tg = (tp - tg) / tau
+    if (use_intertial_timescale) then
+      do k=1, num_levels
+         dt_tg(:,:,k) = (tp(:,:,k) - tg(:,:,k)) * 2.*omega * sin(rad_lat(:,:))
+      end do
+    else
+      dt_tg = (tp - tg) / tau      
+    endif
 
 
     if (id_cin  > 0) used = send_data ( id_cin,  cin,        Time, 1, 1)
@@ -274,14 +276,14 @@ module dry_convection_mod
        do j = 1, size(tg,2)
 
           ! lift parcel with lapse rate given by gamma
-          do k = btm(i,j)-1, max_height_level, -1
+          do k = btm(i,j)-1, 1, -1
              zdpkpk = exp( cons1 * alog(p_full(i,j,k)/p_full(i,j,k+1)))  !< equiv. to (pfull[k]/pfull[k+1])^cons1
              tp(i,j,k) = tp(i,j,k+1) +                                        &
                   gamma * (tp(i,j,k+1)*zdpkpk - tp(i,j,k+1))
           end do
 
           ! find LCL
-          do k = btm(i,j)-1, max_height_level, -1
+          do k = btm(i,j)-1, 1, -1
              if(tp(i,j,k) > tg(i,j,k)) then ! unstable parcel
                 if(lzb(i,j) == btm(i,j)) then ! not above a lower cloud
                    ! calculate CAPE
@@ -335,4 +337,4 @@ module dry_convection_mod
 
   end subroutine capecalc
 
-end module dry_convection_mod
+end module dry_convection_mod                                                                                                                                                                                                                                                                                                   
