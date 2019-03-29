@@ -31,7 +31,7 @@ module diffusivity_mod
 !=======================================================================
 
 
-use     constants_mod, only : grav, vonkarm, cp_air, rdgas, rvgas
+use     constants_mod, only : grav, vonkarm, cp_air, rdgas, rvgas, omega
 
 use           mpp_mod, only : input_nml_file
 use           fms_mod, only : error_mesg, FATAL, file_exist,   &
@@ -131,6 +131,9 @@ real    :: parcel_buoy         =  2.0
 real    :: znom                =  1000.0
 logical :: free_atm_diff       = .false.
 logical :: free_atm_skyhi_diff = .false.
+logical :: young_read_jupiter_diffusivity = .false.
+real    :: young_read_timescale=-1.0
+logical :: do_pbl_diff         = .true.
 logical :: pbl_mcm             = .false.
 real    :: rich_crit_diff      =  0.25
 real    :: mix_len             = 30.
@@ -152,7 +155,9 @@ namelist /diffusivity_nml/ fixed_depth, depth_0, frac_inner,&
                            znom, free_atm_diff, free_atm_skyhi_diff,&
                            pbl_mcm, rich_crit_diff, mix_len, rich_prandtl,&
                            background_m, background_t, ampns, ampns_max, &
-                           do_entrain, do_simple, use_pog_bug_fix
+                           do_entrain, do_simple, use_pog_bug_fix, &
+                           young_read_jupiter_diffusivity, young_read_timescale, &
+                           do_pbl_diff
 
 !=======================================================================
 
@@ -230,6 +235,10 @@ integer :: unit, ierr, io, logunit
             call error_mesg ('diffusivity_init',  &
             'ampns is only valid when free_atm_skyhi_diff is &
                    & also true', FATAL)
+         if (young_read_jupiter_diffusivity .and.  free_atm_skyhi_diff) &
+            call error_mesg ('diffusivity_init',  &
+            'young_read_jupiter_diffusivity and free_atm_skyhi_diff &
+                   & cannot both be true', FATAL)                   
 
       endif  !end of reading input.nml
 
@@ -260,13 +269,13 @@ end subroutine diffusivity_end
 
 !=======================================================================
 
-subroutine diffusivity(t, q, u, v, p_full, p_half, z_full, z_half,  &
+subroutine diffusivity(t, q, u, v, p_full, p_half, z_full, z_half, rad_lat, &
                        u_star, b_star, h, k_m, k_t, kbot)
 
 real,    intent(in),           dimension(:,:,:) :: t, q, u, v
 real,    intent(in),           dimension(:,:,:) :: p_full, p_half
 real,    intent(in),           dimension(:,:,:) :: z_full, z_half
-real,    intent(in),           dimension(:,:)   :: u_star, b_star
+real,    intent(in),           dimension(:,:)   :: u_star, b_star, rad_lat
 real,    intent(inout),        dimension(:,:,:) :: k_m, k_t
 real,    intent(out),          dimension(:,:)   :: h
 integer, intent(in), optional, dimension(:,:)   :: kbot
@@ -312,22 +321,28 @@ end do
 z_half_ag(:,:,nlev+1) = z_half(:,:,nlev+1) - z_surf(:,:)
 
 
-if(fixed_depth)  then
-   h = depth_0
-else
-   call pbl_depth(svcp,u,v,z_full_ag,u_star,b_star,h,kbot=kbot)
-end if
+if (do_pbl_diff) then
 
-if(pbl_mcm) then
-   call diffusivity_pbl_mcm (u,v, t, p_full, p_half, &
-                             z_full_ag, z_half_ag, h, k_m, k_t)
+  if(fixed_depth)  then
+    h = depth_0
+  else
+    call pbl_depth(svcp,u,v,z_full_ag,u_star,b_star,h,kbot=kbot)
+  end if
+
+  if(pbl_mcm) then
+    call diffusivity_pbl_mcm (u,v, t, p_full, p_half, &
+                              z_full_ag, z_half_ag, h, k_m, k_t)
+  else
+    call diffusivity_pbl  (svcp, u, v, z_half_ag, h, u_star, b_star,&
+                        k_m, k_t, kbot=kbot)
+  end if
+
 else
-   call diffusivity_pbl  (svcp, u, v, z_half_ag, h, u_star, b_star,&
-                       k_m, k_t, kbot=kbot)
+  h=0.
 end if
 
 if(free_atm_diff) &
-   call diffusivity_free (svcp, u, v, z_full_ag, z_half_ag, h, k_m, k_t)
+   call diffusivity_free (svcp, u, v, z_full_ag, z_half_ag, h, rad_lat, k_m, k_t)
 
 k_m = k_m + k_m_save
 k_t = k_t + k_t_save
@@ -593,10 +608,10 @@ end subroutine diffusivity_pbl_mcm
 
 !=======================================================================
 
-subroutine diffusivity_free(t, u, v, z, zz, h, k_m, k_t)
+subroutine diffusivity_free(t, u, v, z, zz, h, rad_lat, k_m, k_t)
 
 real, intent(in)    , dimension(:,:,:) :: t, u, v, z, zz
-real, intent(in)    , dimension(:,:)   :: h
+real, intent(in)    , dimension(:,:)   :: h, rad_lat
 real, intent(inout) , dimension(:,:,:) :: k_m, k_t
 
 real, dimension(size(t,1),size(t,2))   :: dz, b, speed2, rich, fri, &
@@ -642,7 +657,11 @@ do k = 2, size(t,3)
 !   mixing coefficient. if ampns is on, this value includes it; other-
 !   wise it does not.
 !---------------------------------------------------------------------
-  fri(:,:)   = (1.0 - rich/rich_crit_diff)**2
+  if (young_read_jupiter_diffusivity) then
+    fri(:,:)   = (1.0 - rich/rich_crit_diff)**3
+  else
+    fri(:,:)   = (1.0 - rich/rich_crit_diff)**2  
+  endif
 
 !---------------------------------------------------------------------
 !   compute the eddy mixing coefficients in the free atmosphere ( zz
@@ -672,6 +691,20 @@ do k = 2, size(t,3)
         k_t(:,:,k) = k_m(:,:,k)* (0.1 + 0.9*fri2(:,:))
       end where
     endif
+  elseif (young_read_jupiter_diffusivity) then
+
+    if (young_read_timescale .le. 0.0) then    
+        where (rich < rich_crit_diff .and. zz(:,:,k) > h)        
+            k_t(:,:,k) = fri(:,:)*(dz**2.)*(2.*omega * abs(sin(rad_lat(:,:))))/3.
+            k_m(:,:,k) = k_t(:,:,k)*rich_prandtl
+        end where
+    else
+        where (rich < rich_crit_diff .and. zz(:,:,k) > h)
+            k_t(:,:,k) = fri(:,:)*(dz**2.)/(3.*young_read_timescale)
+            k_m(:,:,k) = k_t(:,:,k)*rich_prandtl
+        end where
+    endif
+
   else
 
 !---------------------------------------------------------------------

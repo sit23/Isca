@@ -16,6 +16,21 @@ def cell_area_all(t_res,base_dir, radius=6376.0e3):
 
     return area_array,xsize_array,ysize_array
 
+def def_grid_and_cell_area_all(t_res,base_dir, radius=6376.0e3):
+    """read in grid from approriate file, and return 2D array of grid cell areas in metres**2."""
+    resolution_file = Dataset(base_dir+'src/extra/python/scripts/gfdl_grid_files/t'+str(t_res)+'.nc', 'r', format='NETCDF3_CLASSIC')
+
+    lons = resolution_file.variables['lon'][:]
+    lats = resolution_file.variables['lat'][:]
+
+    lonb = resolution_file.variables['lonb'][:]
+    latb = resolution_file.variables['latb'][:]
+
+    area_array,xsize_array,ysize_array = cell_area_calculate(lons, lats, lonb, latb, radius)
+
+
+    return area_array,xsize_array,ysize_array, lons, lats, lonb, latb
+
 def cell_area(t_res,base_dir):
     """wrapper for cell_area_all, such that cell_area only returns area array, and not xsize_array and y_size_array too."""
     area_array,xsize_array,ysize_array = cell_area_all(t_res,base_dir)

@@ -41,11 +41,11 @@ def populate_new_spherical_harmonic_field(x_in, y_in, x_out, y_out, input_array)
     return output_array
 
 
-def process_input_file(file_name, atmosphere_or_spectral_dynamics, num_fourier_out, num_x_out, num_y_out):
+def process_input_file(file_name, base_dir, atmosphere_or_spectral_dynamics, num_fourier_out, num_x_out, num_y_out):
 
     num_spherical_out = num_fourier_out + 1
 
-    dataset = xar.open_dataset(file_name+'.res.nc')
+    dataset = xar.open_dataset(base_dir+ file_name+'.res.nc')
 
     Time_in = dataset.Time.values #Just 1 and 2
     Time_out = Time_in
@@ -121,13 +121,105 @@ def process_input_file(file_name, atmosphere_or_spectral_dynamics, num_fourier_o
         dataset_out[var].attrs = dataset[var].attrs
 
     out_file_name = file_name+'_mod_'+str(num_fourier_out)+'_onescript.res.nc'
-    dataset_out.to_netcdf(path='./temp_'+out_file_name, format='NETCDF3_CLASSIC', engine='scipy')
+    dataset_out.to_netcdf(path=base_dir+'/temp_'+out_file_name, format='NETCDF3_CLASSIC', engine='scipy')
     
-    remove_fill_value_attribute('./temp_'+out_file_name, out_file_name)
+    remove_fill_value_attribute(base_dir+'/temp_'+out_file_name, out_file_name)
     
-    os.remove('./temp_'+out_file_name)
+    os.remove(base_dir+'/temp_'+out_file_name)
     
     return out_file_name
+
+def process_column_input_file(file_name, base_dir, atmosphere_or_spectral_dynamics, num_fourier_out, num_x_out, num_y_out):
+
+    num_spherical_out = num_fourier_out + 1
+
+    dataset = xar.open_dataset(base_dir+ file_name+'.res.nc')
+    dataset_spectral_to_copy = xar.open_dataset('./spectral_dynamics.res.nc')
+
+    Time_in = dataset.Time.values #Just 1 and 2
+    Time_out = Time_in
+        
+    dataset_out = dataset_spectral_to_copy.copy(deep=True)
+
+    x_axis_1_in = dataset.xaxis_1.values #Just a single value - 1.0
+    x_axis_2_in = dataset.xaxis_2.values #Bizarrely, this is the number of vertical levels+1
+    x_axis_3_in = None
+    x_axis_4_in = dataset.xaxis_3.values #Number of gridpoints in physical space
+
+    y_axis_1_in = dataset.yaxis_1.values #Just a single value - 1.0
+    y_axis_2_in = None
+    y_axis_3_in = dataset.yaxis_2.values #Number of gridpoints in physical space
+
+
+    z_axis_1_in = dataset.zaxis_1.values #Just a single value - 1.0
+    z_axis_2_in = dataset.zaxis_2.values #Number of full levels (30)
+
+    longitudes_in  = np.arange(0., 360., (360./x_axis_4_in.shape[0]))
+    latitudes_in  = gg.gaussian_latitudes(int(y_axis_3_in.shape[0]/2))[0]
+
+    axes_out = {'xaxis_1':x_axis_1_in, 'xaxis_2':x_axis_2_in, 'xaxis_3':np.arange(1.,num_spherical_out+1), 'xaxis_4':np.arange(1.,num_x_out+1), 'yaxis_1':y_axis_1_in, 'yaxis_2':np.arange(1.,num_spherical_out+2), 'yaxis_3':np.arange(1.,num_y_out+1), 'zaxis_1':dataset.zaxis_1.values, 'zaxis_2':dataset.zaxis_2.values, 'Time':Time_in}
+
+    y_axis_name = 'yaxis_3'
+    x_axis_name = 'xaxis_4'
+
+
+    longitudes_out = np.arange(0., 360., (360./num_x_out))
+    latitudes_out = gg.gaussian_latitudes(int(num_y_out/2))[0]    
+
+    for var in list(dataset_out.data_vars.keys()):
+        dataset_out.__delitem__(var)
+
+    for coord in list(dataset_out.coords.keys()):
+        dataset_out[coord] = axes_out[coord]
+        dataset_out[coord].attrs = dataset_spectral_to_copy[coord].attrs
+
+    for var in list(dataset_spectral_to_copy.data_vars.keys()):
+
+        var_dims = dataset_spectral_to_copy[var].dims
+
+        if var in list(dataset.data_vars.keys()):
+
+            if var_dims[2:4] == (y_axis_name, x_axis_name):
+                print((var, 'physical grid'))
+                new_var = linear_interpolate_for_regrid(longitudes_in, latitudes_in, longitudes_out, latitudes_out, dataset[var].load().values)
+                dataset_out[var] = (dataset_spectral_to_copy[var].dims, new_var)
+        
+            elif var_dims[2:4] == ('yaxis_2', 'xaxis_3'):    
+                print((var, 'spectral grid'))
+                new_var = populate_new_spherical_harmonic_field(x_axis_2_in, y_axis_2_in, axes_out['xaxis_3'], axes_out['yaxis_2'], dataset[var].values)
+                dataset_out[var] = ((dataset_spectral_to_copy[var].dims, new_var))
+            else:
+                print((var, 'neither'))
+                dataset_out[var] = ((dataset_spectral_to_copy[var].dims, dataset[var].values))
+                
+            dataset_out[var].attrs = dataset[var].attrs
+
+        else:
+            if var_dims[2:4] == (y_axis_name, x_axis_name):
+                print((var, 'physical grid'))
+                new_var = linear_interpolate_for_regrid(longitudes_in, latitudes_in, longitudes_out, latitudes_out, np.zeros([np.shape(dataset_out[dim_to_use])[0] for dim_to_use in var_dims]))
+                pdb.set_trace()
+                dataset_out[var] = (dataset_spectral_to_copy[var].dims, new_var)
+        
+            elif var_dims[2:4] == ('yaxis_2', 'xaxis_3'):    
+                print((var, 'spectral grid'))
+                new_var = populate_new_spherical_harmonic_field(x_axis_2_in, y_axis_2_in, axes_out['xaxis_3'], axes_out['yaxis_2'], np.zeros([np.shape(dataset_out[dim_to_use])[0] for dim_to_use in var_dims]))
+                dataset_out[var] = ((dataset_spectral_to_copy[var].dims, new_var))
+            else:
+                print((var, 'neither'))
+                dataset_out[var] = ((dataset_spectral_to_copy[var].dims, dataset_spectral_to_copy[var].values))
+                
+            dataset_out[var].attrs = dataset_spectral_to_copy[var].attrs            
+
+    out_file_name = 'spectral_dynamics_mod_'+str(num_fourier_out)+'_onescript.res.nc'
+    dataset_out.to_netcdf(path=base_dir+'/temp_'+out_file_name, format='NETCDF3_CLASSIC', engine='scipy')
+    
+    remove_fill_value_attribute(base_dir+'/temp_'+out_file_name, out_file_name)
+    
+    os.remove(base_dir+'/temp_'+out_file_name)
+    
+    return out_file_name
+
 
 def join_into_cpio(atmosphere_file_name='./atmosphere.res.nc', spectral_dynamics_file_name='./spectral_dynamics.res.nc', atmos_model_file_name='./atmos_model.res', restart_file_out_name='./res_mod'):
 
@@ -191,24 +283,34 @@ def remove_fill_value_attribute(in_file_name, out_file_name):
 if __name__=="__main__":
 
     #Specify the number of fourier modes and lon and lat dimensions for the output
-    num_fourier_out = 213
-    num_x_out = 640
-    num_y_out = 320
+    num_fourier_out = 85
+    num_x_out = 256
+    num_y_out = 128
 
-    base_dir = ''
+    base_dir = '/scratch/sit204/Isca/src/extra/python/scripts/res2194_column_mk4/'
     #Specify the name of the input files that you want to regrid
-    atmosphere_file_name = base_dir + 'atmosphere'
-    spectral_dynamics_file_name = base_dir + 'spectral_dynamics'
-    atmos_model_file_name = base_dir + 'atmos_model.res'
+    atmosphere_file_name = 'atmosphere'
+    spectral_dynamics_file_name = 'column_model'
+    atmos_model_file_name = 'atmos_model.res'
     
+    convert_from_column_model_to_spectral_dynamics = True
+
     #Specify the name of the output cpio archive    
-    restart_file_out_name = 'res_t213_moist_no_drag'
-    
-    #Regridding atmosphere file
-    atmosphere_out_file_name = process_input_file(atmosphere_file_name,        'atmosphere',        num_fourier_out, num_x_out, num_y_out)
-    #regridding spectral dynamics file
-    spectral_out_file_name   = process_input_file(spectral_dynamics_file_name, 'spectral_dynamics', num_fourier_out, num_x_out, num_y_out)
-    
+    restart_file_out_name = 'restart_3d_from_column_mk4_2194'
+
+    if not convert_from_column_model_to_spectral_dynamics:    
+        #Regridding atmosphere file
+        atmosphere_out_file_name = process_input_file(atmosphere_file_name, base_dir,       'atmosphere',        num_fourier_out, num_x_out, num_y_out)
+        #regridding spectral dynamics file
+        spectral_out_file_name   = process_input_file(spectral_dynamics_file_name, base_dir, 'spectral_dynamics', num_fourier_out, num_x_out, num_y_out)
+    else:
+        #Regridding atmosphere file
+        atmosphere_out_file_name = process_input_file(atmosphere_file_name, base_dir,       'atmosphere',        num_fourier_out, num_x_out, num_y_out)
+        #regridding spectral dynamics file
+        spectral_out_file_name   = process_column_input_file(spectral_dynamics_file_name, base_dir, 'column_model', num_fourier_out, num_x_out, num_y_out)        
+
+
+
     #merging into a single archive
     join_into_tar(atmosphere_out_file_name, spectral_out_file_name, atmos_model_file_name, restart_file_out_name=restart_file_out_name)
     

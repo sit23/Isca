@@ -307,7 +307,7 @@ if (do_mellor_yamada) then
 !------------------- non-local K scheme --------------
 
 
-    call diffusivity ( tt, qq, uu, vv, p_full, p_half, z_full, z_half,   &
+    call diffusivity ( tt, qq, uu, vv, p_full, p_half, z_full, z_half, lat,  &
                        u_star, b_star, z_pbl, diff_m, diff_t, &
                        kbot = kbot)
 

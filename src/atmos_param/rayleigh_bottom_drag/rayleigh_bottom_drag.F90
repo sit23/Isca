@@ -29,6 +29,8 @@ use  diag_manager_mod, only: register_diag_field, send_data
        sigma_mid             = 1./3.,              & ! extent of frictional `PBL'
        sigma_top             = ((1./3.)-0.05)        ! extent of frictional `PBL'
 
+  real :: deep_velocity_magnitude = 0.
+
   logical ::                           &
        do_drag_at_surface = .true.
 
@@ -41,7 +43,7 @@ use  diag_manager_mod, only: register_diag_field, send_data
              
   namelist/rayleigh_bottom_drag_nml/ sigma_b, rc, H_lambda,             &
               kf_days, do_energy_conserv_ray, variable_drag, zero_eq_drag, &
-              do_drag_at_surface, sigma_bot, sigma_mid, sigma_top
+              do_drag_at_surface, sigma_bot, sigma_mid, sigma_top, deep_velocity_magnitude
 
   private rayleigh_bottom_drag_nml
 
@@ -162,9 +164,9 @@ contains
     real,    dimension(size(ug,1),size(ug,2)) :: sigma, sigma_norm, sigma_max
     real,    intent(out),   dimension(:,:,:)  :: dissipative_heat 
     
-    real, dimension(size(ug,1),size(ug,2),size(ug,3)):: dt_u_temp, dt_v_temp
+    real, dimension(size(ug,1),size(ug,2),size(ug,3)):: dt_u_temp, dt_v_temp, u_deep
     real, dimension(size(ug,2))  :: drag_coeff
-    integer :: j, k, num_level 
+    integer :: i, j, k, num_level 
     type(time_type), intent(in)            ::  Time
     logical :: used
     real :: half_delt, cp_inv
@@ -200,6 +202,13 @@ contains
       drag_coeff = kf
    endif
 
+   u_deep = 0.0
+   
+   do i=1, size(ug,1)
+      do j = 1, size(ug, 2)
+         u_deep(i,j,num_level) = deep_velocity_magnitude * cos(3.*lat(i,j))
+      end do
+   end do
 
     do k = 1, num_level
        do j = 1, size(ug,2)
@@ -207,7 +216,7 @@ contains
        sigma_norm(:,j)   = (sigma(:,j) - sigma_b) / (1.0 - sigma_b)
        sigma_max(:,j)    = max(sigma_norm(:,j), 0.0)
        dt_ug(:,j,k) = dt_ug(:,j,k)     &
-                        - drag_coeff(j) * sigma_max(:,j) * ug(:,j,k)
+                        - drag_coeff(j) * sigma_max(:,j) * (ug(:,j,k) - u_deep(:,j,k))
        dt_vg(:,j,k) = dt_vg(:,j,k)     &
                         - drag_coeff(j) * sigma_max(:,j) * vg(:,j,k)
        end do

@@ -21,7 +21,7 @@ module dry_convection_mod
   use           fms_mod, only: error_mesg, FATAL, stdlog, mpp_pe,             &
                                mpp_root_pe, open_namelist_file, close_file,   &
                                check_nml_error
-  use     constants_mod, only: rdgas, cp_air, omega
+  use     constants_mod, only: rdgas, cp_air, omega, pi
   use  time_manager_mod, only: time_type
   use  diag_manager_mod, only: register_diag_field, send_data
 
@@ -34,9 +34,10 @@ module dry_convection_mod
   real :: tau, &            !< relaxation timescale [seconds]
           gamma             !< prescibed lapse rate [non-dim]
 
-  logical :: use_intertial_timescale = .false.          
+  logical :: use_inertial_timescale = .false.
+  logical :: inertial_timescale_min_timestep = .false.
 
-  namelist /dry_convection_nml/ tau, gamma, use_intertial_timescale
+  namelist /dry_convection_nml/ tau, gamma, use_inertial_timescale, inertial_timescale_min_timestep
 
   integer :: i, j, jit, k, num_levels
   real :: cons1 = 0.  !< Potential temperature exponent (R/Cp)
@@ -49,15 +50,19 @@ module dry_convection_mod
 
   public :: dry_convection_init, dry_convection
 
+  real, allocatable :: inv_tau_inertial_arr(:,:)
+
   contains
 
 !> Initialise the dry convection scheme
 !!
 !! @param[in] axes The dimensions of the model
 !! @param[in] Time Initial time (as a time_type)
-    subroutine dry_convection_init(axes, Time)
+    subroutine dry_convection_init(axes, Time, rad_lat, dt_atmos)
       integer, intent(in) :: axes(4)
       type(time_type), intent(in) :: Time
+      real, intent(in), dimension(:,:) :: rad_lat
+      real, intent(in) :: dt_atmos
 
       integer :: unit, ierr, io
 
@@ -103,6 +108,22 @@ module dry_convection_mod
       id_dt = register_diag_field ( mod_name, 'dt_tg', axes(1:3), &
            Time, 'Temperature tendency', 'K/s', missing_value=missing_value)
 
+    if (use_inertial_timescale) then
+
+        allocate(inv_tau_inertial_arr(size(rad_lat, 1), size(rad_lat, 2)))
+        inv_tau_inertial_arr(:,:) = 2.*omega * abs(sin(rad_lat(:,:)))
+
+        ! if (inertial_timescale_min_timestep) then
+        !     do i=1, size(rad_lat,1)
+        !         do j=1, size(rad_lat,2)
+        !             inv_tau_inertial_arr(i,j) = min(inv_tau_inertial_arr(i,j), 1./(2.*pi*dt_atmos))
+        !         end do
+        !     end do
+        ! end if
+        write(6,*) 'minval, maxval', minval(inv_tau_inertial_arr), maxval(inv_tau_inertial_arr)
+
+    end if
+
     end subroutine dry_convection_init
 
 !> Run a single timestep of the dry convection scheme
@@ -119,7 +140,7 @@ module dry_convection_mod
 !! @param[out] dt_tg Calculated temperature tendency
 !! @param[out] cape Convective Available Potential Energy
 !! @param[out] cin Convective Inhibition
-  subroutine dry_convection(Time, tg, p_full, p_half, lat, dt_tg, cape, cin)
+  subroutine dry_convection(Time, tg, p_full, p_half, dt_tg, cape, cin)
 
     type(time_type), intent(in) :: Time
 
@@ -127,8 +148,6 @@ module dry_convection_mod
          tg,               &   ! temperature
          p_full,           &   ! pressure on full model levels
          p_half                ! pressure on half model levels
-
-    real, intent(in), dimension(:,:) :: rad_lat
 
     real, intent(out), dimension(:,:,:) ::                                    &
          dt_tg                 ! temperature tendency
@@ -202,9 +221,9 @@ module dry_convection_mod
     end do
 
     ! temperature tendency
-    if (use_intertial_timescale) then
+    if (use_inertial_timescale) then
       do k=1, num_levels
-         dt_tg(:,:,k) = (tp(:,:,k) - tg(:,:,k)) * 2.*omega * sin(rad_lat(:,:))
+         dt_tg(:,:,k) = (tp(:,:,k) - tg(:,:,k)) * inv_tau_inertial_arr
       end do
     else
       dt_tg = (tp - tg) / tau      

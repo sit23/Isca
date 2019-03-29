@@ -692,7 +692,7 @@ do i_conv=1,2
       call betts_miller_init()
 
     case(DRY_CONV)
-      call dry_convection_init(axes, Time)
+      call dry_convection_init(axes, Time, rad_lat, dt_real)
 
     case(RAS_CONV)
 
@@ -909,7 +909,7 @@ do i_conv=1, num_conv_schemes_to_run
        
     case(DRY_CONV)
         call dry_convection(Time, tg_tmp,                         &
-                            p_full(:,:,:,previous), p_half(:,:,:,previous), rad_lat(:,:),    &
+                            p_full(:,:,:,previous), p_half(:,:,:,previous),  &
                             conv_dt_tg, cape_dry, cin_dry)
 
         tg_tmp = conv_dt_tg*delta_t + tg_tmp
