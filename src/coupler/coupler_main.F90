@@ -190,10 +190,10 @@ use flux_exchange_mod, only: flux_exchange_init,   &
                              flux_ice_to_ocean,    &
                              flux_ocean_to_ice
 
-!   use simple_surface_mod, only: simple_surface_init,   &
-!                                 compute_flux,          &
-!                                 update_simple_surface, &
-!                                 simple_surface_end
+  use simple_surface_mod, only: simple_surface_init,   &
+                                compute_flux,          &
+                                update_simple_surface, &
+                                simple_surface_end
 
   use mpp_mod, only: mpp_clock_id, mpp_clock_begin, mpp_clock_end
   use mpp_mod, only: mpp_init, mpp_pe, mpp_npes, mpp_root_pe, &
@@ -419,18 +419,40 @@ do nc = 1, num_cpld_calls
             write(6,*) 'DONE SURFACE FLUXES'                                     
           end if
 
+          call compute_flux (float(dt_atmos), Time_atmos, Atm,       &
+                            !land_frac_atm,                          &
+                            !t_surf_atm, albedo_atm, rough_mom_atm,  &
+                            !flux_u_atm, flux_v_atm, dtaudv_atm,     &
+                            !u_star_atm, b_star_atm                  )
+                            Land_ice_atmos_boundary%land_frac, &
+                            Land_ice_atmos_boundary%t,         &
+                            Land_ice_atmos_boundary%albedo,    &
+                            Land_ice_atmos_boundary%rough_mom, &
+                            Land_ice_atmos_boundary%u_flux,    &
+                            Land_ice_atmos_boundary%v_flux,    &
+                            Land_ice_atmos_boundary%dtaudv,    &
+                            Land_ice_atmos_boundary%u_star,    &
+                            Land_ice_atmos_boundary%b_star     )
+
 !      ---- atmosphere down ----
             if (do_atmos) then
                 write(6,*) 'ATMOS_MODEL DOWN'
                 call update_atmos_model_down( Land_ice_atmos_boundary, Atm )
                 write(6,*) 'DONE ATMOS_MODEL DOWN'
+
+                call update_simple_surface (float(dt_atmos), Time_atmos, Atm, &
+                Land_ice_atmos_boundary%dt_t, &
+                Land_ice_atmos_boundary%dt_q)                
             endif
-            write(6,*) 'FLUX DOWN FROM ATMOS'            
-          call flux_down_from_atmos( Time_atmos, Atm, Land, Ice, &
-               Land_ice_atmos_boundary, &
-               Atmos_land_boundary, &
-               Atmos_ice_boundary )
-               write(6,*) 'DONE Flux DOWN from atmos'
+            write(6,*) 'FLUX DOWN FROM ATMOS'     
+            if (do_flux) then
+       
+                call flux_down_from_atmos( Time_atmos, Atm, Land, Ice, &
+                    Land_ice_atmos_boundary, &
+                    Atmos_land_boundary, &
+                    Atmos_ice_boundary )
+                    write(6,*) 'DONE Flux DOWN from atmos'
+            endif
 
 
 !      --------------------------------------------------------------
@@ -450,11 +472,13 @@ do nc = 1, num_cpld_calls
 !      --------------------------------------------------------------
 !      ---- atmosphere up ----
             write(6,*) 'about to do flux up to atmos'
+            if (do_flux) then
 
-           call flux_up_to_atmos( Time_atmos, Land, Ice, Land_ice_atmos_boundary, &
-                & Atmos_land_boundary, Atmos_ice_boundary )
+                call flux_up_to_atmos( Time_atmos, Land, Ice, Land_ice_atmos_boundary, &
+                        & Atmos_land_boundary, Atmos_ice_boundary )
 
-                write(6,*) 'about to atmos model up'
+                        write(6,*) 'about to atmos model up'
+            endif
                 
             if (do_atmos) &
               call update_atmos_model_up( Land_ice_atmos_boundary, Atm )
@@ -471,7 +495,10 @@ do nc = 1, num_cpld_calls
 !
        write(6,*) 'Doing flux land to ice'
 
-       call flux_land_to_ice( Time, Land, Ice, Land_ice_boundary )
+       if (do_flux) then
+
+            call flux_land_to_ice( Time, Land, Ice, Land_ice_boundary )
+       endif
 
        Atmos_ice_boundary%p = 0.0 ! call flux_atmos_to_ice_slow ?
 
@@ -836,7 +863,7 @@ contains
 ! pjp    Lima Atm contains fields in addition to what df is using.
 ! pjp    They are initialized to zero by atmos_model_init.
 ! pjp    I don't think any action is necessary to make simple_surface_init compatable with Lima.
-!         call simple_surface_init (Time, Atm)
+        call simple_surface_init (Time, Atm)
 !         id = size(Atm%t_bot,1)
 !         jd = size(Atm%t_bot,2)
 !         allocate (Land_ice_atmos_boundary%t        (id,jd), &
@@ -965,7 +992,7 @@ contains
 !pjp    Lima Atm contains fields in addition to what df is using.
 !pjp    They are initialized to zero by atmos_model_init.
 !pjp    I don't think any action is necessary to make simple_surface_end compatable with Lima.
-!         call simple_surface_end (Atm)
+        call simple_surface_end (Atm)
 
 !       call  land_model_end (Atmos_land_boundary, Land)
 !       call   ice_model_end (Ice)

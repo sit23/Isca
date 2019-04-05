@@ -23,15 +23,15 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('coupled_frierson_test_experiment_16_ocean_and_ice_on', codebase=cb)
+exp = Experiment('simple_surface_frierson_test_1', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
 #Tell model how to write diagnostics
 diag = DiagTable()
 diag.add_file('atmos_daily', 1, 'days', time_units='days')
-diag.add_file('ocean_daily', 1, 'days', time_units='days')
-diag.add_file('ice_daily', 1, 'days', time_units='days')
+# diag.add_file('ocean_daily', 1, 'days', time_units='days')
+# diag.add_file('ice_daily', 1, 'days', time_units='days')
 
 
 #Tell model which diagnostics to write
@@ -47,13 +47,13 @@ diag.add_field('dynamics', 'temp', time_avg=True, files = ['atmos_daily'])
 diag.add_field('dynamics', 'vor', time_avg=True, files = ['atmos_daily'])
 diag.add_field('dynamics', 'div', time_avg=True, files = ['atmos_daily'])
 
-diag.add_field('ocean_model', 'salt', time_avg=True, files = ['ocean_daily'])
-diag.add_field('ocean_model', 'temp', time_avg=True, files = ['ocean_daily'])
-diag.add_field('ocean_model', 'u', time_avg=True, files = ['ocean_daily'])
-diag.add_field('ocean_model', 'v', time_avg=True, files = ['ocean_daily'])
+# diag.add_field('ocean_model', 'salt', time_avg=True, files = ['ocean_daily'])
+# diag.add_field('ocean_model', 'temp', time_avg=True, files = ['ocean_daily'])
+# diag.add_field('ocean_model', 'u', time_avg=True, files = ['ocean_daily'])
+# diag.add_field('ocean_model', 'v', time_avg=True, files = ['ocean_daily'])
 
-diag.add_field('ice_model', 'CN', time_avg=True, files = ['ice_daily'])
-diag.add_field('ice_model', 'EXT', time_avg=True, files = ['ice_daily'])
+# diag.add_field('ice_model', 'CN', time_avg=True, files = ['ice_daily'])
+# diag.add_field('ice_model', 'EXT', time_avg=True, files = ['ice_daily'])
 
 exp.diag_table = diag
 
@@ -73,8 +73,8 @@ exp.namelist = namelist = Namelist({
      'current_date' : [1,1,1,0,0,0],
      'calendar' : 'thirty_day',
      'do_land' : False,
-     'do_ice' : True,
-     'do_flux': True,
+     'do_ice' : False,
+     'do_ocean': False,
 
     },
 

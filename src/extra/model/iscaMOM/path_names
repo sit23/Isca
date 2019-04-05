@@ -140,6 +140,7 @@ atmos_spectral/tools/transforms.F90
 coupler/surface_flux.F90
 coupler/coupler_main.F90
 coupler/flux_exchange.F90
+coupler/simple_surface.F90
 shared/axis_utils/axis_utils.F90
 shared/constants/constants.F90
 shared/astronomy/astronomy.f90
