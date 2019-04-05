@@ -308,6 +308,7 @@ character(len=16) :: cosp_precip_sources = '    '
 ! ---> h1g, 2012-08-28, add option of applying surface fluxes in host-model
 !                       by default .true. (that is, applying surface fluxes in host-model)
 logical :: l_host_applies_sfc_fluxes = .true.
+logical :: print_s_messages = .true.
 ! <--- h1g, 2012-08-28
 
 namelist / physics_driver_nml / do_radiation, &
@@ -323,7 +324,8 @@ namelist / physics_driver_nml / do_radiation, &
                                 override_aerosols_radiation,  &
                                 override_aerosols_cloud,    &
                                 cosp_precip_sources,    &
-                                l_host_applies_sfc_fluxes
+                                l_host_applies_sfc_fluxes, &
+                                print_s_messages
 
 !---------------------------------------------------------------------
 !------- public data ------
@@ -723,7 +725,7 @@ rad_lonb = lonb * PI/180.
   call  moist_processes_init (id, jd, kd, lonb, latb, lon, lat, phalf, pref(:,1),&
   axes, Time, doing_donner)
 
-  write(6,*) 'checking nt ntp', nt, ntp
+  if (print_s_messages) write(6,*) 'checking nt ntp', nt, ntp
   call moist_alloc_init (id,jd,kd,nt,ntp) ! Are these the right way around? nt and ntp correct?
 
 
@@ -1366,7 +1368,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                          'module has not been initialized', FATAL)
       endif
 
-      write(6,*) 'made it to physics driver down'
+      if (print_s_messages) write(6,*) 'made it to physics driver down'
 !---------------------------------------------------------------------
 !    if COSP is activated, save the surface (skin) temperature for
 !    its use.
@@ -1429,14 +1431,14 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       !   moist_convect, diffm, difft  )      
 
 
-      write(6,*) 'made it to idmp call'
+      if (print_s_messages) write(6,*) 'made it to idmp call'
     if (do_grey_radiation) then
       call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, udt, vdt, tdt, rdt, .false., mask, kbot, net_surf_sw_down_grey=net_surf_sw_down_grey )  
     else
       call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, udt, vdt, tdt, rdt, .false., mask, kbot )
     endif
     
-    write(6,*) 'Done idmp call'
+    if (print_s_messages) write(6,*) 'Done idmp call'
 !-------------------------------------------------------------------
 !    process the variables returned from radiation_driver_mod. the 
 !    radiative heating rate is added to the accumulated physics heating
@@ -1448,7 +1450,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !    accumulating the radiative and turbulent heating rates, and which
 !    is needed by strat_cloud_mod.
 !-------------------------------------------------------------------
-    write(6,*) 'applying tendencies'
+    if (print_s_messages) write(6,*) 'applying tendencies'
       ! tdt     = tdt + tdt_idm
     !PROBLEM IS CURRENTLY HERE, where Radiation object is not defined and so getting seg faults. Need to work out relationship between all these variables in order to divide them up. 
 
@@ -1496,10 +1498,10 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       ! radturbten (is:ie,js:je,:) = radturbten(is:ie,js:je,:) + &
       !                              Radiation%tdt_rad(:,:,:,1)
  
-      write(6,*) 'DONE applying tendencies'
+      if (print_s_messages) write(6,*) 'DONE applying tendencies'
       call mpp_clock_end ( radiation_clock )
 
-      write(6,*) 'do grey radiation =', do_grey_radiation, maxval(net_surf_sw_down_grey)
+      if (print_s_messages) write(6,*) 'do grey radiation =', do_grey_radiation, maxval(net_surf_sw_down_grey)
 
       if(do_grey_radiation) then !rif:(09/10/09) 
         ! call grey_radiation(is, js, Time, Time_next, lat, lon, phalfgrey, albedo, t_surf_rad, t, tdt, net_surf_sw_down_grey, flux_lw)
@@ -1514,16 +1516,16 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !    call damping_driver to calculate the various model dampings that
 !    are desired. 
 !----------------------------------------------------------------------
-      write(6,*) 'about to do damping driver'
+      if (print_s_messages) write(6,*) 'about to do damping driver'
       z_pbl(:,:) = pbltop(is:ie,js:je) 
-      write(6,*) maxval(pbltop(is:ie, js:je)), 'max pbltop'
+      if (print_s_messages) write(6,*) maxval(pbltop(is:ie, js:je)), 'max pbltop'
       call mpp_clock_begin ( damping_clock )
       call damping_driver (is, js, lat, Time_next, dt,           &
                            p_full, p_half, z_full, z_half,          &
                            um, vm, tm, qm, rm(:,:,:,1:ntp), &
                            udt, vdt, tdt, qdt, rdt,&
                            z_pbl , mask, kbot)
-      write(6,*) 'done damping driver'
+      if (print_s_messages) write(6,*) 'done damping driver'
       call mpp_clock_end ( damping_clock )
 
 !---------------------------------------------------------------------
@@ -1543,7 +1545,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       !   endif
       ! end do
 
-      write(6,*) 'about to do vert turb driver'
+      if (print_s_messages) write(6,*) 'about to do vert turb driver'
       call mpp_clock_begin ( turb_clock )
       call vert_turb_driver (is, js, Time, Time_next, dt,            &
                              lw_tendency(is:ie,js:je,:), frac_land,  &
@@ -1557,7 +1559,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                              mask=mask, kbot=kbot             )
      call mpp_clock_end ( turb_clock )
      pbltop(is:ie,js:je) = z_pbl(:,:)
-     write(6,*) 'Done vert turb driver'
+     if (print_s_messages) write(6,*) 'Done vert turb driver'
       ! if (id_tdt_phys_turb > 0) then
       !   used = send_data ( id_tdt_phys_turb, +2.0*tdt(:,:,:), &
       !                      Time_next, is, js, 1, rmask=mask )
@@ -1692,7 +1694,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
      call mpp_clock_end ( diff_down_clock )
 
-     write(6,*) 'Finished physics driver down'
+     if (print_s_messages) write(6,*) 'Finished physics driver down'
  end subroutine physics_driver_down
 
 
@@ -2065,7 +2067,7 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
         ! end do
 
         call mpp_clock_begin ( moist_processes_clock )
-        write(6, *) 'about to do moist processes'
+        if (print_s_messages) write(6,*) 'about to do moist processes'
         call moist_processes (is, ie, js, je, Time_next, dt, frac_land, &
                            p_half, p_full, z_half, z_full, omega,    &
                            diff_t(is:ie,js:je,:),                    &
@@ -2083,7 +2085,7 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
                            gust_cv, area, lon, lat,   &
                            mask=mask, kbot=kbot)      
                            
-        write(6, *) 'Done moist processes'                           
+        if (print_s_messages) write(6,*) 'Done moist processes'                           
         call mpp_clock_end ( moist_processes_clock )
         diff_cu_mo(is:ie, js:je,:) = diff_cu_mo_loc(:,:,:)
         radturbten(is:ie,js:je,:) = 0.0
@@ -2165,45 +2167,48 @@ integer :: moist_processes_term_clock, damping_term_clock, turb_term_clock, &
 
 ! ---> h1g
 integer :: clubb_term_clock
-!--------------------------------------------------------------------
-        clubb_term_clock =      &
-        mpp_clock_id( '   Phys_driver_term: clubb: Termination', &
-                grain=CLOCK_MODULE_DRIVER )
-! <--- h1g
 
-      moist_processes_term_clock =      &
-        mpp_clock_id( '   Phys_driver_term: MP: Termination', &
-                grain=CLOCK_MODULE_DRIVER )
-      damping_term_clock         =     &
-        mpp_clock_id( '   Phys_driver_term: Damping: Termination',    &
-                  grain=CLOCK_MODULE_DRIVER )
-      turb_term_clock            =      &
-        mpp_clock_id( '   Phys_driver_term: Vert. Turb.: Termination', &
-                  grain=CLOCK_MODULE_DRIVER )
-      diff_term_clock       =     &
-        mpp_clock_id( '   Phys_driver_term: Vert. Diff.: Termination',   &
-                 grain=CLOCK_MODULE_DRIVER )
-      cloud_spec_term_clock       =       &
-        mpp_clock_id( '   Phys_driver_term: Cloud spec: Termination', &
-                       grain=CLOCK_MODULE_DRIVER )
-      cosp_term_clock       =       &
-        mpp_clock_id( '   Phys_driver_term: COSP: Termination', &
-                       grain=CLOCK_MODULE_DRIVER )
-      aerosol_term_clock       =       &
-        mpp_clock_id( '   Phys_driver_term: Aerosol: Termination', &
-                       grain=CLOCK_MODULE_DRIVER )
-      grey_radiation_term_clock       =       &
-        mpp_clock_id( '   Phys_driver_term: Grey Radiation: Termination', &
-                       grain=CLOCK_MODULE_DRIVER )
-      radiative_gases_term_clock       =       &
-        mpp_clock_id( '   Phys_driver_term: Radiative gases: Termination', &
-                       grain=CLOCK_MODULE_DRIVER )
-      radiation_term_clock       =       &
-        mpp_clock_id( '   Phys_driver_term: Radiation: Termination', &
-                       grain=CLOCK_MODULE_DRIVER )
-      tracer_term_clock          =      &
-        mpp_clock_id( '   Phys_driver_term: Tracer: Termination',    &
-                 grain=CLOCK_MODULE_DRIVER )
+write(6,*) 'physics driver end #0'
+
+!--------------------------------------------------------------------
+!         clubb_term_clock =      &
+!         mpp_clock_id( '   Phys_driver_term: clubb: Termination', &
+!                 grain=CLOCK_MODULE_DRIVER )
+! ! <--- h1g
+
+!       moist_processes_term_clock =      &
+!         mpp_clock_id( '   Phys_driver_term: MP: Termination', &
+!                 grain=CLOCK_MODULE_DRIVER )
+!       damping_term_clock         =     &
+!         mpp_clock_id( '   Phys_driver_term: Damping: Termination',    &
+!                   grain=CLOCK_MODULE_DRIVER )
+!       turb_term_clock            =      &
+!         mpp_clock_id( '   Phys_driver_term: Vert. Turb.: Termination', &
+!                   grain=CLOCK_MODULE_DRIVER )
+!       diff_term_clock       =     &
+!         mpp_clock_id( '   Phys_driver_term: Vert. Diff.: Termination',   &
+!                  grain=CLOCK_MODULE_DRIVER )
+!       cloud_spec_term_clock       =       &
+!         mpp_clock_id( '   Phys_driver_term: Cloud spec: Termination', &
+!                        grain=CLOCK_MODULE_DRIVER )
+!       cosp_term_clock       =       &
+!         mpp_clock_id( '   Phys_driver_term: COSP: Termination', &
+!                        grain=CLOCK_MODULE_DRIVER )
+!       aerosol_term_clock       =       &
+!         mpp_clock_id( '   Phys_driver_term: Aerosol: Termination', &
+!                        grain=CLOCK_MODULE_DRIVER )
+!       grey_radiation_term_clock       =       &
+!         mpp_clock_id( '   Phys_driver_term: Grey Radiation: Termination', &
+!                        grain=CLOCK_MODULE_DRIVER )
+!       radiative_gases_term_clock       =       &
+!         mpp_clock_id( '   Phys_driver_term: Radiative gases: Termination', &
+!                        grain=CLOCK_MODULE_DRIVER )
+!       radiation_term_clock       =       &
+!         mpp_clock_id( '   Phys_driver_term: Radiation: Termination', &
+!                        grain=CLOCK_MODULE_DRIVER )
+!       tracer_term_clock          =      &
+!         mpp_clock_id( '   Phys_driver_term: Tracer: Termination',    &
+!                  grain=CLOCK_MODULE_DRIVER )
 !---------------------------------------------------------------------
 !    verify that the module is initialized.
 !---------------------------------------------------------------------
@@ -2212,49 +2217,62 @@ integer :: clubb_term_clock
               'module has not been initialized', FATAL)
       endif
 
-      call physics_driver_netcdf
+      write(6,*) 'physics driver end #1'
+
+
+      ! call physics_driver_netcdf
 
 !--------------------------------------------------------------------
 !    call the destructor routines for those modules who were initial-
 !    ized from this module.
 !--------------------------------------------------------------------
-      call mpp_clock_begin ( turb_term_clock )
+      ! call mpp_clock_begin ( turb_term_clock )
       call vert_turb_driver_end
-      call mpp_clock_end ( turb_term_clock )
-      call mpp_clock_begin ( diff_term_clock )
+      ! call mpp_clock_end ( turb_term_clock )
+      write(6,*) 'physics driver end #1.1'
+
+
+      ! call mpp_clock_begin ( diff_term_clock )
       ! call vert_diff_driver_end
-      call mpp_clock_end ( diff_term_clock )
+      ! call mpp_clock_end ( diff_term_clock )
       if (do_radiation) then
-        call mpp_clock_begin ( radiation_term_clock )
+        ! call mpp_clock_begin ( radiation_term_clock )
         ! call radiation_driver_end
-        call mpp_clock_end ( radiation_term_clock )
-        call mpp_clock_begin ( radiative_gases_term_clock )
+        ! call mpp_clock_end ( radiation_term_clock )
+        ! call mpp_clock_begin ( radiative_gases_term_clock )
         ! call radiative_gases_end
-        call mpp_clock_end ( radiative_gases_term_clock )
-        call mpp_clock_begin ( cloud_spec_term_clock )
+        write(6,*) 'physics driver end #1.2'
+
+        ! call mpp_clock_end ( radiative_gases_term_clock )
+        ! call mpp_clock_begin ( cloud_spec_term_clock )
         ! call cloud_spec_end
-        call mpp_clock_end ( cloud_spec_term_clock )
-        call mpp_clock_begin ( aerosol_term_clock )
+        ! call mpp_clock_end ( cloud_spec_term_clock )
+        ! call mpp_clock_begin ( aerosol_term_clock )
         ! call aerosol_end
-        call mpp_clock_end ( aerosol_term_clock )
+        ! call mpp_clock_end ( aerosol_term_clock )
       endif
-      call mpp_clock_begin ( grey_radiation_term_clock )
+      write(6,*) 'physics driver end #1.3'
+
+      ! call mpp_clock_begin ( grey_radiation_term_clock )
+
+      write(6,*) 'physics driver end #2'
 
       ! if(do_grey_radiation) call grey_radiation_end 
 
-      call mpp_clock_end ( grey_radiation_term_clock )
-      call mpp_clock_begin ( moist_processes_term_clock )
+      ! call mpp_clock_end ( grey_radiation_term_clock )
+      ! call mpp_clock_begin ( moist_processes_term_clock )
       call moist_processes_end( clubb_term_clock )
-      call mpp_clock_end ( moist_processes_term_clock )
-      call mpp_clock_begin ( tracer_term_clock )
+      ! call mpp_clock_end ( moist_processes_term_clock )
+      ! call mpp_clock_begin ( tracer_term_clock )
       ! call atmos_tracer_driver_end
-      call mpp_clock_end ( tracer_term_clock )
-      call mpp_clock_begin ( damping_term_clock )
+      ! call mpp_clock_end ( tracer_term_clock )
+      ! call mpp_clock_begin ( damping_term_clock )
       call damping_driver_end
-      call mpp_clock_end ( damping_term_clock )
-      call mpp_clock_begin ( cosp_term_clock )
-      call mpp_clock_end ( cosp_term_clock )
+      ! call mpp_clock_end ( damping_term_clock )
+      ! call mpp_clock_begin ( cosp_term_clock )
+      ! call mpp_clock_end ( cosp_term_clock )
 
+      write(6,*) 'physics driver end #3'      
 !---------------------------------------------------------------------
 !    deallocate the module variables.
 !---------------------------------------------------------------------
@@ -2263,9 +2281,9 @@ integer :: clubb_term_clock
       deallocate (fl_lsrain, fl_lssnow, fl_lsgrpl, fl_ccrain, fl_ccsnow, &
                   fl_donmca_snow, fl_donmca_rain, mr_ozone, daytime, &
                   temp_last, q_last)
-      deallocate (lsc_cloud_area, lsc_liquid, lsc_ice, &
-                  lsc_droplet_number, lsc_ice_number)
-      deallocate (lsc_snow, lsc_rain, lsc_snow_size, lsc_rain_size)
+      ! deallocate (lsc_liquid, lsc_ice, &
+                  ! lsc_droplet_number, lsc_ice_number)
+      ! deallocate (lsc_snow, lsc_rain, lsc_snow_size, lsc_rain_size)
       if (do_clubb > 0) then
          deallocate ( dcond_ls_liquid )
          deallocate ( dcond_ls_ice )
@@ -2275,6 +2293,8 @@ integer :: clubb_term_clock
          deallocate ( rbar_dust )
          deallocate ( diff_t_clubb )
       end if
+
+      write(6,*) 'physics driver end #4'
 
       if (doing_donner) then
         deallocate (cell_cld_frac, cell_liq_amt, cell_liq_size, &
@@ -2290,16 +2310,19 @@ integer :: clubb_term_clock
 
       endif
  
-      deallocate (id_tracer_phys_vdif_dn)
-      deallocate (id_tracer_phys_vdif_up)
-      deallocate (id_tracer_phys_turb)
-      deallocate (id_tracer_phys_moist)
+      ! deallocate (id_tracer_phys_vdif_dn)
+      ! deallocate (id_tracer_phys_vdif_up)
+      ! deallocate (id_tracer_phys_turb)
+      ! deallocate (id_tracer_phys_moist)
 
-      if (do_cosp .or. do_modis_yim) then
-        deallocate (stoch_cloud_type, tau_stoch, lwem_stoch, &
-                    stoch_conc_drop, stoch_conc_ice, stoch_size_drop, &
-                    stoch_size_ice, tsurf_save)
-      endif
+      write(6,*) 'physics driver end #5'
+
+
+      ! if (do_cosp .or. do_modis_yim) then
+      !   deallocate (stoch_cloud_type, tau_stoch, lwem_stoch, &
+      !               stoch_conc_drop, stoch_conc_ice, stoch_size_drop, &
+      !               stoch_size_ice, tsurf_save)
+      ! endif
 !---------------------------------------------------------------------
 !    mark the module as uninitialized.
 !---------------------------------------------------------------------

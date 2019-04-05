@@ -88,7 +88,9 @@ logical :: do_mcm_moist_processes = .false.
 
 logical :: do_moist_in_phys_up=.true.
 
-namelist / atmosphere_nml / do_mcm_moist_processes
+logical :: print_s_messages = .true.
+
+namelist / atmosphere_nml / do_mcm_moist_processes, print_s_messages
 
 !------------------------------------------------------------------------------------------------
 
@@ -274,7 +276,7 @@ if(.not.module_is_initialized) then
   call error_mesg('atmosphere_down','atmosphere module has not been initialized.', FATAL)
 endif
 
-write(6,*) 'reached atmosphere down'
+if (print_s_messages) write(6,*) 'reached atmosphere down'
 dt_psg = 0.
 dt_ug  = 0.
 dt_vg  = 0.
@@ -294,7 +296,7 @@ call mpp_clock_begin(phyclock)
 
 !    call idealized_moist_phys(Time, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, &
 !                              previous, current, dt_ug, dt_vg, dt_tg, dt_tracers)
-write(6,*) 'doing spectral physics down'
+if (print_s_messages) write(6,*) 'doing spectral physics down'
 call spectral_physics_down(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, psg,      &
                         ug, vg, tg, grid_tracers, frac_land, rough_mom, frac_open_sea, albedo, t_surf, u_star, b_star, q_star,     &
                         dtau_du, dtau_dv, tau_x, tau_y, albedo_vis_dir, albedo_nir_dir, albedo_vis_dif, albedo_nir_dif, &
@@ -302,7 +304,7 @@ call spectral_physics_down(Time_prev, Time, Time_next, previous, current, p_half
                         flux_sw_down_vis_dir, flux_sw_down_vis_dif, flux_sw_down_total_dir, flux_sw_down_total_dif, &
                         flux_sw_vis, flux_sw_vis_dir, flux_sw_vis_dif, flux_lw, coszen,gust, Surf_diff)
 call mpp_clock_end(phyclock)
-write(6,*) 'Done spectral physics down'
+if (print_s_messages) write(6,*) 'Done spectral physics down'
 return
 end subroutine atmosphere_down
 !#################################################################################################################################
@@ -323,10 +325,10 @@ if(.not.module_is_initialized) then
 endif
 
 call mpp_clock_begin(phyclock)
-write(6,*) 'doing spectral physics up'
+if (print_s_messages) write(6,*) 'doing spectral physics up'
 call spectral_physics_up(Time_prev, Time, Time_next, previous, current, p_half, p_full, z_half, z_full, wg_full, ug, vg, tg, &
                          grid_tracers, frac_land, u_star, b_star, q_star, dt_ug, dt_vg, dt_tg, dt_tracers, Surf_diff, lprec, fprec, gust)
-write(6,*) 'done spectral physics up'                         
+if (print_s_messages) write(6,*) 'done spectral physics up'                         
 call mpp_clock_end(phyclock)
 
 if(previous == current) then
@@ -501,6 +503,8 @@ character(len=64) :: file, tr_name
 
 if(.not.module_is_initialized) return
 
+write(6,*) 'atmosphere about to write restarts'
+
 file='RESTART/atmosphere.res'
 call write_data(trim(file), 'previous', previous, no_domain=.true.)
 call write_data(trim(file), 'current',  current,  no_domain=.true.)
@@ -516,11 +520,20 @@ do nt=1,num_time_levels
 enddo
 call write_data(trim(file), 'wg_full', wg_full, grid_domain)
 
+write(6,*) 'atmosphere about to deallocate'
+
 deallocate(dt_psg, dt_ug, dt_vg, dt_tg, dt_tracers)
+
+write(6,*) 'atmosphere deallocated'
+
 
 call set_domain(grid_domain)
 ! call idealized_moist_phys_end(grid_domain)
+write(6,*) 'atmosphere deallocated #2'
+
 call spectral_physics_end(Time)
+write(6,*) 'atmosphere deallocated #3'
+
 call spectral_dynamics_end(tracer_attributes, Time)
 
 module_is_initialized = .false.

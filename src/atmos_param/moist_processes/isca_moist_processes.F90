@@ -255,6 +255,7 @@ private
    logical :: detrain_ice_num =.false.
    logical :: do_legacy_strat_cloud = .true.
    character(len=64)  :: cmt_mass_flux_source = 'ras'
+   logical :: print_s_messages = .True.
 
    integer :: tau_sg = 0
    integer :: k_sg = 2
@@ -279,7 +280,8 @@ namelist /moist_processes_nml/ do_mca, do_lsc, do_ras, do_uw_conv, do_strat,    
                                do_bm, do_bmmass, do_bmomp, do_simple, &
                                do_ice_num, do_legacy_strat_cloud, &
                                detrain_liq_num, detrain_ice_num,  &
-                               conv_frac_max, use_updated_profiles_for_clubb, remain_detrain_bug !h1g
+                               conv_frac_max, use_updated_profiles_for_clubb, remain_detrain_bug,& !h1g
+                               print_s_messages
 
 !-------------------- clock definitions --------------------------------
 
@@ -873,7 +875,7 @@ logical, intent(out), dimension(:,:)     :: convect
    real, dimension(size(omega,1),size(omega,2),size(omega,3))  :: qcvar_clubb
 ! <--- h1g, 2012-10-05      
 !-------- input array size and position in global storage --------------
-   write(6,*) 'start moist processes 0'
+   if (print_s_messages) write(6,*) 'start moist processes 0'
 
       ix=size(t,1); jx=size(t,2); kx=size(t,3); nt=size(rdt,4)
 
@@ -897,23 +899,23 @@ logical, intent(out), dimension(:,:)     :: convect
 !--------------------------------------------------------------------
 !    initialize the arrays which will be used in this subroutine.
 !--------------------------------------------------------------------
-      write(6,*) 'start moist processes 0.5'
+      if (print_s_messages) write(6,*) 'start moist processes 0.5'
 
       rain_don     = 0.0
       snow_don     = 0.0
       rain_donmca  = 0.0
       snow_donmca  = 0.0
-      write(6,*) 'start moist processes 0.6'
+      if (print_s_messages) write(6,*) 'start moist processes 0.6'
 
       lprec        = 0.0  
       fprec        = 0.0
-      write(6,*) 'start moist processes 0.7'
+      if (print_s_messages) write(6,*) 'start moist processes 0.7'
 
-      write(6,*) size(fl_lsrain,1),size(fl_lsrain,2),size(fl_lsrain,3)
+      if (print_s_messages) write(6,*) size(fl_lsrain,1),size(fl_lsrain,2),size(fl_lsrain,3)
       fl_lsrain(:,:,:) = 0.
       fl_lssnow(:,:,:) = 0.
       fl_ccrain(:,:,:) = 0.
-      write(6,*) 'start moist processes 0.75'
+      if (print_s_messages) write(6,*) 'start moist processes 0.75'
 
       fl_ccsnow(:,:,:) = 0.
       fl_donmca_rain(:,:,:) = 0.
@@ -923,7 +925,7 @@ logical, intent(out), dimension(:,:)     :: convect
       precip       = 0.0 
       rain3d       = 0.0
       snow3d       = 0.0
-      write(6,*) 'start moist processes 1', size(rdt,1), size(rdt,2), size(rdt,3), size(rdt,4)
+      if (print_s_messages) write(6,*) 'start moist processes 1', size(rdt,1), size(rdt,2), size(rdt,3), size(rdt,4)
 !---------------------------------------------------------------------
 !    initialize local arrays which will hold sums.
 !---------------------------------------------------------------------
@@ -941,7 +943,7 @@ logical, intent(out), dimension(:,:)     :: convect
 !    thus far calculated on the current step. control is through nml
 !    variable use_tau.
 !---------------------------------------------------------------------
-      write(6,*) 'start moist processes 2'
+      if (print_s_messages) write(6,*) 'start moist processes 2'
 
       if (use_tau) then
         tin(is:ie,js:je,:) = t
@@ -970,7 +972,7 @@ logical, intent(out), dimension(:,:)     :: convect
 !    to u, v and q, and a temperature value of EPST (=200. K) is given 
 !    to sub-surface  points.
 !--------------------------------------------------------------------
-      write(6,*) 'start moist processes 3'
+      if (print_s_messages) write(6,*) 'start moist processes 3'
 
       if (present(mask) .and. present(kbot))  then
         tin(is:ie,js:je,:) = mask*tin(is:ie,js:je,:) + (1.0 - mask)*EPST 
@@ -985,7 +987,7 @@ logical, intent(out), dimension(:,:)     :: convect
 !----------------------------------------------------------------------
 !    compute the mass in each model layer.
 !----------------------------------------------------------------------
-      write(6,*) 'start moist processes 4'
+      if (print_s_messages) write(6,*) 'start moist processes 4'
 
       do k=1,kx
         pmass(is:ie,js:je,k) = (phalf(:,:,k+1) - phalf(:,:,k))/GRAV
@@ -995,7 +997,7 @@ logical, intent(out), dimension(:,:)     :: convect
 !    output any requested convectively-transported tracer fields 
 !    and / or their column sums before convective transport.
 !----------------------------------------------------------------------
-      write(6,*) 'start moist processes 5'
+      if (print_s_messages) write(6,*) 'start moist processes 5'
 
       do n=1,num_tracers
         used = send_data (id_conv_tracer(n), tracer(is:ie,js:je,:,n), Time, &
@@ -1012,7 +1014,7 @@ logical, intent(out), dimension(:,:)     :: convect
 !    snow or rain falls in the column.
 !    ????    SHOULD TIN BE USED RATHER THAN t ??
 !----------------------------------------------------------------------
-      write(6,*) 'start moist processes 6'
+      if (print_s_messages) write(6,*) 'start moist processes 6'
 
       call tempavg (pdepth, phalf, t, snow, mask)
       coldT = .false.
@@ -1059,9 +1061,9 @@ logical, intent(out), dimension(:,:)     :: convect
 !                             meso_droplet_number, nsum_out, &
 !                             hydrostatic, phys_hydrostatic)
 
-      write(6,*) ' about to do idm conv and lscale cond'
+      if (print_s_messages) write(6,*) ' about to do idm conv and lscale cond'
     call idealized_convection_and_lscale_cond( phalf, pfull, zhalf, zfull, t, r, u, v, tdt, udt, vdt, rdt, Time, dt, mask, kbot)    
-    write(6,*) ' Done idm conv and lscale cond'
+    if (print_s_messages) write(6,*) ' Done idm conv and lscale cond'
 
 !---------------------------------------------------------------------
 !    end the timing of the convection code section.
@@ -1224,7 +1226,7 @@ integer            :: k
   
 !----- initialize quantities for global integral package -----
 
-   call diag_integral_field_init ('prec', 'f6.3')
+  !  call diag_integral_field_init ('prec', 'f6.3')
    allocate (prec_intgl(id,jd))
 
 
@@ -1272,12 +1274,12 @@ integer, intent (out), optional :: clubb_term_clock
       ! if (do_uw_conv    ) call     uw_conv_end
       ! if (do_lin_cld_microphys) call lin_cld_microphys_end
 
-      deallocate (max_water_imbal)
-      deallocate (max_enthalpy_imbal)
-      if (do_donner_deep .and. do_donner_conservation_checks) then
-        deallocate (max_water_imbal_don)
-        deallocate (max_enthalpy_imbal_don)
-      endif
+      ! deallocate (max_water_imbal)
+      ! deallocate (max_enthalpy_imbal)
+      ! if (do_donner_deep .and. do_donner_conservation_checks) then
+        ! deallocate (max_water_imbal_don)
+        ! deallocate (max_enthalpy_imbal_don)
+      ! endif
 
       module_is_initialized = .false.
 

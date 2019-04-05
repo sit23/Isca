@@ -159,7 +159,8 @@ character(len=80) :: restart_format = 'atmos_coupled_mod restart format 01'
 !-----------------------------------------------------------------------
 logical           :: do_netcdf_restart = .true.
 logical           :: restart_tbot_qbot = .false.
-namelist /atmos_model_nml/ do_netcdf_restart, restart_tbot_qbot  
+logical           :: print_s_messages  = .true.
+namelist /atmos_model_nml/ do_netcdf_restart, restart_tbot_qbot, print_s_messages
 
 contains
 
@@ -286,11 +287,11 @@ integer :: nhum
     Atmos%Surf_diff%delta_t = Surface_boundary%dt_t
     Atmos%Surf_diff%delta_tr = Surface_boundary%dt_tr
 
-   write(6,*) 'about to do atmosphere up'
+   if (print_s_messages) write(6,*) 'about to do atmosphere up'
     call atmosphere_up (Atmos%Time,  Surface_boundary%land_frac, Surface_boundary%u_star, Surface_boundary%b_star, Surface_boundary%q_star, Atmos%Surf_diff, &
                         Atmos%lprec, Atmos%fprec, Atmos%gust)
 
-   write(6,*) 'Done atmosphere up'                        
+   if (print_s_messages) write(6,*) 'Done atmosphere up'                        
 !   --- advance time ---
 
     Atmos % Time = Atmos % Time + Atmos % Time_step
@@ -388,10 +389,10 @@ type (time_type), intent(in) :: Time_init, Time, Time_step
         
 !-----------------------------------------------------------------------
 !  ----- initialize atmospheric model -----
-write(6,*) 'initializing atmosphere'
+if (print_s_messages) write(6,*) 'initializing atmosphere'
     call atmosphere_init (Atmos%Time_init, Atmos%Time, Atmos%Time_step,&
                           Atmos%Surf_diff )
-write(6,*) 'done initializing atmosphere'    
+if (print_s_messages) write(6,*) 'done initializing atmosphere'    
 !-----------------------------------------------------------------------
 !---- allocate space ----
 
@@ -583,10 +584,11 @@ integer :: unit, sec, day, dt
 character(len=64) :: fname = 'RESTART/atmos_coupled.res.nc'
 !-----------------------------------------------------------------------
 !---- termination routine for atmospheric model ----
-                                              
+  write(6,*)  'atmosphere end'
   call atmosphere_end (Atmos % Time)
 
 !------ global integrals ------
+  write(6,*)  'diag integral end'
 
   call diag_integral_end (Atmos % Time)
 
@@ -596,7 +598,7 @@ character(len=64) :: fname = 'RESTART/atmos_coupled.res.nc'
 
 !------ write several atmospheric fields ------
 !        also resolution and time step
-
+  write(6,*)  'restart end'
   if( do_netcdf_restart) then
      if(mpp_pe() == mpp_root_pe()) then
         call mpp_error ('atmos_model_mod', 'Writing netCDF formatted restart file.', NOTE)
@@ -628,7 +630,7 @@ character(len=64) :: fname = 'RESTART/atmos_coupled.res.nc'
   endif
 
 !-------- deallocate space --------
-
+  write(6,*)  'deallocate end'
   deallocate ( Atmos % glon_bnd , &
                Atmos % glat_bnd , &
                Atmos %  lon_bnd , &

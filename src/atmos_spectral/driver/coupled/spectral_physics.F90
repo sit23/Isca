@@ -51,6 +51,7 @@ integer :: num_levels, num_tracers, nhum
 integer :: is, ie, js, je
 logical :: module_is_initialized = .false.
 logical :: do_mcm_moist_processes
+logical :: print_s_messages = .false.
 
 contains
 
@@ -243,7 +244,7 @@ integer :: nco2
 if(.not.module_is_initialized) then
   call error_mesg('spectral_physics_down','spectral_physics module is not initialized', FATAL)
 end if
-write(6,*) 'made it to spectral physics down'
+if (print_s_messages) write(6,*) 'made it to spectral physics down'
 nco2 = get_tracer_index(MODEL_ATMOS, 'co2')
 gavg_rrv = 0.0
 if(nco2 /= NO_TRACER) then
@@ -252,7 +253,7 @@ if(nco2 /= NO_TRACER) then
 endif
 
 if(do_moist_in_phys_up()) then
-  write(6,*) 'doing physics driver 1'
+  if (print_s_messages) write(6,*) 'doing physics driver 1'
   call physics_driver_down(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,   &
             rad_lat_2d,    rad_lon_2d,  area_2d,                                 &
                 p_half(:,:,:,current),      p_full(:,:,:,current),               &
@@ -274,7 +275,7 @@ if(do_moist_in_phys_up()) then
                flux_sw_vis_dir, flux_sw_vis_dif,                                 &
                flux_lw, coszen, gust, Surf_diff, gavg_rrv)
 else
-  write(6,*) 'doing physics driver 2'  
+  if (print_s_messages) write(6,*) 'doing physics driver 2'  
   call physics_driver_down(1, ie-is+1, 1, je-js+1, Time_prev, Time, Time_next,   &
             rad_lat_2d,    rad_lon_2d,  area_2d,                                 &
             p_half(:,:,:,current),      p_full(:,:,:,current),                   &
@@ -415,10 +416,18 @@ where(convect)
 elsewhere
   rconvect = 0.
 endwhere
+
+write(6,*) 'spectral physics end post restart'
 call write_data(trim(file), 'convect', rconvect, grid_domain) ! pjp: No interface for reading/writing netcdf logicals
 
 deallocate(rad_lon_2d, rad_lat_2d, area_2d, diff_cu_mo, convect)
+
+
 call physics_driver_end(Time)
+
+write(6,*) 'spectral physics post physics driver end'
+
+
 if(do_mcm_moist_processes) then
   ! call mcm_moist_processes_end
 else

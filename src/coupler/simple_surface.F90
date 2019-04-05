@@ -31,6 +31,7 @@ use interpolator_mod, only: interpolate_type,interpolator_init&
      &,CONSTANT,interpolator
 !mj q-flux
 use qflux_mod, only: qflux_init,qflux,warmpool
+use atmosphere_mod,     only: get_nhum
 !mj local surface heating
 ! use physics_driver_mod, only: do_local_heating
 ! use local_heating_mod, only: horizontal_heating,ngauss,hamp,pcenter
@@ -139,7 +140,7 @@ namelist /simple_surface_nml/ z_ref_heat, z_ref_mom,             &
                                        drdt_surf, dhdt_atm, dedq_atm, &
                                        flux_t, flux_q, flux_lw
 
-  real, allocatable, dimension(:,:) :: sst, flux_u, flux_v, flux_o
+  real, allocatable, dimension(:,:) :: sst, flux_u, flux_v, flux_o, lonb_2d, latb_2d
 !mj read sst and land sea mask from input file
   real, allocatable, dimension(:,:) :: land_sea_mask
   type(interpolate_type),save :: sst_interp, lmask_interp
@@ -166,14 +167,14 @@ real, dimension(:,:),   intent(out) :: t_surf_atm
 real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
        u_surf, v_surf, rough_heat, rough_moist,          &
        stomatal, snow, water, max_water,                 &
-       q_star, q_surf, cd_q, cd_t, cd_m, wind, dtaudu_atm
+       q_star, q_surf, cd_q, cd_t, cd_m, wind, dtaudu_atm, zeros_2d
 
 logical, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
        mask, glacier, seawater
 
 logical :: used
 
-integer :: j
+integer :: j, nhum
 real :: lat, pi
 
 pi = 4.0*atan(1.)
@@ -295,9 +296,11 @@ pi = 4.0*atan(1.)
    cd_t = 0.0
    cd_m = 0.0
    cd_q = 0.0
+   zeros_2d = 0.0
 
    t_surf_atm = sst
 
+   call get_nhum(nhum)
 !  call surface_flux (Atm%t_bot, Atm%q_bot, Atm%u_bot, Atm%v_bot,        & ! Fez
 !                     Atm%p_bot, Atm%z_bot,                              &
 !                     Atm%p_surf, t_surf_atm, u_surf, v_surf,            &
@@ -311,10 +314,17 @@ pi = 4.0*atan(1.)
 !                     dhdt_atm,  dedq_atm,   dtaudv_atm,                 &
 !                     dt, mask, glacier)
 
-   call surface_flux (Atm%t_bot, Atm%q_bot, Atm%u_bot, Atm%v_bot,        & ! Lima
+   call surface_flux (Atm%t_bot, Atm%tr_bot(:,:,nhum), Atm%u_bot, Atm%v_bot,        & ! Lima
                       Atm%p_bot, Atm%z_bot, Atm%p_surf, t_surf_atm,      &
                       t_surf_atm,                                        & ! Required argument, intent(in). t_surf_atm instead of Land%t_ca
-                      q_surf, u_surf, v_surf,                            &
+                      q_surf,                                            &
+                      .false.,                                           &     ! RG Add bucket
+                      zeros_2d,                                          &     ! RG Add bucket
+                      0.,                                                &     ! RG Add bucket
+                      zeros_2d(:,:),                                     &     ! RG Add bucket
+                      zeros_2d(:,:),                                     &     ! RG Add bucket
+                      zeros_2d(:,:),                                     &
+                      u_surf, v_surf,                                    &
                       rough_mom, rough_heat, rough_moist,                &
                       rough_mom,                                         & ! Required argument, intent(in). rough_mom instead of Land%rough_scale
                       Atm%gust, flux_t, flux_q, flux_lw, flux_u, flux_v, &
@@ -386,7 +396,10 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
  real,dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: sst_new
 ! mj shallower ocean in tropics, land-sea contrast
  real :: lon,lat,pi,loc_cap
- integer :: i,j,k
+ integer :: i,j,k, nhum
+
+
+   call get_nhum(nhum)
 
    pi = 4.*atan(1.)
 
@@ -394,9 +407,9 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
 
    dtmass  = Atm%Surf_Diff%dtmass
    delta_t = Atm%Surf_Diff%delta_t
-   delta_q = Atm%Surf_Diff%delta_q
+   delta_q = Atm%Surf_Diff%delta_tr(:,:,nhum)
    dflux_t = Atm%Surf_Diff%dflux_t
-   dflux_q = Atm%Surf_Diff%dflux_q
+   dflux_q = Atm%Surf_Diff%dflux_tr(:,:,nhum)
 
  cp_inv = 1.0/cp_air
 
@@ -498,7 +511,7 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
             lon2d(i,j) = 0.5*( Atm%lon_bnd(i+1) + Atm%lon_bnd(i) )
          enddo
       enddo
-      call horizontal_heating(Time,lon2d,lat2d,horiz_heat)
+    !   call horizontal_heating(Time,lon2d,lat2d,horiz_heat)
    else
       horiz_heat = 0.0 ! for diagnostics output
    endif
@@ -539,7 +552,7 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
       used = send_data ( id_entrop_lwflx, entrop_lwflx, Time)
    endif
 
-   call sum_diag_integral_field ('evap', flux_q*86400.)
+!    call sum_diag_integral_field ('evap', flux_q*86400.)
 
 !=======================================================================
 !---- deallocate module storage ----
@@ -597,7 +610,7 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
         write (stdlog(), nml=simple_surface_nml)
    endif
 
-   call diag_integral_field_init ('evap', 'f6.3')
+!    call diag_integral_field_init ('evap', 'f6.3')
    call diag_field_init ( Time, Atm%axes(1:2) )
 
 allocate(sst   (size(Atm%t_bot,1),size(Atm%t_bot,2)))
@@ -607,7 +620,18 @@ allocate(flux_o(size(Atm%t_bot,1),size(Atm%t_bot,2)))
 
 !mj read fixed SSTs
 if( do_read_sst ) then
-   call interpolator_init( sst_interp, trim(sst_file)//'.nc',Atm%lon_bnd,Atm%lat_bnd, data_out_of_bounds=(/CONSTANT/) )
+    allocate (lonb_2d(size(Atm%lon_bnd), size(Atm%lat_bnd)))
+    allocate (latb_2d(size(Atm%lon_bnd), size(Atm%lat_bnd)))
+
+    do i = 1,size(Atm%lon_bnd)
+        lonb_2d(i,:) = Atm%lon_bnd(i)
+      enddo
+      
+      do j = 1,size(Atm%lat_bnd)
+        latb_2d(:,j) = Atm%lat_bnd(j)
+      enddo
+
+   call interpolator_init( sst_interp, trim(sst_file)//'.nc',lonb_2d, latb_2d, data_out_of_bounds=(/CONSTANT/) )
 endif
 !mj read land sea mask
 if( trim(land_option) .eq. 'input' ) then

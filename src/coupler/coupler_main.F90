@@ -162,6 +162,8 @@ program coupler_main
                               atmos_data_type, &
                               land_ice_atmos_boundary_type
 
+  use atmosphere_mod, only: get_nhum
+
 use   land_model_mod, only: land_model_init, land_model_end, &
                             land_data_type, atmos_land_boundary_type, &
                             update_land_model_fast, update_land_model_slow
@@ -352,12 +354,13 @@ type(ocean_ice_boundary_type)      :: Ocean_ice_boundary
   logical :: do_flux =.true.
   logical :: concurrent=.FALSE.
   logical :: use_lag_fluxes=.TRUE.
+  logical :: print_s_messages = .TRUE.
   namelist /coupler_nml/ current_date, calendar, force_date_from_namelist, months, days, hours, &
-          minutes, seconds, dt_atmos, dt_ocean, dt_cpld, do_atmos, do_ocean, do_land, do_ice, do_flux, atmos_npes
+          minutes, seconds, dt_atmos, dt_ocean, dt_cpld, do_atmos, do_ocean, do_land, do_ice, do_flux, atmos_npes, print_s_messages
 
   integer :: initClock, mainClock, termClock
 
-  integer :: nfields
+  integer :: nfields, nhum
   character(len=80) :: text
 
 !#######################################################################
@@ -402,9 +405,9 @@ do nc = 1, num_cpld_calls
 
      if( Atm%pe )then
          call mpp_set_current_pelist(Atm%pelist)
-         write(6,*) 'UPDATING ICE MODEL'
+         if (print_s_messages) write(6,*) 'UPDATING ICE MODEL'
          if (do_ice) call update_ice_model_slow_up( Ocean_ice_boundary, Ice )
-         write(6,*) 'DONE UPDATING ICE MODEL'
+         if (print_s_messages) write(6,*) 'DONE UPDATING ICE MODEL'
 !-----------------------------------------------------------------------
 !   ------ atmos/fast-land/fast-ice integration loop -------
 
@@ -413,10 +416,10 @@ do nc = 1, num_cpld_calls
             Time_atmos = Time_atmos + Time_step_atmos
 
           if (do_flux) then
-            write(6,*) 'SURFACE FLUXES'
+            if (print_s_messages) write(6,*) 'SURFACE FLUXES'
             call sfc_boundary_layer( REAL(dt_atmos), Time_atmos, &
                                      Atm, Land, Ice, Land_ice_atmos_boundary )
-            write(6,*) 'DONE SURFACE FLUXES'                                     
+            if (print_s_messages) write(6,*) 'DONE SURFACE FLUXES'                                     
           end if
 
           call compute_flux (float(dt_atmos), Time_atmos, Atm,       &
@@ -436,34 +439,35 @@ do nc = 1, num_cpld_calls
 
 !      ---- atmosphere down ----
             if (do_atmos) then
-                write(6,*) 'ATMOS_MODEL DOWN'
+                if (print_s_messages) write(6,*) 'ATMOS_MODEL DOWN'
                 call update_atmos_model_down( Land_ice_atmos_boundary, Atm )
-                write(6,*) 'DONE ATMOS_MODEL DOWN'
+                if (print_s_messages) write(6,*) 'DONE ATMOS_MODEL DOWN'
 
+                call get_nhum(nhum)
                 call update_simple_surface (float(dt_atmos), Time_atmos, Atm, &
                 Land_ice_atmos_boundary%dt_t, &
-                Land_ice_atmos_boundary%dt_q)                
+                Land_ice_atmos_boundary%dt_tr(:,:,nhum))                
             endif
-            write(6,*) 'FLUX DOWN FROM ATMOS'     
+            if (print_s_messages) write(6,*) 'FLUX DOWN FROM ATMOS'     
             if (do_flux) then
        
                 call flux_down_from_atmos( Time_atmos, Atm, Land, Ice, &
                     Land_ice_atmos_boundary, &
                     Atmos_land_boundary, &
                     Atmos_ice_boundary )
-                    write(6,*) 'DONE Flux DOWN from atmos'
+                    if (print_s_messages) write(6,*) 'DONE Flux DOWN from atmos'
             endif
 
 
 !      --------------------------------------------------------------
 
 !      ---- land model ----
-               write(6,*) 'about to do land model fast'
+               if (print_s_messages) write(6,*) 'about to do land model fast'
 
           if (do_land) &
             call update_land_model_fast( Atmos_land_boundary, Land )
 
-            write(6,*) 'about to do ice model fast'
+            if (print_s_messages) write(6,*) 'about to do ice model fast'
 
 !      ---- ice model ----
           if (do_ice) &
@@ -471,13 +475,13 @@ do nc = 1, num_cpld_calls
 
 !      --------------------------------------------------------------
 !      ---- atmosphere up ----
-            write(6,*) 'about to do flux up to atmos'
+            if (print_s_messages) write(6,*) 'about to do flux up to atmos'
             if (do_flux) then
 
                 call flux_up_to_atmos( Time_atmos, Land, Ice, Land_ice_atmos_boundary, &
                         & Atmos_land_boundary, Atmos_ice_boundary )
 
-                        write(6,*) 'about to atmos model up'
+                        if (print_s_messages) write(6,*) 'about to atmos model up'
             endif
                 
             if (do_atmos) &
@@ -493,7 +497,7 @@ do nc = 1, num_cpld_calls
 !
 !     need flux call to put runoff and p_surf on ice grid
 !
-       write(6,*) 'Doing flux land to ice'
+       if (print_s_messages) write(6,*) 'Doing flux land to ice'
 
        if (do_flux) then
 
@@ -503,7 +507,7 @@ do nc = 1, num_cpld_calls
        Atmos_ice_boundary%p = 0.0 ! call flux_atmos_to_ice_slow ?
 
 !   ------ slow-ice model ------
-       write(6,*) 'about to do slow ice model'
+       if (print_s_messages) write(6,*) 'about to do slow ice model'
 
        if (do_ice) call update_ice_model_slow_dn( Atmos_ice_boundary, &
                                                   Land_ice_boundary, Ice )
@@ -515,7 +519,7 @@ do nc = 1, num_cpld_calls
        call flux_ice_to_ocean( Time, Ice, Ocean, Ice_ocean_boundary )
    end if
 
-   write(6,*) 'about to do update ocean model'
+   if (print_s_messages) write(6,*) 'about to do update ocean model'
 
     if( Ocean%pe )then
         call mpp_set_current_pelist(Ocean%pelist)
@@ -547,12 +551,18 @@ enddo
   call mpp_clock_begin(termClock)
   call coupler_end
 
+  write(6,*) 'done coupler end'
   call diag_manager_end (Time)
   call mpp_clock_end(termClock)
 
-  call print_memuse_stats( 'Memory HiWaterMark', always=.TRUE. )
+  write(6,*) 'done diag end'
+
+!   call print_memuse_stats( 'Memory HiWaterMark', always=.TRUE. )
+  write(6,*) 'done memuse end'
+
   call fms_end
 
+  write(6,*) 'done fms end'
 !-----------------------------------------------------------------------
 
 contains
@@ -856,7 +866,7 @@ contains
     if( Atm%pe )then
         call mpp_set_current_pelist(Atm%pelist)
 !---- atmosphere ----
-        write(6,*) 'DOING ATMOS MODEL INIT'
+        if (print_s_messages) write(6,*) 'DOING ATMOS MODEL INIT'
         call atmos_model_init( Atm, Time_init, Time, Time_step_atmos )
         call print_memuse_stats( 'atmos_model_init' )
 
@@ -900,10 +910,10 @@ contains
       call print_memuse_stats( 'land_model_init' )
 
 !---- ice -----------
-      write(6,*) 'DOING ICE MODEL INIT'      
+      if (print_s_messages) write(6,*) 'DOING ICE MODEL INIT'      
       call ice_model_init( Ice, Time_init, Time, Time_step_atmos, Time_step_cpld )
       call print_memuse_stats( 'ice_model_init' )
-      write(6,*) 'DONE ICE MODEL INIT'            
+      if (print_s_messages) write(6,*) 'DONE ICE MODEL INIT'            
 !       call data_override_init(Atm_domain_in = Atm%domain, Ice_domain_in = Ice%domain, Land_domain_in=Land%domain)
     end if
   if( Ocean%pe )then
@@ -919,11 +929,11 @@ contains
 !   call mpp_broadcast_domain(Ocean%domain)
 !-----------------------------------------------------------------------
 !---- initialize flux exchange module ----
-    write(6,*) 'DOING flux ex INIT'          
+    if (print_s_messages) write(6,*) 'DOING flux ex INIT'          
    call flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
         atmos_ice_boundary, land_ice_atmos_boundary, &
         land_ice_boundary, ice_ocean_boundary, ocean_ice_boundary )
-        write(6,*) 'DONE flux ex INIT'          
+        if (print_s_messages) write(6,*) 'DONE flux ex INIT'          
     Time_atmos = Time
     Time_ocean = Time
 
@@ -987,23 +997,31 @@ contains
     end if
     if( Atm%pe )then
         call mpp_set_current_pelist(Atm%pelist)
+        write(6,*) 'ending atmos model'
         call atmos_model_end (Atm)
 
 !pjp    Lima Atm contains fields in addition to what df is using.
 !pjp    They are initialized to zero by atmos_model_init.
 !pjp    I don't think any action is necessary to make simple_surface_end compatable with Lima.
+        write(6,*) 'ending simple surface'        
         call simple_surface_end (Atm)
 
 !       call  land_model_end (Atmos_land_boundary, Land)
 !       call   ice_model_end (Ice)
     end if
+    write(6,*) 'ending io exit'            
     call fms_io_exit
     call mpp_set_current_pelist()
+
+    write(6,*) 'ending mpp exit'            
 
 !----- write restart file ------
 
     call mpp_open( unit, 'RESTART/coupler.res', nohdrs=.TRUE. )
+    write(6,*) 'ending open restart'            
+
     if ( mpp_pe().EQ.mpp_root_pe() )then
+        write(6,*) 'on root proc'            
         write( unit, '(i6,8x,a)' )calendar_type, &
              '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
 
@@ -1012,6 +1030,7 @@ contains
         write( unit, '(6i6,8x,a)' )date, &
              'Current model time: year, month, day, hour, minute, second'
     end if
+    write(6,*) 'ending write restart'            
     call mpp_close(unit)
 
 !-----------------------------------------------------------------------

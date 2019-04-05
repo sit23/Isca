@@ -29,23 +29,23 @@ exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
 #Tell model how to write diagnostics
 diag = DiagTable()
-diag.add_file('atmos_daily', 1, 'days', time_units='days')
+diag.add_file('atmos_hourly', 1, 'hours', time_units='days')
 # diag.add_file('ocean_daily', 1, 'days', time_units='days')
 # diag.add_file('ice_daily', 1, 'days', time_units='days')
 
 
 #Tell model which diagnostics to write
-diag.add_field('dynamics', 'ps', time_avg=True, files = ['atmos_daily'])
-diag.add_field('dynamics', 'bk', files = ['atmos_daily'])
-diag.add_field('dynamics', 'pk', files = ['atmos_daily'])
-diag.add_field('atmosphere', 'precipitation', time_avg=True, files = ['atmos_daily'])
-diag.add_field('mixed_layer', 't_surf', time_avg=True, files = ['atmos_daily'])
-diag.add_field('dynamics', 'sphum', time_avg=True, files = ['atmos_daily'])
-diag.add_field('dynamics', 'ucomp', time_avg=True, files = ['atmos_daily'])
-diag.add_field('dynamics', 'vcomp', time_avg=True, files = ['atmos_daily'])
-diag.add_field('dynamics', 'temp', time_avg=True, files = ['atmos_daily'])
-diag.add_field('dynamics', 'vor', time_avg=True, files = ['atmos_daily'])
-diag.add_field('dynamics', 'div', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'ps', time_avg=True, files = ['atmos_hourly'])
+diag.add_field('dynamics', 'bk', files = ['atmos_hourly'])
+diag.add_field('dynamics', 'pk', files = ['atmos_hourly'])
+diag.add_field('atmosphere', 'precipitation', time_avg=True, files = ['atmos_hourly'])
+diag.add_field('mixed_layer', 't_surf', time_avg=True, files = ['atmos_hourly'])
+diag.add_field('dynamics', 'sphum', time_avg=True, files = ['atmos_hourly'])
+diag.add_field('dynamics', 'ucomp', time_avg=True, files = ['atmos_hourly'])
+diag.add_field('dynamics', 'vcomp', time_avg=True, files = ['atmos_hourly'])
+diag.add_field('dynamics', 'temp', time_avg=True, files = ['atmos_hourly'])
+diag.add_field('dynamics', 'vor', time_avg=True, files = ['atmos_hourly'])
+diag.add_field('dynamics', 'div', time_avg=True, files = ['atmos_hourly'])
 
 # diag.add_field('ocean_model', 'salt', time_avg=True, files = ['ocean_daily'])
 # diag.add_field('ocean_model', 'temp', time_avg=True, files = ['ocean_daily'])
@@ -63,8 +63,8 @@ exp.clear_rundir()
 #Define values for the 'core' namelist
 exp.namelist = namelist = Namelist({
     'coupler_nml':{
-     'days'   : 5,
-     'hours'  : 0,
+     'days'   : 0,
+     'hours'  : 1,
      'minutes': 0,
      'seconds': 0,
      'dt_atmos':600,
@@ -75,6 +75,7 @@ exp.namelist = namelist = Namelist({
      'do_land' : False,
      'do_ice' : False,
      'do_ocean': False,
+     'print_s_messages': False,
 
     },
 
@@ -89,6 +90,22 @@ exp.namelist = namelist = Namelist({
         'roughness_moist':3.21e-05,                
         'two_stream_gray': True,     #Use grey radiation
         'convection_scheme': 'SIMPLE_BETTS_MILLER', #Use the simple Betts Miller convection scheme from Frierson
+    },
+
+    'moist_processes_nml': {
+        'print_s_messages': False,
+    },
+
+    'physics_driver_nml': {
+        'print_s_messages': False,
+    },
+
+    'atmos_model_nml': {
+        'print_s_messages': False,
+    },
+
+    'atmosphere_nml': {
+        'print_s_messages': False,
     },
 
     'vert_turb_driver_nml': {

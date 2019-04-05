@@ -961,6 +961,7 @@ type (time_type), intent(in) :: Time
               'module has not been initialized', FATAL )
       endif
 
+      write(6,*) 'diag integral end', field_count
 !---------------------------------------------------------------------
 !    if the alarm interval was set to Zero_time (meaning no integral 
 !    output during the model run) call write_field_averages to output
