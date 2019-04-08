@@ -856,7 +856,7 @@ subroutine flux_exchange_init ( Time, Atm, Land, Ice, Ocean, Ocean_state,&
 !----- initialize quantities for global integral package -----
 
 !! call diag_integral_field_init ('prec', 'f6.3')
-        call diag_integral_field_init ('evap', 'f6.3')
+        ! call diag_integral_field_init ('evap', 'f6.3')
 
 !-----------------------------------------------------------------------
 !----- initialize diagnostic fields -----
@@ -3531,7 +3531,7 @@ subroutine flux_up_to_atmos ( Time, Land, Ice, Land_Ice_Atmos_Boundary, Land_bou
      used = send_tile_averaged_data(id_q_flux_land, diag_land, &
           Land%tile_size, Time, mask=Land%mask)
   endif
-  call sum_diag_integral_field ('evap', evap_atm*86400.)
+!   call sum_diag_integral_field ('evap', evap_atm*86400.)
 
   ! compute stock changes
 

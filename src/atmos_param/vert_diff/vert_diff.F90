@@ -119,6 +119,9 @@ subroutine vert_diff_init (Tri_surf, idim, jdim, kdim,    &
  character(len=128) :: scheme  ! tracer diffusion scheme
  integer :: n, logunit
 
+    if (module_is_initialized) return
+
+
     call write_version_number ( version, tagname )
 
     !s initialise constants here as rdgas no longer a parameter.

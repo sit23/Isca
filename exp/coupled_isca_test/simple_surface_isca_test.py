@@ -23,29 +23,34 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('simple_surface_frierson_test_1', codebase=cb)
+exp = Experiment('simple_surface_frierson_test_3', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
 #Tell model how to write diagnostics
 diag = DiagTable()
-diag.add_file('atmos_hourly', 1, 'hours', time_units='days')
+diag.add_file('atmos_daily', 1, 'days', time_units='days')
 # diag.add_file('ocean_daily', 1, 'days', time_units='days')
 # diag.add_file('ice_daily', 1, 'days', time_units='days')
 
 
 #Tell model which diagnostics to write
-diag.add_field('dynamics', 'ps', time_avg=True, files = ['atmos_hourly'])
-diag.add_field('dynamics', 'bk', files = ['atmos_hourly'])
-diag.add_field('dynamics', 'pk', files = ['atmos_hourly'])
-diag.add_field('atmosphere', 'precipitation', time_avg=True, files = ['atmos_hourly'])
-diag.add_field('mixed_layer', 't_surf', time_avg=True, files = ['atmos_hourly'])
-diag.add_field('dynamics', 'sphum', time_avg=True, files = ['atmos_hourly'])
-diag.add_field('dynamics', 'ucomp', time_avg=True, files = ['atmos_hourly'])
-diag.add_field('dynamics', 'vcomp', time_avg=True, files = ['atmos_hourly'])
-diag.add_field('dynamics', 'temp', time_avg=True, files = ['atmos_hourly'])
-diag.add_field('dynamics', 'vor', time_avg=True, files = ['atmos_hourly'])
-diag.add_field('dynamics', 'div', time_avg=True, files = ['atmos_hourly'])
+diag.add_field('dynamics', 'ps', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'bk', files = ['atmos_daily'])
+diag.add_field('dynamics', 'pk', files = ['atmos_daily'])
+diag.add_field('atmosphere', 'precipitation', time_avg=True, files = ['atmos_daily'])
+diag.add_field('simple_surface', 't_surf', time_avg=True, files = ['atmos_daily'])
+diag.add_field('simple_surface', 'shflx', time_avg=True, files = ['atmos_daily'])
+diag.add_field('simple_surface', 'evap', time_avg=True, files = ['atmos_daily'])
+diag.add_field('simple_surface', 'lwflx', time_avg=True, files = ['atmos_daily'])
+diag.add_field('simple_surface', 'tdt_surf', time_avg=True, files = ['atmos_daily'])
+
+diag.add_field('dynamics', 'sphum', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'ucomp', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'vcomp', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'temp', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'vor', time_avg=True, files = ['atmos_daily'])
+diag.add_field('dynamics', 'div', time_avg=True, files = ['atmos_daily'])
 
 # diag.add_field('ocean_model', 'salt', time_avg=True, files = ['ocean_daily'])
 # diag.add_field('ocean_model', 'temp', time_avg=True, files = ['ocean_daily'])
@@ -63,8 +68,8 @@ exp.clear_rundir()
 #Define values for the 'core' namelist
 exp.namelist = namelist = Namelist({
     'coupler_nml':{
-     'days'   : 0,
-     'hours'  : 1,
+     'days'   : 4,
+     'hours'  : 0,
      'minutes': 0,
      'seconds': 0,
      'dt_atmos':600,
@@ -75,6 +80,7 @@ exp.namelist = namelist = Namelist({
      'do_land' : False,
      'do_ice' : False,
      'do_ocean': False,
+     'do_flux': False,
      'print_s_messages': False,
 
     },
@@ -220,5 +226,5 @@ exp.namelist = namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
     exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=False)
-    for i in range(2,121):
+    for i in range(2,25):
         exp.run(i, num_cores=NCORES)

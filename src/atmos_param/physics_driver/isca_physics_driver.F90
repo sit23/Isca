@@ -109,11 +109,11 @@ use idealized_moist_phys_mod, only: idealized_moist_phys_init , idealized_moist_
 
 use         mpp_domains_mod, only: domain2D !s added to enable land reading
 
-! use vert_diff_driver_mod,    only: vert_diff_driver_down,  &
-!                                    vert_diff_driver_up,    &
-!                                    vert_diff_driver_init,  &
-!                                    vert_diff_driver_end,   &
-!                                    surf_diff_type
+use vert_diff_driver_mod,    only: vert_diff_driver_down,  &
+                                   vert_diff_driver_up, &
+                                   vert_diff_driver_init
+                                !    vert_diff_driver_end,   &
+                                !    surf_diff_type
 
 ! use radiation_driver_mod,    only: radiation_driver_init,    &
 !                                    define_rad_times, define_surface,   &
@@ -727,6 +727,9 @@ rad_lonb = lonb * PI/180.
 
   if (print_s_messages) write(6,*) 'checking nt ntp', nt, ntp
   call moist_alloc_init (id,jd,kd,nt,ntp) ! Are these the right way around? nt and ntp correct?
+
+  call vert_diff_driver_init (Surf_diff, id, jd, kd, axes, Time, do_clubb )
+
 
 
 !---------------------------------------------------------------------
@@ -1658,16 +1661,16 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
     !                               diff_t_clubb=diff_t_clubb(is:ie,js:je,:),   &   ! cjg
     !                               mask=mask, kbot=kbot           )
     !  else
-    !     call vert_diff_driver_down (is, js, Time_next, dt, p_half,   &
-    !                               p_full, z_full,   &
-    !                               diff_m(is:ie,js:je,:),         &
-    !                               diff_t(is:ie,js:je,:),         &
-    !                               um ,vm ,tm ,qm ,rm(:,:,:,1:ntp), &
-    !                               dtau_du, dtau_dv, tau_x, tau_y,  &
-    !                               udt, vdt, tdt, qdt, rdt,       &
-    !                               Surf_diff,                     &
-    !                               diff_t_clubb=diff_t_clubb,   &   ! RASF
-    !                               mask=mask, kbot=kbot           )
+        call vert_diff_driver_down (is, js, Time_next, dt, p_half,   &
+                                  p_full, z_full,   &
+                                  diff_m(is:ie,js:je,:),         &
+                                  diff_t(is:ie,js:je,:),         &
+                                  um ,vm ,tm ,qm ,rm(:,:,:,1:ntp), &
+                                  dtau_du, dtau_dv, tau_x, tau_y,  &
+                                  udt, vdt, tdt, qdt, rdt,       &
+                                  Surf_diff,                     &
+                                !   diff_t_clubb=diff_t_clubb,   &   ! RASF
+                                  mask=mask, kbot=kbot           )
     !   endif
 
       ! if (id_tdt_phys_vdif_dn > 0) then
@@ -2018,9 +2021,9 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
 ! <--- h1g, 2012-08-28
 
       call mpp_clock_begin ( diff_up_clock )
-      ! call vert_diff_driver_up (is, js, Time_next, dt, p_half,   &
-                                ! Surf_diff, tdt, qdt, rdt, mask=mask,  &
-                                ! kbot=kbot)
+      call vert_diff_driver_up (is, js, Time_next, dt, p_half,   &
+                                Surf_diff, tdt, qdt, rdt, mask=mask,  &
+                                kbot=kbot)
 
 ! ---> h1g, 2012-08-28, save temperature and moisture tendencies due to surface fluxes at lowest-level
       if( .not. l_host_applies_sfc_fluxes ) then

@@ -411,6 +411,8 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
    dflux_t = Atm%Surf_Diff%dflux_t
    dflux_q = Atm%Surf_Diff%dflux_tr(:,:,nhum)
 
+    write(6,*) 'checking inputs', maxval(dtmass), maxval(delta_t), maxval(delta_q), maxval(dflux_t), maxval(dflux_q)
+
  cp_inv = 1.0/cp_air
 
  ! temperature
@@ -526,6 +528,9 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
   flux_lw    = flux_lw     - dt_t_surf*drdt_surf
   dt_t_atm   = f_t_delt_n  + dt_t_surf*e_t_n
   dt_q_atm   = f_q_delt_n  + dt_t_surf*e_q_n
+
+  write(6,*) maxval(f_q_delt_n), maxval(dt_t_surf), maxval(e_q_n), 'q tend components'
+  write(6,*) maxval(f_t_delt_n), maxval(dt_t_surf), maxval(e_t_n), 't tend components'
 
 
 
