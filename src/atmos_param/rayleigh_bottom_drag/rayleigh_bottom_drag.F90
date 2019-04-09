@@ -30,6 +30,7 @@ use  diag_manager_mod, only: register_diag_field, send_data
        sigma_top             = ((1./3.)-0.05)        ! extent of frictional `PBL'
 
   real :: deep_velocity_magnitude = 0.
+  real :: deep_velocity_wavenumber = 3.
 
   logical ::                           &
        do_drag_at_surface = .true.
@@ -43,7 +44,8 @@ use  diag_manager_mod, only: register_diag_field, send_data
              
   namelist/rayleigh_bottom_drag_nml/ sigma_b, rc, H_lambda,             &
               kf_days, do_energy_conserv_ray, variable_drag, zero_eq_drag, &
-              do_drag_at_surface, sigma_bot, sigma_mid, sigma_top, deep_velocity_magnitude
+              do_drag_at_surface, sigma_bot, sigma_mid, sigma_top, deep_velocity_magnitude, &
+              deep_velocity_wavenumber
 
   private rayleigh_bottom_drag_nml
 
@@ -206,7 +208,7 @@ contains
    
    do i=1, size(ug,1)
       do j = 1, size(ug, 2)
-         u_deep(i,j,num_level) = deep_velocity_magnitude * cos(3.*lat(i,j))
+         u_deep(i,j,num_level) = deep_velocity_magnitude * cos(deep_velocity_wavenumber*lat(i,j))
       end do
    end do
 

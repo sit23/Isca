@@ -8,7 +8,7 @@ import datetime
 
 # notify('Job running __'+str(os.path.basename(__file__))+'__ on Isca started at '+str(datetime.datetime.now().time()), 'Isca cpu update')
 
-NCORES = 16
+NCORES = 32
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -31,9 +31,6 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('dry_giant_planet_3d_60_levels_with_conv_with_diff_mk4_50_deep_velocity', codebase=cb)
-
-exp.inputfiles = [os.path.join(base_dir,'input/jupiter_column_with_diff_input_file_4300.nc')]
 
 #Tell model how to write diagnostics
 diag = DiagTable()
@@ -50,6 +47,7 @@ diag.add_field('dynamics', 'sphum', time_avg=True)
 diag.add_field('dynamics', 'ucomp', time_avg=True)
 diag.add_field('dynamics', 'vcomp', time_avg=True)
 diag.add_field('dynamics', 'temp', time_avg=True)
+diag.add_field('dynamics', 'omega', time_avg=True)
 diag.add_field('atmosphere', 'rh', time_avg=True)
 #diag.add_field('atmosphere', 'precipitation', time_avg=True)
 diag.add_field('atmosphere', 'dt_qg_convection', time_avg=True)
@@ -83,20 +81,16 @@ diag.add_field('rayleigh_bottom_drag', 'udt_rd', time_avg=True)
 diag.add_field('rayleigh_bottom_drag', 'vdt_rd', time_avg=True)
 
 
-exp.diag_table = diag
-
-#Empty the run directory ready to run
-exp.clear_rundir()
 
 #s Namelist changes from default values
-exp.namelist = namelist = Namelist({
+namelist = Namelist({
 
     'main_nml': {
      'days'   : 90,	
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,			
-     'dt_atmos':1800,
+     'dt_atmos':1200,
      'current_date' : [1,1,1,0,0,0],
      'calendar' : 'no_calendar'
     },
@@ -252,7 +246,7 @@ exp.namelist = namelist = Namelist({
     # },
 
     'ic_from_external_file_nml': {
-        'file_name':'INPUT/jupiter_column_with_diff_input_file_4300.nc',    
+        'file_name':'INPUT/jupiter_column_with_diff_input_file_4300_mk2.nc',    
     },    
 
     'constants_nml': {
@@ -295,8 +289,25 @@ exp.namelist = namelist = Namelist({
       
 })
 
+if __name__=="__main__":
 
-#exp.run(1441, multi_node=False, use_restart=True, restart_file = base_dir+'/input/moist_no_drag_sbm_res1440.tar.gz', num_cores=NCORES)
-exp.run(1, multi_node=False, use_restart=False, num_cores=NCORES)
-for i in range(2,5001):
-   exp.run(i, num_cores=NCORES, multi_node=False)
+    for wavenumber in [6,12]:
+        exp = Experiment('dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_50_deep_velocity', codebase=cb)
+
+        exp.inputfiles = [os.path.join(base_dir,'input/jupiter_column_with_diff_input_file_4300_mk2.nc')]
+
+        exp.diag_table = diag
+
+    #Empty the run directory ready to run
+        exp.clear_rundir()
+        exp.namelist = namelist
+
+        exp.update_namelist({
+            'rayleigh_bottom_drag_nml': {
+                'deep_velocity_wavenumber':6.,
+            }
+        })
+
+        exp.run(1, multi_node=False, use_restart=False, num_cores=NCORES)
+        for i in range(2,456):
+            exp.run(i, num_cores=NCORES, multi_node=False)
