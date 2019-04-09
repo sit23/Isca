@@ -291,8 +291,8 @@ namelist = Namelist({
 
 if __name__=="__main__":
 
-    for wavenumber in [6,12]:
-        exp = Experiment('dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_50_deep_velocity', codebase=cb)
+    for wavenumber in [6.,12.]:
+        exp = Experiment('dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_50_deep_velocity_wavenumber_'+str(wavenumber), codebase=cb)
 
         exp.inputfiles = [os.path.join(base_dir,'input/jupiter_column_with_diff_input_file_4300_mk2.nc')]
 
@@ -304,7 +304,7 @@ if __name__=="__main__":
 
         exp.update_namelist({
             'rayleigh_bottom_drag_nml': {
-                'deep_velocity_wavenumber':6.,
+                'deep_velocity_wavenumber':wavenumber,
             }
         })
 
