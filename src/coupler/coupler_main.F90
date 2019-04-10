@@ -447,8 +447,8 @@ do nc = 1, num_cpld_calls
                 call update_simple_surface (float(dt_atmos), Time_atmos, Atm, &
                 Land_ice_atmos_boundary%dt_t, &
                 Land_ice_atmos_boundary%dt_tr(:,:,nhum))         
-                write(6,*) maxval(Land_ice_atmos_boundary%dt_tr(:,:,nhum)), minval(Land_ice_atmos_boundary%dt_tr(:,:,nhum)), nhum, 'post update simple surface q'
-                write(6,*) maxval(Land_ice_atmos_boundary%dt_t(:,:)), minval(Land_ice_atmos_boundary%dt_t(:,:)), nhum, 'post update simple surface t'
+                if (print_s_messages) write(6,*) maxval(Land_ice_atmos_boundary%dt_tr(:,:,nhum)), minval(Land_ice_atmos_boundary%dt_tr(:,:,nhum)), nhum, 'post update simple surface q'
+                if (print_s_messages) write(6,*) maxval(Land_ice_atmos_boundary%dt_t(:,:)), minval(Land_ice_atmos_boundary%dt_t(:,:)), nhum, 'post update simple surface t'
 
 
             endif
