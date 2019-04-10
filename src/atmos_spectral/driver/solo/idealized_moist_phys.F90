@@ -561,7 +561,6 @@ endif
       endif
 
 if(mixed_layer_bc) then
-
   call mixed_layer_init(is, ie, js, je, num_levels, t_surf, bucket_depth, axes, Time, albedo, rad_lon, rad_lat, rad_lonb_2d(:,:), rad_latb_2d(:,:), land, bucket, grid_domain_in) ! t_surf is intent(inout) !s albedo distribution set here.
   
 elseif(gp_surface) then
@@ -673,10 +672,11 @@ end select
         axes(1:2), Time, 'Rain from convection','kg/m/m/s')
 !endif
 
-
 if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, axes, Time, rad_lonb_2d, rad_latb_2d, dt_real)
 
-do_grey_radiation=two_stream_gray
+if (present(do_grey_radiation)) then
+    do_grey_radiation=two_stream_gray
+endif
 
 #ifdef RRTM_NO_COMPILE
     if (do_rrtm_radiation) then
@@ -710,8 +710,8 @@ if(turb) then
 endif
 
    id_rh = register_diag_field ( mod_name, 'rh', &
-	axes(1:3), Time, 'relative humidity', 'percent')
-
+    axes(1:3), Time, 'relative humidity', 'percent')
+    
 end subroutine idealized_moist_phys_init
 !=================================================================================================================================
 subroutine idealized_moist_phys(Time, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, &
@@ -764,7 +764,6 @@ if(do_damping) then
                              dt_tracers(:,:,:,nsphum), dt_tracers(:,:,:,:),             &
                              z_pbl) !s have taken the names of arrays etc from vert_turb_driver below. Watch ntp from 2006 call to this routine?
 endif
-
 
 
 
@@ -871,7 +870,6 @@ endif ! if(turb) then
 !This part has been included here to avoid editing atmosphere.F90
 ! Therefore define a future variable locally, but do not feedback any changes to timestepping variables upstream, so as to avoid messing with the model's overall timestepping.
 ! Bucket diffusion has been cut for this version - could be incorporated later.
-
 if(bucket) then
 
   if(previous == current) then
@@ -1191,8 +1189,9 @@ real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
                            surf_lw_down(:,:), albedo, &
                            grid_tracers_prev(:,:,:,nsphum))
 
-
-          net_surf_sw_down_grey=net_surf_sw_down
+          if (present(net_surf_sw_down_grey))  then
+            net_surf_sw_down_grey=net_surf_sw_down
+          endif
     end if
 
     if(.not.mixed_layer_bc) then
