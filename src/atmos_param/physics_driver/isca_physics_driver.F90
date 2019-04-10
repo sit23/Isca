@@ -709,10 +709,11 @@ type(time_type),         intent(in),   optional  :: Time_step
 !         call error_mesg('physics_driver_init','do_radiation and do_grey_radiation cannot both be .true.',FATAL)
 
 !CONVERT INCOMING DIMENSIONAL ARRAYS INTO RADIANS
-rad_lat = lat * PI/180.
-rad_latb = latb * PI/180.
-rad_lon = lon * PI/180.
-rad_lonb = lonb * PI/180.
+
+rad_lat = lat 
+rad_latb = latb 
+rad_lon = lon 
+rad_lonb = lonb 
 
   call idealized_moist_phys_init(is_in, ie_in, js_in, je_in, num_levels_in, axes, surf_geopotential, Time, Time_step, nhum_in, rad_lon, rad_lat, rad_lonb, rad_latb, grid_domain_in, Surf_diff, do_grey_radiation=do_grey_radiation)
 
