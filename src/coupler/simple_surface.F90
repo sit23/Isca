@@ -56,7 +56,7 @@ character(len=14), parameter :: mod_name = 'simple_surface'
 integer :: id_drag_moist,  id_drag_heat,  id_drag_mom,              &
            id_rough_moist, id_rough_heat, id_rough_mom,             &
            id_u_star, id_b_star, id_u_flux, id_v_flux, id_t_surf,   &
-           id_t_flux, id_q_flux, id_o_flux, id_r_flux,              &
+           id_t_flux, id_q_flux, id_o_flux, id_r_flux, id_sw_flux,  &
            id_t_atm,  id_u_atm,  id_v_atm,  id_wind,                &
            id_t_ref,  id_rh_ref, id_u_ref,  id_v_ref,               &
            id_del_h,  id_del_m,  id_del_q, id_albedo, id_entrop_evap, &
@@ -542,6 +542,7 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
    if ( id_t_surf > 0 ) used = send_data ( id_t_surf, sst, Time )
    if ( id_t_flux > 0 ) used = send_data ( id_t_flux, flux_t, Time )
    if ( id_r_flux > 0 ) used = send_data ( id_r_flux, flux_lw, Time )
+   if ( id_sw_flux > 0 ) used = send_data ( id_sw_flux, Atm%flux_sw, Time )
    if ( id_q_flux > 0 ) used = send_data ( id_q_flux, flux_q, Time )
    if ( id_o_flux > 0 ) used = send_data ( id_o_flux, flux_o, Time )
    if ( id_heat   > 0 ) used = send_data ( id_heat,land_sea_heat_capacity,Time )
@@ -995,6 +996,10 @@ subroutine diag_field_init ( Time, atmos_axes )
    id_r_flux     = &
    register_diag_field ( mod_name, 'lwflx',      atmos_axes, Time, &
                         'net (down-up) longwave flux',   'w/m2'    )
+
+    id_sw_flux     = &
+    register_diag_field ( mod_name, 'swflx',      atmos_axes, Time, &
+                            'net (down-up) shortwave flux',   'w/m2'    )                        
 
    id_t_atm      = &
    register_diag_field ( mod_name, 't_atm',      atmos_axes, Time, &
