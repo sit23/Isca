@@ -1509,6 +1509,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       if(do_grey_radiation) then !rif:(09/10/09) 
         ! call grey_radiation(is, js, Time, Time_next, lat, lon, phalfgrey, albedo, t_surf_rad, t, tdt, net_surf_sw_down_grey, flux_lw)
         coszen = 1.0
+        flux_sw         = net_surf_sw_down_grey
         flux_sw_dir     = R1*net_surf_sw_down_grey
         flux_sw_dif     = R2*net_surf_sw_down_grey
         flux_sw_vis_dir = R3*net_surf_sw_down_grey
