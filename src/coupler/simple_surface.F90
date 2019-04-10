@@ -111,6 +111,7 @@ character(len=256) :: sst_file
 character(len=256) :: land_option = 'none'
 character(len=256) :: land_sea_mask_file = 'lmask'
 real,dimension(10) :: slandlon=0,slandlat=0,elandlon=-1,elandlat=-1
+logical :: print_s_messages=.true.
 
 namelist /simple_surface_nml/ z_ref_heat, z_ref_mom,             &
                               surface_choice,  heat_capacity,    &
@@ -127,7 +128,8 @@ namelist /simple_surface_nml/ z_ref_heat, z_ref_mom,             &
                               do_read_sst,do_sc_sst,sst_file,    &  !mj
                               land_option,slandlon,slandlat,     &  !mj
                               elandlon,elandlat,land_sea_mask_file,&!mj
-                              albedo_exp,albedo_cntr,albedo_wdth    !mj
+                              albedo_exp,albedo_cntr,albedo_wdth, & !mj
+                              print_s_messages
 
 !-----------------------------------------------------------------------
 
@@ -411,8 +413,8 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
    dflux_t = Atm%Surf_Diff%dflux_t
    dflux_q = Atm%Surf_Diff%dflux_tr(:,:,nhum)
 
-    write(6,*) 'checking inputs', maxval(dtmass), maxval(delta_t), maxval(delta_q), maxval(dflux_t), maxval(dflux_q)
-
+    if (print_s_messages) write(6,*) 'checking inputs', maxval(dtmass), maxval(delta_t), maxval(delta_q), maxval(dflux_t), maxval(dflux_q)
+    if (print_s_messages) write(6,*) 'flux_sw', maxval(Atm%flux_sw), minval(Atm%flux_sw)
  cp_inv = 1.0/cp_air
 
  ! temperature
@@ -529,8 +531,8 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
   dt_t_atm   = f_t_delt_n  + dt_t_surf*e_t_n
   dt_q_atm   = f_q_delt_n  + dt_t_surf*e_q_n
 
-  write(6,*) maxval(f_q_delt_n), maxval(dt_t_surf), maxval(e_q_n), 'q tend components'
-  write(6,*) maxval(f_t_delt_n), maxval(dt_t_surf), maxval(e_t_n), 't tend components'
+  if (print_s_messages) write(6,*) maxval(f_q_delt_n), maxval(dt_t_surf), maxval(e_q_n), 'q tend components'
+  if (print_s_messages) write(6,*) maxval(f_t_delt_n), maxval(dt_t_surf), maxval(e_t_n), 't tend components'
 
 
 
