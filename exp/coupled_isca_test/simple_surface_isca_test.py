@@ -4,7 +4,7 @@ import numpy as np
 
 from isca import IscaMOMCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
 
-NCORES = 2
+NCORES = 4
 base_dir = os.path.dirname(os.path.realpath(__file__))
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
@@ -23,7 +23,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('simple_surface_frierson_test_3', codebase=cb)
+exp = Experiment('simple_surface_frierson_test_8', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
@@ -68,7 +68,7 @@ exp.clear_rundir()
 #Define values for the 'core' namelist
 exp.namelist = namelist = Namelist({
     'coupler_nml':{
-     'days'   : 4,
+     'days'   : 5,
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,
@@ -112,6 +112,12 @@ exp.namelist = namelist = Namelist({
 
     'atmosphere_nml': {
         'print_s_messages': False,
+    },
+
+    'simple_surface_nml': {
+        'print_s_messages': False,
+        'heat_capacity': 4.e07,
+        'Tm': -275.,
     },
 
     'vert_turb_driver_nml': {
