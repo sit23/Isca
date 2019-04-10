@@ -23,7 +23,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('simple_surface_frierson_test_8', codebase=cb)
+exp = Experiment('simple_surface_frierson_test_14', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
@@ -43,6 +43,7 @@ diag.add_field('simple_surface', 't_surf', time_avg=True, files = ['atmos_daily'
 diag.add_field('simple_surface', 'shflx', time_avg=True, files = ['atmos_daily'])
 diag.add_field('simple_surface', 'evap', time_avg=True, files = ['atmos_daily'])
 diag.add_field('simple_surface', 'lwflx', time_avg=True, files = ['atmos_daily'])
+diag.add_field('simple_surface', 'swflx', time_avg=True, files = ['atmos_daily'])
 diag.add_field('simple_surface', 'tdt_surf', time_avg=True, files = ['atmos_daily'])
 
 diag.add_field('dynamics', 'sphum', time_avg=True, files = ['atmos_daily'])
@@ -51,6 +52,14 @@ diag.add_field('dynamics', 'vcomp', time_avg=True, files = ['atmos_daily'])
 diag.add_field('dynamics', 'temp', time_avg=True, files = ['atmos_daily'])
 diag.add_field('dynamics', 'vor', time_avg=True, files = ['atmos_daily'])
 diag.add_field('dynamics', 'div', time_avg=True, files = ['atmos_daily'])
+
+diag.add_field('two_stream', 'net_lw_surf', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'swdn_sfc', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'swdn_toa', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'coszen', time_avg=True, files = ['atmos_daily'])
+
+
+
 
 # diag.add_field('ocean_model', 'salt', time_avg=True, files = ['ocean_daily'])
 # diag.add_field('ocean_model', 'temp', time_avg=True, files = ['ocean_daily'])
@@ -181,7 +190,7 @@ exp.namelist = namelist = Namelist({
 
     'two_stream_gray_rad_nml': {
         'rad_scheme': 'frierson',            #Select radiation scheme to use, which in this case is Frierson
-        'do_seasonal': False,                #do_seasonal=false uses the p2 insolation profile from Frierson 2006. do_seasonal=True uses the GFDL astronomy module to calculate seasonally-varying insolation.
+        'do_seasonal': True,                #do_seasonal=false uses the p2 insolation profile from Frierson 2006. do_seasonal=True uses the GFDL astronomy module to calculate seasonally-varying insolation.
         'atm_abs': 0.2,                      # default: 0.0        
     },
 

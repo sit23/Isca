@@ -23,7 +23,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('original_isca_grey_rad_comparison_2', codebase=cb)
+exp = Experiment('original_isca_grey_rad_comparison_4', codebase=cb)
 
 # exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
@@ -157,9 +157,10 @@ exp.namelist = namelist = Namelist({
     #Use a large mixed-layer depth, and the Albedo of the CTRL case in Jucker & Gerber, 2017
     'mixed_layer_nml': {
         'tconst' : 275.,
+        'delta_T': 0.,
         'evaporation':True,   
         'depth': 2.5,                          #Depth of mixed layer used
-        'albedo_value': 0.3,                  #Albedo value used             
+        'albedo_value': 0.3,                  #Albedo value used          
     },
 
     'qe_moist_convection_nml': {
