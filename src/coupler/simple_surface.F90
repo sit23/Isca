@@ -107,6 +107,7 @@ logical :: do_qflux         = .false. !mj
 logical :: do_warmpool      = .false. !mj
 logical :: do_read_sst      = .false. !mj
 logical :: do_sc_sst        = .false. !mj
+logical :: evaporation      = .true.
 character(len=256) :: sst_file
 character(len=256) :: land_option = 'none'
 character(len=256) :: land_sea_mask_file = 'lmask'
@@ -129,6 +130,7 @@ namelist /simple_surface_nml/ z_ref_heat, z_ref_mom,             &
                               land_option,slandlon,slandlat,     &  !mj
                               elandlon,elandlat,land_sea_mask_file,&!mj
                               albedo_exp,albedo_cntr,albedo_wdth, & !mj
+                              evaporation,                       &
                               print_s_messages
 
 !-----------------------------------------------------------------------
@@ -405,7 +407,7 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
 
    pi = 4.*atan(1.)
 
-   flux_lw = Atm%flux_lw - flux_lw
+   flux_lw = Atm%flux_lw - flux_lw !flux_lw is assigned to the output of surface_flux above, which gives out the surface radiation flux. So we take atm%flux_lw, which is down, and subtract upward lw stored in flux_lw, I think...
 
    dtmass  = Atm%Surf_Diff%dtmass
    delta_t = Atm%Surf_Diff%delta_t
@@ -427,14 +429,17 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
    dhdt_surf  =  dhdt_surf     + dhdt_atm * e_t_n
 
 ! moisture
+   if (evaporation) then
+    gamma      =  1./ (1.0 - dtmass*(dflux_q + dedq_atm))
+    e_q_n      =  dtmass*dedt_surf*gamma
+    f_q_delt_n = (delta_q  + dtmass * flux_q) * gamma
 
-   gamma      =  1./ (1.0 - dtmass*(dflux_q + dedq_atm))
-   e_q_n      =  dtmass*dedt_surf*gamma
-   f_q_delt_n = (delta_q  + dtmass * flux_q) * gamma
-
-   flux_q     =  flux_q        + dedq_atm * f_q_delt_n
-   dedt_surf  =  dedt_surf     + dedq_atm * e_q_n
-
+    flux_q     =  flux_q        + dedq_atm * f_q_delt_n
+    dedt_surf  =  dedt_surf     + dedq_atm * e_q_n
+   
+   else
+    flux_q = 0.
+   endif
 
    dt_t_surf  = 0.0
    !###############################
@@ -486,10 +491,19 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
             enddo
          endif
 
-         flux    = (flux_lw + Atm%flux_sw - hlf*Atm%fprec &
-              - (flux_t + hlv*flux_q) + flux_o)*dt/land_sea_heat_capacity
+         if (evaporation) then
+          flux    = (flux_lw + Atm%flux_sw - hlf*Atm%fprec &
+                - (flux_t + hlv*flux_q) + flux_o)*dt/land_sea_heat_capacity
 
-         deriv   = - (dhdt_surf + hlv*dedt_surf + drdt_surf)*dt/land_sea_heat_capacity
+          deriv   = - (dhdt_surf + hlv*dedt_surf + drdt_surf)*dt/land_sea_heat_capacity
+         else
+          flux    = (flux_lw + Atm%flux_sw - hlf*Atm%fprec &
+          - (flux_t ) + flux_o)*dt/land_sea_heat_capacity
+
+          deriv   = - (dhdt_surf + drdt_surf)*dt/land_sea_heat_capacity
+         endif
+
+
         !flux    = (flux_lw + Atm%flux_sw - hlf*Atm%fprec &
         !        - (flux_t + hlv*flux_q) + flux_o)*dt/heat_capacity
 
@@ -526,10 +540,10 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
 
 
   flux_t     = flux_t      + dt_t_surf*dhdt_surf
-  flux_q     = flux_q      + dt_t_surf*dedt_surf
+  if (evaporation) flux_q     = flux_q      + dt_t_surf*dedt_surf
   flux_lw    = flux_lw     - dt_t_surf*drdt_surf
   dt_t_atm   = f_t_delt_n  + dt_t_surf*e_t_n
-  dt_q_atm   = f_q_delt_n  + dt_t_surf*e_q_n
+  if (evaporation) dt_q_atm   = f_q_delt_n  + dt_t_surf*e_q_n
 
   if (print_s_messages) write(6,*) maxval(f_q_delt_n), maxval(dt_t_surf), maxval(e_q_n), 'q tend components'
   if (print_s_messages) write(6,*) maxval(f_t_delt_n), maxval(dt_t_surf), maxval(e_t_n), 't tend components'
