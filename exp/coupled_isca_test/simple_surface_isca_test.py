@@ -4,7 +4,7 @@ import numpy as np
 
 from isca import IscaMOMCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
 
-NCORES = 4
+NCORES = 2
 base_dir = os.path.dirname(os.path.realpath(__file__))
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
@@ -23,7 +23,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('simple_surface_frierson_test_16', codebase=cb)
+exp = Experiment('simple_surface_frierson_test_dry_no_add_phys_t_surf_rad_34', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
@@ -39,6 +39,8 @@ diag.add_field('dynamics', 'ps', time_avg=True, files = ['atmos_daily'])
 diag.add_field('dynamics', 'bk', files = ['atmos_daily'])
 diag.add_field('dynamics', 'pk', files = ['atmos_daily'])
 diag.add_field('atmosphere', 'precipitation', time_avg=True, files = ['atmos_daily'])
+diag.add_field('atmosphere', 't_surf_in', time_avg=True, files = ['atmos_daily'])
+
 diag.add_field('simple_surface', 't_surf', time_avg=True, files = ['atmos_daily'])
 diag.add_field('simple_surface', 'shflx', time_avg=True, files = ['atmos_daily'])
 diag.add_field('simple_surface', 'evap', time_avg=True, files = ['atmos_daily'])
@@ -57,7 +59,8 @@ diag.add_field('two_stream', 'net_lw_surf', time_avg=True, files = ['atmos_daily
 diag.add_field('two_stream', 'swdn_sfc', time_avg=True, files = ['atmos_daily'])
 diag.add_field('two_stream', 'swdn_toa', time_avg=True, files = ['atmos_daily'])
 diag.add_field('two_stream', 'coszen', time_avg=True, files = ['atmos_daily'])
-
+diag.add_field('two_stream', 'tdt_rad', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'tdt_solar', time_avg=True, files = ['atmos_daily'])
 
 
 
@@ -77,7 +80,7 @@ exp.clear_rundir()
 #Define values for the 'core' namelist
 exp.namelist = namelist = Namelist({
     'coupler_nml':{
-     'days'   : 5,
+     'days'   : 30,
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,
@@ -97,14 +100,14 @@ exp.namelist = namelist = Namelist({
     'idealized_moist_phys_nml': {
         'do_damping': True,
         'turb':True,
-        'mixed_layer_bc':True,
+        'mixed_layer_bc':False,
         'do_virtual' :False,
         'do_simple': True,
         'roughness_mom':3.21e-05,
         'roughness_heat':3.21e-05,
         'roughness_moist':3.21e-05,                
         'two_stream_gray': True,     #Use grey radiation
-        'convection_scheme': 'SIMPLE_BETTS_MILLER', #Use the simple Betts Miller convection scheme from Frierson
+        'convection_scheme': 'None', #Use the simple Betts Miller convection scheme from Frierson
     },
 
     'moist_processes_nml': {
@@ -113,6 +116,7 @@ exp.namelist = namelist = Namelist({
 
     'physics_driver_nml': {
         'print_s_messages': False,
+        'diffusion_smooth': False,
     },
 
     'atmos_model_nml': {
@@ -127,6 +131,7 @@ exp.namelist = namelist = Namelist({
         'print_s_messages': False,
         'heat_capacity': 4.e07,
         'Tm': -275.,
+        'evaporation' : False,
     },
 
     'vert_turb_driver_nml': {
@@ -154,10 +159,11 @@ exp.namelist = namelist = Namelist({
 
     #Use a large mixed-layer depth, and the Albedo of the CTRL case in Jucker & Gerber, 2017
     'mixed_layer_nml': {
-        'tconst' : 285.,
-        'evaporation':True,   
+        'tconst' : 275.,
+        'delta_T': 0.,        
+        'evaporation':False,   
         'depth': 2.5,                          #Depth of mixed layer used
-        'albedo_value': 0.31,                  #Albedo value used             
+        'albedo_value': 0.30,                  #Albedo value used          
     },
 
     'qe_moist_convection_nml': {
@@ -192,6 +198,8 @@ exp.namelist = namelist = Namelist({
         'rad_scheme': 'frierson',            #Select radiation scheme to use, which in this case is Frierson
         'do_seasonal': False,                #do_seasonal=false uses the p2 insolation profile from Frierson 2006. do_seasonal=True uses the GFDL astronomy module to calculate seasonally-varying insolation.
         'atm_abs': 0.2,                      # default: 0.0        
+        # 'ir_tau_eq': 0.,
+        # 'ir_tau_pole': 0.,        
     },
 
     # FMS Framework configuration
@@ -214,7 +222,7 @@ exp.namelist = namelist = Namelist({
         'reference_sea_level_press':1.0e5,
         'num_levels':25,               #How many model pressure levels to use
         'valid_range_t':[100.,800.],
-        'initial_sphum':[2.e-6],
+        'initial_sphum':[0.],
         'vert_coord_option':'input', #Use the vertical levels from Frierson 2006
         'surf_res':0.5,
         'scale_heights' : 11.0,
@@ -241,5 +249,7 @@ exp.namelist = namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
     exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=False)
-    for i in range(2,25):
-        exp.run(i, num_cores=NCORES)
+    exp.run(2, num_cores=NCORES, overwrite_data=False)
+
+    # for i in range(2,25):
+    #     exp.run(i, num_cores=NCORES)

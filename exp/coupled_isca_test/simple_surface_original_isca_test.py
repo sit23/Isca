@@ -4,7 +4,7 @@ import numpy as np
 
 from isca import IscaCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
 
-NCORES = 4
+NCORES = 2
 base_dir = os.path.dirname(os.path.realpath(__file__))
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
@@ -23,7 +23,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('original_isca_grey_rad_comparison_4', codebase=cb)
+exp = Experiment('original_isca_grey_rad_comparison_dry_no_add_phys_t_surf_rad_12', codebase=cb)
 
 # exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
@@ -51,6 +51,14 @@ diag.add_field('dynamics', 'vcomp', time_avg=True, files = ['atmos_daily'])
 diag.add_field('dynamics', 'temp', time_avg=True, files = ['atmos_daily'])
 diag.add_field('dynamics', 'vor', time_avg=True, files = ['atmos_daily'])
 diag.add_field('dynamics', 'div', time_avg=True, files = ['atmos_daily'])
+
+diag.add_field('two_stream', 'swdn_sfc', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'swdn_toa', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'lwup_sfc', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'lwdn_sfc', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'net_lw_surf', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'tdt_rad', time_avg=True, files = ['atmos_daily'])
+diag.add_field('two_stream', 'tdt_solar', time_avg=True, files = ['atmos_daily'])
 
 # diag.add_field('ocean_model', 'salt', time_avg=True, files = ['ocean_daily'])
 # diag.add_field('ocean_model', 'temp', time_avg=True, files = ['ocean_daily'])
@@ -86,7 +94,7 @@ exp.namelist = namelist = Namelist({
     # },
 
     'main_nml':{
-     'days'   : 5,
+     'days'   : 30,
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,
@@ -106,7 +114,7 @@ exp.namelist = namelist = Namelist({
         'roughness_heat':3.21e-05,
         'roughness_moist':3.21e-05,                
         'two_stream_gray': True,     #Use grey radiation
-        'convection_scheme': 'SIMPLE_BETTS_MILLER', #Use the simple Betts Miller convection scheme from Frierson
+        'convection_scheme': 'None', #Use the simple Betts Miller convection scheme from Frierson
     },
 
     # 'moist_processes_nml': {
@@ -158,7 +166,7 @@ exp.namelist = namelist = Namelist({
     'mixed_layer_nml': {
         'tconst' : 275.,
         'delta_T': 0.,
-        'evaporation':True,   
+        'evaporation':False,   
         'depth': 2.5,                          #Depth of mixed layer used
         'albedo_value': 0.3,                  #Albedo value used          
     },
@@ -195,6 +203,8 @@ exp.namelist = namelist = Namelist({
         'rad_scheme': 'frierson',            #Select radiation scheme to use, which in this case is Frierson
         'do_seasonal': False,                #do_seasonal=false uses the p2 insolation profile from Frierson 2006. do_seasonal=True uses the GFDL astronomy module to calculate seasonally-varying insolation.
         'atm_abs': 0.2,                      # default: 0.0        
+        # 'ir_tau_eq': 0.,
+        # 'ir_tau_pole': 0.,            
     },
 
     # FMS Framework configuration
@@ -217,7 +227,7 @@ exp.namelist = namelist = Namelist({
         'reference_sea_level_press':1.0e5,
         'num_levels':25,               #How many model pressure levels to use
         'valid_range_t':[100.,800.],
-        'initial_sphum':[2.e-6],
+        'initial_sphum':[0.],
         'vert_coord_option':'input', #Use the vertical levels from Frierson 2006
         'surf_res':0.5,
         'scale_heights' : 11.0,
@@ -244,5 +254,6 @@ exp.namelist = namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
     exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=False)
-    for i in range(2,25):
-        exp.run(i, num_cores=NCORES)
+    exp.run(2, num_cores=NCORES)    
+    # for i in range(2,25):
+    #     exp.run(i, num_cores=NCORES)
