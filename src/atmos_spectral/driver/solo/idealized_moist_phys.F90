@@ -408,7 +408,7 @@ allocate(depth_change_lh(is:ie, js:je))                       ! RG Add bucket
 allocate(depth_change_cond(is:ie, js:je))                     ! RG Add bucket
 allocate(depth_change_conv(is:ie, js:je))                     ! RG Add bucket
 allocate(z_surf      (is:ie, js:je))
-allocate(t_surf      (is:ie, js:je))
+allocate(t_surf      (is:ie, js:je)); t_surf = 0.0
 allocate(q_surf      (is:ie, js:je)); q_surf = 0.0
 allocate(u_surf      (is:ie, js:je)); u_surf = 0.0
 allocate(v_surf      (is:ie, js:je)); v_surf = 0.0
@@ -562,7 +562,7 @@ endif
 
 if(mixed_layer_bc) then
   call mixed_layer_init(is, ie, js, je, num_levels, t_surf, bucket_depth, axes, Time, albedo, rad_lon, rad_lat, rad_lonb_2d(:,:), rad_latb_2d(:,:), land, bucket, grid_domain_in) ! t_surf is intent(inout) !s albedo distribution set here.
-  
+  write(6,*) 'mixed layer init', maxval(t_surf), minval(t_surf)
 elseif(gp_surface) then
   albedo=0.0
   call error_mesg('idealized_moist_phys','Because gp_surface=.True., setting albedo=0.0', NOTE)
@@ -745,7 +745,7 @@ rain = 0.0; snow = 0.0; precip = 0.0
 
 call idealized_convection_and_lscale_cond( p_half(:,:,:,previous), p_full(:,:,:,previous), z_half(:,:,:,previous), z_full(:,:,:,previous), tg(:,:,:,previous), grid_tracers(:,:,:,previous,:), ug(:,:,:,previous), vg(:,:,:,previous), dt_tg, dt_ug, dt_vg, dt_tracers, Time, delta_t, mask, kbot)
 
-call idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half(:,:,:,current), p_full(:,:,:,current), z_half(:,:,:,current), z_full(:,:,:,current), ug(:,:,:,previous), vg(:,:,:,previous), tg(:,:,:,previous), grid_tracers(:,:,:,previous,:), dt_ug, dt_vg, dt_tg, dt_tracers, .true., mask, kbot, current_in=current)
+call idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half(:,:,:,current), p_full(:,:,:,current), z_half(:,:,:,current), z_full(:,:,:,current), ug(:,:,:,previous), vg(:,:,:,previous), tg(:,:,:,previous), grid_tracers(:,:,:,previous,:), t_surf(:,:), dt_ug, dt_vg, dt_tg, dt_tracers, .true., mask, kbot, current_in=current)
 
 !----------------------------------------------------------------------
 !    Copied from MiMA physics_driver.f90
@@ -1157,12 +1157,13 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 end subroutine idealized_convection_and_lscale_cond
 
-subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug_prev, vg_prev, tg_prev, grid_tracers_prev,  dt_ug, dt_vg, dt_tg, dt_tracers, do_surface_flux, mask, kbot, current_in, net_surf_sw_down_grey  )
+subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug_prev, vg_prev, tg_prev, grid_tracers_prev, t_surf_in, dt_ug, dt_vg, dt_tg, dt_tracers, do_surface_flux, mask, kbot, current_in, net_surf_sw_down_grey, surf_lw_down_grey  )
 
 integer,                    intent(in)    :: is, js
 type(time_type),            intent(in)    :: Time
 real,                       intent(in)    :: delta_t
 real, dimension(:,:,:),   intent(in)      :: p_half_curr, p_full_curr, z_half_curr, z_full_curr
+real, dimension(:,:),    intent(in)      :: t_surf_in
 real, dimension(:,:,:),   intent(in)    :: ug_prev, vg_prev, tg_prev
 real, dimension(:,:,:,:), intent(in)    :: grid_tracers_prev
 real, dimension(:,:,:),     intent(inout) :: dt_tg, dt_ug, dt_vg
@@ -1172,7 +1173,7 @@ logical,                   intent(in)     :: do_surface_flux
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
 integer, intent(in),                 optional :: current_in
-real, intent(out) , dimension(:,:), optional :: net_surf_sw_down_grey
+real, intent(out) , dimension(:,:), optional :: net_surf_sw_down_grey, surf_lw_down_grey
 
 real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
 
@@ -1192,6 +1193,9 @@ real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
           if (present(net_surf_sw_down_grey))  then
             net_surf_sw_down_grey=net_surf_sw_down
           endif
+          if (present(surf_lw_down_grey))  then
+            surf_lw_down_grey=surf_lw_down
+          endif          
     end if
 
     if(.not.mixed_layer_bc) then
@@ -1212,18 +1216,18 @@ real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
       endif
 
     call surface_flux(                                                          &
-                      tg_prev(:,:,num_levels),                              &
-     grid_tracers_prev(:,:,num_levels,nsphum),                              &
-                      ug_prev(:,:,num_levels),                              &
-                      vg_prev(:,:,num_levels),                              &
-                   p_full_curr(:,:,num_levels),                              &
-       z_full_curr(:,:,num_levels)-z_surf(:,:),                              &
-                 p_half_curr(:,:,num_levels+1),                              &
-                                      t_surf(:,:),                              &
-                                      t_surf(:,:),                              &
+                          tg_prev(:,:,num_levels),                              &
+         grid_tracers_prev(:,:,num_levels,nsphum),                              &
+                          ug_prev(:,:,num_levels),                              &
+                          vg_prev(:,:,num_levels),                              &
+                      p_full_curr(:,:,num_levels),                              &
+          z_full_curr(:,:,num_levels)-z_surf(:,:),                              &
+                    p_half_curr(:,:,num_levels+1),                              &
+                                   t_surf_in(:,:),                              &
+                                   t_surf_in(:,:),                              &
                                       q_surf(:,:),                              & ! is intent(inout)
                                            bucket,                              &     ! RG Add bucket
-                        bucket_depth(:,:,current_in),                           &     ! RG Add bucket
+                     bucket_depth(:,:,current_in),                              &     ! RG Add bucket
                             max_bucket_depth_land,                              &     ! RG Add bucket
                              depth_change_lh(:,:),                              &     ! RG Add bucket
                            depth_change_conv(:,:),                              &     ! RG Add bucket
@@ -1267,7 +1271,7 @@ real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
        call two_stream_gray_rad_up(is, js, Time, &
                          rad_lat(:,:),           &
                          p_half_curr(:,:,:),  &
-                         t_surf(:,:),            &
+                         t_surf_in(:,:),            &
                          tg_prev(:,:,:),     &
                          dt_tg(:,:,:), albedo)
     end if
@@ -1281,7 +1285,7 @@ if(do_rrtm_radiation) then
    !need t at half grid
     tg_interp=tg_prev(:,:,:)
    call interp_temp(z_full_curr(:,:,:),z_half_curr(:,:,:),tg_interp, Time)
-   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full_curr(:,:,:),p_half_curr(:,:,:),albedo,grid_tracers_prev(:,:,:,nsphum),tg_interp,t_surf(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
+   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full_curr(:,:,:),p_half_curr(:,:,:),albedo,grid_tracers_prev(:,:,:,nsphum),tg_interp,t_surf_in(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
 endif
 #endif
 
