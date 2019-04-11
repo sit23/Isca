@@ -107,6 +107,8 @@ use vert_turb_driver_mod,    only: vert_turb_driver,  &
 
 use idealized_moist_phys_mod, only: idealized_moist_phys_init , idealized_moist_phys , idealized_convection_and_lscale_cond, idealized_radiation_and_optional_surface_flux, idealized_moist_phys_end, surf_diff_type
 
+! use atmosphere_mod,           only: get_nhum
+
 use         mpp_domains_mod, only: domain2D !s added to enable land reading
 
 use vert_diff_driver_mod,    only: vert_diff_driver_down,  &
@@ -1305,10 +1307,10 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                                                         Cell_microphys,&
                                                     Shallow_microphys, &
                                                         Model_microphys
-      integer          ::    sec, day, n
+      integer          ::    sec, day, n, nhum
       real             ::    dt, alpha, dt2
       logical          ::    used
-      real, dimension(size(u,1),size(u,2))           :: net_surf_sw_down_grey
+      real, dimension(size(u,1),size(u,2))           :: net_surf_sw_down_grey, surf_lw_down_grey
 
 !---------------------------------------------------------------------
 !   local variables:
@@ -1434,14 +1436,20 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       !   mask, kbot, diff_cum_mom,             &
       !   moist_convect, diffm, difft  )      
 
+      if (print_s_messages) write(6,*) 'maxval tdt pre idm', maxval(tdt), maxval(qdt)
 
       if (print_s_messages) write(6,*) 'made it to idmp call'
     if (do_grey_radiation) then
-      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, udt, vdt, tdt, rdt, .false., mask, kbot, net_surf_sw_down_grey=net_surf_sw_down_grey )  
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, net_surf_sw_down_grey=net_surf_sw_down_grey, surf_lw_down_grey = surf_lw_down_grey )  
     else
-      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, udt, vdt, tdt, rdt, .false., mask, kbot )
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot )
     endif
     
+!     call get_nhum(nhum)
+!     qdt = rdt(:,:,:,nhum)
+
+    if (print_s_messages) write(6,*) 'maxval tdt post idm', maxval(tdt), maxval(qdt)
+
     if (print_s_messages) write(6,*) 'Done idmp call'
 !-------------------------------------------------------------------
 !    process the variables returned from radiation_driver_mod. the 
@@ -1515,6 +1523,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
         flux_sw_dif     = R2*net_surf_sw_down_grey
         flux_sw_vis_dir = R3*net_surf_sw_down_grey
         flux_sw_vis_dif = R4*net_surf_sw_down_grey
+        flux_lw         = surf_lw_down_grey
       endif
 
 !----------------------------------------------------------------------
@@ -1698,6 +1707,8 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       endif
 
      call mpp_clock_end ( diff_down_clock )
+
+     if (print_s_messages) write(6,*) 'maxval tdt end pdd', maxval(tdt), maxval(qdt)
 
      if (print_s_messages) write(6,*) 'Finished physics driver down'
  end subroutine physics_driver_down
