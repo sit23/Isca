@@ -337,6 +337,8 @@ else
   future = previous
 endif
 
+if (print_s_messages)  write(6,*) ' pre spectral dynamics dt_tg max min', maxval(dt_tg), minval(dt_tg)
+
 call mpp_clock_begin(dynclock)
 call spectral_dynamics(Time, psg(:,:,future), ug(:,:,:,future), vg(:,:,:,future), &
                        tg(:,:,:,future), tracer_attributes, grid_tracers(:,:,:,:,:), future, &
