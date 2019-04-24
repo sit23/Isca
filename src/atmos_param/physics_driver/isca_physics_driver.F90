@@ -1310,7 +1310,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
       integer          ::    sec, day, n, nhum
       real             ::    dt, alpha, dt2
       logical          ::    used
-      real, dimension(size(u,1),size(u,2))           :: net_surf_sw_down_grey, surf_lw_down_grey
+      real, dimension(size(u,1),size(u,2))           :: net_surf_sw_down_grey, surf_lw_down_grey, coszen_idmp
 
 !---------------------------------------------------------------------
 !   local variables:
@@ -1440,9 +1440,9 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
       if (print_s_messages) write(6,*) 'made it to idmp call'
     if (do_grey_radiation) then
-      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, net_surf_sw_down_grey=net_surf_sw_down_grey, surf_lw_down_grey = surf_lw_down_grey )  
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, net_surf_sw_down_grey=net_surf_sw_down_grey, surf_lw_down_grey = surf_lw_down_grey, coszen_out = coszen_idmp )  
     else
-      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot )
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, coszen_out = coszen_idmp )
     endif
     
 !     call get_nhum(nhum)
@@ -1517,7 +1517,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
       if(do_grey_radiation) then !rif:(09/10/09) 
         ! call grey_radiation(is, js, Time, Time_next, lat, lon, phalfgrey, albedo, t_surf_rad, t, tdt, net_surf_sw_down_grey, flux_lw)
-        coszen = 1.0
+        coszen = coszen_idmp
         flux_sw         = net_surf_sw_down_grey
         flux_sw_dir     = R1*net_surf_sw_down_grey
         flux_sw_dif     = R2*net_surf_sw_down_grey

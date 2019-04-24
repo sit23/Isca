@@ -23,7 +23,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('simple_surface_frierson_test_dry_no_add_phys_t_surf_rad_34', codebase=cb)
+exp = Experiment('simple_surface_frierson_test_dry_no_add_phys_t_surf_rad_35', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
 
@@ -80,7 +80,7 @@ exp.clear_rundir()
 #Define values for the 'core' namelist
 exp.namelist = namelist = Namelist({
     'coupler_nml':{
-     'days'   : 30,
+     'days'   : 5,
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,
@@ -249,7 +249,7 @@ exp.namelist = namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
     exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=False)
-    exp.run(2, num_cores=NCORES, overwrite_data=False)
+    # exp.run(2, num_cores=NCORES, overwrite_data=False)
 
     # for i in range(2,25):
     #     exp.run(i, num_cores=NCORES)

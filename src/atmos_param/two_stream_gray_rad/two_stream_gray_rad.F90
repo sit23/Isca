@@ -383,7 +383,7 @@ end subroutine two_stream_gray_rad_init
 ! ==================================================================================
 
 subroutine two_stream_gray_rad_down (is, js, Time_diag, lat, lon, p_half, t,         &
-                           net_surf_sw_down, surf_lw_down, albedo, q)
+                           net_surf_sw_down, surf_lw_down, albedo, q, coszen_output)
 
 ! Begin the radiation calculation by computing downward fluxes.
 ! This part of the calculation does not depend on the surface temperature.
@@ -394,6 +394,7 @@ real, intent(in), dimension(:,:)    :: lat, lon, albedo
 real, intent(out), dimension(:,:)   :: net_surf_sw_down
 real, intent(out), dimension(:,:)   :: surf_lw_down
 real, intent(in), dimension(:,:,:)  :: t, q,  p_half
+real, intent(out), dimension(:,:), optional :: coszen_output
 integer :: i, j, k, n, dyofyr
 
 integer :: seconds, year_in_s, days
@@ -445,6 +446,10 @@ if (do_seasonal) then
   end if
 
      insolation = solar_constant * coszen
+
+     if (present(coszen_output)) then
+      coszen_output = coszen
+     endif
 
 else if (sw_scheme==B_SCHNEIDER_LIU) then
   insolation = (solar_constant/pi)*cos(lat)

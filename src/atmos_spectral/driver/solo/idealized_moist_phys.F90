@@ -1163,7 +1163,7 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 end subroutine idealized_convection_and_lscale_cond
 
-subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug_prev, vg_prev, tg_prev, grid_tracers_prev, t_surf_in, dt_ug, dt_vg, dt_tg, dt_tracers, do_surface_flux, mask, kbot, current_in, net_surf_sw_down_grey, surf_lw_down_grey  )
+subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug_prev, vg_prev, tg_prev, grid_tracers_prev, t_surf_in, dt_ug, dt_vg, dt_tg, dt_tracers, do_surface_flux, mask, kbot, current_in, net_surf_sw_down_grey, surf_lw_down_grey, coszen_out  )
 
 integer,                    intent(in)    :: is, js
 type(time_type),            intent(in)    :: Time
@@ -1179,7 +1179,7 @@ logical,                   intent(in)     :: do_surface_flux
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
 integer, intent(in),                 optional :: current_in
-real, intent(out) , dimension(:,:), optional :: net_surf_sw_down_grey, surf_lw_down_grey
+real, intent(out) , dimension(:,:), optional :: net_surf_sw_down_grey, surf_lw_down_grey, coszen_out
 
 real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
 
@@ -1194,7 +1194,7 @@ real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
                            tg_prev(:,:,:),     &
                            net_surf_sw_down(:,:),  &
                            surf_lw_down(:,:), albedo, &
-                           grid_tracers_prev(:,:,:,nsphum))
+                           grid_tracers_prev(:,:,:,nsphum), coszen_output = coszen)
 
           if (present(net_surf_sw_down_grey))  then
             net_surf_sw_down_grey=net_surf_sw_down
@@ -1202,6 +1202,11 @@ real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
           if (present(surf_lw_down_grey))  then
             surf_lw_down_grey=surf_lw_down
           endif          
+
+          if (present(coszen_out)) then
+            coszen_out = coszen
+         endif          
+
     end if
 
     if(.not.mixed_layer_bc) then
@@ -1293,6 +1298,11 @@ if(do_rrtm_radiation) then
     tg_interp=tg_prev(:,:,:)
    call interp_temp(z_full_curr(:,:,:),z_half_curr(:,:,:),tg_interp, Time)
    call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full_curr(:,:,:),p_half_curr(:,:,:),albedo,grid_tracers_prev(:,:,:,nsphum),tg_interp,t_surf_in(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
+
+   if (present(coszen_out)) then
+      coszen_out = coszen
+   endif
+    
 endif
 #endif
 
