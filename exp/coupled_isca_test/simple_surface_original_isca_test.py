@@ -23,9 +23,9 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('original_isca_grey_rad_comparison_dry_no_add_phys_t_surf_rad_12', codebase=cb)
+exp = Experiment('original_isca_grey_rad_comparison_dry_no_add_phys_t_surf_rad_post_sc_3', codebase=cb)
 
-# exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
+exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc'), os.path.join(base_dir,'input/analytic_t_surf_1.nc')]
 
 #Tell model how to write diagnostics
 diag = DiagTable()
@@ -94,7 +94,7 @@ exp.namelist = namelist = Namelist({
     # },
 
     'main_nml':{
-     'days'   : 30,
+     'days'   : 5,
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,
@@ -169,6 +169,9 @@ exp.namelist = namelist = Namelist({
         'evaporation':False,   
         'depth': 2.5,                          #Depth of mixed layer used
         'albedo_value': 0.3,                  #Albedo value used          
+        # 'do_read_sst': True,
+        # 'do_sc_sst': True,
+        # 'sst_file': 'analytic_t_surf_1'
     },
 
     'qe_moist_convection_nml': {
@@ -254,6 +257,6 @@ exp.namelist = namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
     exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=False)
-    exp.run(2, num_cores=NCORES)    
+    # exp.run(2, num_cores=NCORES)    
     # for i in range(2,25):
     #     exp.run(i, num_cores=NCORES)

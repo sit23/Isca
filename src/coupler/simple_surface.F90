@@ -502,8 +502,7 @@ real, dimension(size(Atm%t_bot,1), size(Atm%t_bot,2)) :: &
 
           deriv   = - (dhdt_surf + drdt_surf)*dt/land_sea_heat_capacity
          endif
-
-
+         
         !flux    = (flux_lw + Atm%flux_sw - hlf*Atm%fprec &
         !        - (flux_t + hlv*flux_q) + flux_o)*dt/heat_capacity
 

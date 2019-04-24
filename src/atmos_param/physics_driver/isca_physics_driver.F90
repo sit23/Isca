@@ -1440,9 +1440,9 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
       if (print_s_messages) write(6,*) 'made it to idmp call'
     if (do_grey_radiation) then
-      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, net_surf_sw_down_grey=net_surf_sw_down_grey, surf_lw_down_grey = surf_lw_down_grey, coszen_out = coszen_idmp )  
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, net_surf_sw_down_grey=net_surf_sw_down_grey, surf_lw_down_grey = surf_lw_down_grey, coszen_out = coszen_idmp, albedo_in = albedo )  
     else
-      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, coszen_out = coszen_idmp )
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, coszen_out = coszen_idmp, albedo_in = albedo )
     endif
     
 !     call get_nhum(nhum)

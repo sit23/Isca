@@ -570,6 +570,11 @@ elseif(gp_surface) then
 
   call error_mesg('idealized_moist_phys','Note that if grey radiation scheme != Schneider is used, model will seg-fault b/c gp_surface does not define a t_surf, which is required by most grey schemes.', NOTE)
 
+else
+  albedo = 0.0
+  call error_mesg('idealized_moist_phys','Because mixed-layer and gp_surface options are not being used, setting albedo=0.0', NOTE)
+
+
 endif
 
 if(turb) then
@@ -1163,7 +1168,7 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 end subroutine idealized_convection_and_lscale_cond
 
-subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug_prev, vg_prev, tg_prev, grid_tracers_prev, t_surf_in, dt_ug, dt_vg, dt_tg, dt_tracers, do_surface_flux, mask, kbot, current_in, net_surf_sw_down_grey, surf_lw_down_grey, coszen_out  )
+subroutine idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half_curr, p_full_curr, z_half_curr, z_full_curr, ug_prev, vg_prev, tg_prev, grid_tracers_prev, t_surf_in, dt_ug, dt_vg, dt_tg, dt_tracers, do_surface_flux, mask, kbot, current_in, net_surf_sw_down_grey, surf_lw_down_grey, coszen_out, albedo_in  )
 
 integer,                    intent(in)    :: is, js
 type(time_type),            intent(in)    :: Time
@@ -1180,11 +1185,19 @@ real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
 integer, intent(in),                 optional :: current_in
 real, intent(out) , dimension(:,:), optional :: net_surf_sw_down_grey, surf_lw_down_grey, coszen_out
+real, intent(in), dimension(:,:), optional  :: albedo_in
 
 real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
+real, dimension(size(tg_prev,1), size(tg_prev,2)) :: albedo_use
 
     ! Begin the radiation calculation by computing downward fluxes.
     ! This part of the calculation does not depend on the surface temperature.
+
+  if (present(albedo_in)) then
+    albedo_use = albedo_in
+  else
+    albedo_use = albedo
+  endif
 
     if(two_stream_gray) then
        call two_stream_gray_rad_down(is, js, Time, &
@@ -1193,7 +1206,7 @@ real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
                            p_half_curr,  &
                            tg_prev(:,:,:),     &
                            net_surf_sw_down(:,:),  &
-                           surf_lw_down(:,:), albedo, &
+                           surf_lw_down(:,:), albedo_use, &
                            grid_tracers_prev(:,:,:,nsphum), coszen_output = coszen)
 
           if (present(net_surf_sw_down_grey))  then
@@ -1285,7 +1298,7 @@ real, dimension(size(tg_prev,1), size(tg_prev,2), size(tg_prev,3)) :: tg_interp
                          p_half_curr(:,:,:),  &
                          t_surf_in(:,:),            &
                          tg_prev(:,:,:),     &
-                         dt_tg(:,:,:), albedo)
+                         dt_tg(:,:,:), albedo_use)
     end if
 
 #ifdef RRTM_NO_COMPILE
@@ -1297,7 +1310,7 @@ if(do_rrtm_radiation) then
    !need t at half grid
     tg_interp=tg_prev(:,:,:)
    call interp_temp(z_full_curr(:,:,:),z_half_curr(:,:,:),tg_interp, Time)
-   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full_curr(:,:,:),p_half_curr(:,:,:),albedo,grid_tracers_prev(:,:,:,nsphum),tg_interp,t_surf_in(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
+   call run_rrtmg(is,js,Time,rad_lat(:,:),rad_lon(:,:),p_full_curr(:,:,:),p_half_curr(:,:,:),albedo_use,grid_tracers_prev(:,:,:,nsphum),tg_interp,t_surf_in(:,:),dt_tg(:,:,:),coszen,net_surf_sw_down(:,:),surf_lw_down(:,:))
 
    if (present(coszen_out)) then
       coszen_out = coszen

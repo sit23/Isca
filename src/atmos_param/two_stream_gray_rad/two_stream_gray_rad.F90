@@ -395,6 +395,7 @@ real, intent(out), dimension(:,:)   :: net_surf_sw_down
 real, intent(out), dimension(:,:)   :: surf_lw_down
 real, intent(in), dimension(:,:,:)  :: t, q,  p_half
 real, intent(out), dimension(:,:), optional :: coszen_output
+
 integer :: i, j, k, n, dyofyr
 
 integer :: seconds, year_in_s, days
@@ -403,10 +404,9 @@ logical :: used
 
 
 real ,dimension(size(q,1),size(q,2),size(q,3)) :: co2f
+real, dimension(size(q,1),size(q,2)) :: albedo_use
 
 n = size(t,3)
-
-
 
 ! albedo(:,:) = albedo_value !s albedo now set in mixed_layer_init.
 

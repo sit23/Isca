@@ -23,9 +23,9 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('simple_surface_frierson_test_dry_no_add_phys_t_surf_rad_35', codebase=cb)
+exp = Experiment('simple_surface_frierson_test_dry_no_add_phys_t_surf_rad_post_sc_3', codebase=cb)
 
-exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc')]
+exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc'), os.path.join(base_dir,'input/analytic_t_surf_1.nc')]
 
 #Tell model how to write diagnostics
 diag = DiagTable()
@@ -132,6 +132,9 @@ exp.namelist = namelist = Namelist({
         'heat_capacity': 4.e07,
         'Tm': -275.,
         'evaporation' : False,
+        # 'do_read_sst': True,
+        # 'do_sc_sst': True,
+        # 'sst_file': 'analytic_t_surf_1'        
     },
 
     'vert_turb_driver_nml': {
