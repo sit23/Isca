@@ -765,40 +765,40 @@ call idealized_radiation_and_optional_surface_flux(is, js, Time, delta_t, p_half
 !----------------------------------------------------------------------
 z_pbl(:,:) = pbltop(is:ie,js:je)
 if(do_damping) then
-    !  call damping_driver (is, js, rad_lat, Time+Time_step, delta_t,                               &
-    !                          p_full(:,:,:,current), p_half(:,:,:,current),              &
-    !                          z_full(:,:,:,current), z_half(:,:,:,current),              &
-    !                          ug(:,:,:,previous), vg(:,:,:,previous),                    &
-    !                          tg(:,:,:,previous), grid_tracers(:,:,:,previous,nsphum),   &
-    !                          grid_tracers(:,:,:,previous,:),                            &
-    !                          dt_ug(:,:,:), dt_vg(:,:,:), dt_tg(:,:,:),                  &
-    !                          dt_tracers(:,:,:,nsphum), dt_tracers(:,:,:,:),             &
-    !                          z_pbl) !s have taken the names of arrays etc from vert_turb_driver below. Watch ntp from 2006 call to this routine?
+     call damping_driver (is, js, rad_lat, Time+Time_step, delta_t,                               &
+                             p_full(:,:,:,current), p_half(:,:,:,current),              &
+                             z_full(:,:,:,current), z_half(:,:,:,current),              &
+                             ug(:,:,:,previous), vg(:,:,:,previous),                    &
+                             tg(:,:,:,previous), grid_tracers(:,:,:,previous,nsphum),   &
+                             grid_tracers(:,:,:,previous,:),                            &
+                             dt_ug(:,:,:), dt_vg(:,:,:), dt_tg(:,:,:),                  &
+                             dt_tracers(:,:,:,nsphum), dt_tracers(:,:,:,:),             &
+                             z_pbl) !s have taken the names of arrays etc from vert_turb_driver below. Watch ntp from 2006 call to this routine?
 endif
 
 
 
 if(turb) then
 
-  !  call vert_turb_driver(            1,                              1, &
-  !                                 Time,                 Time+Time_step, &
-  !                              delta_t, tdtlw(:,:,:),    fracland(:,:), &
-  !                p_half(:,:,:,current),          p_full(:,:,:,current), &
-  !                z_half(:,:,:,current),          z_full(:,:,:,current), &
-  !                           ustar(:,:),                     bstar(:,:), &
-  !                           qstar(:,:),                     rough(:,:), &
-  !                         rad_lat(:,:),                   convect(:,:), &
-  !                   ug(:,:,:,current ),             vg(:,:,:,current ), &
-  !                   tg(:,:,:,current ),                                 &
-  !   grid_tracers(:,:,:,current,nsphum),  grid_tracers(:,:,:,current,:), &
-  !                   ug(:,:,:,previous),                                 &
-  !                   vg(:,:,:,previous),             tg(:,:,:,previous), &
-  !  grid_tracers(:,:,:,previous,nsphum), grid_tracers(:,:,:,previous,:), &
-  !                         dt_ug(:,:,:),                   dt_vg(:,:,:), &
-  !                         dt_tg(:,:,:),       dt_tracers(:,:,:,nsphum), &
-  !                  dt_tracers(:,:,:,:),                  diff_t(:,:,:), &
-  !                        diff_m(:,:,:),                      gust(:,:), &
-  !                           z_pbl(:,:) )
+   call vert_turb_driver(            1,                              1, &
+                                  Time,                 Time+Time_step, &
+                               delta_t, tdtlw(:,:,:),    fracland(:,:), &
+                 p_half(:,:,:,current),          p_full(:,:,:,current), &
+                 z_half(:,:,:,current),          z_full(:,:,:,current), &
+                            ustar(:,:),                     bstar(:,:), &
+                            qstar(:,:),                     rough(:,:), &
+                          rad_lat(:,:),                   convect(:,:), &
+                    ug(:,:,:,current ),             vg(:,:,:,current ), &
+                    tg(:,:,:,current ),                                 &
+    grid_tracers(:,:,:,current,nsphum),  grid_tracers(:,:,:,current,:), &
+                    ug(:,:,:,previous),                                 &
+                    vg(:,:,:,previous),             tg(:,:,:,previous), &
+   grid_tracers(:,:,:,previous,nsphum), grid_tracers(:,:,:,previous,:), &
+                          dt_ug(:,:,:),                   dt_vg(:,:,:), &
+                          dt_tg(:,:,:),       dt_tracers(:,:,:,nsphum), &
+                   dt_tracers(:,:,:,:),                  diff_t(:,:,:), &
+                         diff_m(:,:,:),                      gust(:,:), &
+                            z_pbl(:,:) )
 
       pbltop(is:ie,js:je) = z_pbl(:,:) !s added so that z_pbl can be used subsequently by damping_driver.
 
@@ -830,19 +830,19 @@ if(turb) then
    non_diff_dt_tg  = dt_tg
    non_diff_dt_qg  = dt_tracers(:,:,:,nsphum)
 
-!    call gcm_vert_diff_down (1, 1,                                          &
-!                             delta_t,             ug(:,:,:,previous),       &
-!                             vg(:,:,:,previous),  tg(:,:,:,previous),       &
-!                             grid_tracers(:,:,:,previous,nsphum),           &
-!                             grid_tracers(:,:,:,previous,:), diff_m(:,:,:), &
-!                             diff_t(:,:,:),          p_half(:,:,:,current), &
-!                             p_full(:,:,:,current),  z_full(:,:,:,current), &
-!                             flux_u(:,:),                      flux_v(:,:), &
-!                             dtaudu_atm(:,:),              dtaudv_atm(:,:), &
-!                             dt_ug(:,:,:),                    dt_vg(:,:,:), &
-!                             dt_tg(:,:,:),        dt_tracers(:,:,:,nsphum), &
-!                             dt_tracers(:,:,:,:),         diss_heat(:,:,:), &
-!                             Tri_surf)
+   call gcm_vert_diff_down (1, 1,                                          &
+                            delta_t,             ug(:,:,:,previous),       &
+                            vg(:,:,:,previous),  tg(:,:,:,previous),       &
+                            grid_tracers(:,:,:,previous,nsphum),           &
+                            grid_tracers(:,:,:,previous,:), diff_m(:,:,:), &
+                            diff_t(:,:,:),          p_half(:,:,:,current), &
+                            p_full(:,:,:,current),  z_full(:,:,:,current), &
+                            flux_u(:,:),                      flux_v(:,:), &
+                            dtaudu_atm(:,:),              dtaudv_atm(:,:), &
+                            dt_ug(:,:,:),                    dt_vg(:,:,:), &
+                            dt_tg(:,:,:),        dt_tracers(:,:,:,nsphum), &
+                            dt_tracers(:,:,:,:),         diss_heat(:,:,:), &
+                            Tri_surf)
 ! !
 ! update surface temperature
 !

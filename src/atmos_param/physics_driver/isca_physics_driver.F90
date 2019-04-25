@@ -1561,16 +1561,16 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
       if (print_s_messages) write(6,*) 'about to do vert turb driver'
       call mpp_clock_begin ( turb_clock )
-      ! call vert_turb_driver (is, js, Time, Time_next, dt,            &
-      !                        lw_tendency(is:ie,js:je,:), frac_land,  &
-      !                        p_half, p_full, z_half, z_full, u_star, &
-      !                        b_star, q_star, rough_mom, lat,         &
-      !                        convect(is:ie,js:je),                   &
-      !                        u, v, t, q, r(:,:,:,1:ntp), um, vm,     &
-      !                        tm, qm, rm(:,:,:,1:ntp),                &
-      !                        udt, vdt, tdt, qdt, rdt,                &
-      !                        diff_t_vert, diff_m_vert, gust, z_pbl,  &
-      !                        mask=mask, kbot=kbot             )
+      call vert_turb_driver (is, js, Time, Time_next, dt,            &
+                             lw_tendency(is:ie,js:je,:), frac_land,  &
+                             p_half, p_full, z_half, z_full, u_star, &
+                             b_star, q_star, rough_mom, lat,         &
+                             convect(is:ie,js:je),                   &
+                             u, v, t, q, r(:,:,:,1:ntp), um, vm,     &
+                             tm, qm, rm(:,:,:,1:ntp),                &
+                             udt, vdt, tdt, qdt, rdt,                &
+                             diff_t_vert, diff_m_vert, gust, z_pbl,  &
+                             mask=mask, kbot=kbot             )
      call mpp_clock_end ( turb_clock )
      pbltop(is:ie,js:je) = z_pbl(:,:)
      if (print_s_messages) write(6,*) 'Done vert turb driver'
@@ -1672,16 +1672,16 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
     !                               diff_t_clubb=diff_t_clubb(is:ie,js:je,:),   &   ! cjg
     !                               mask=mask, kbot=kbot           )
     !  else
-      !   call vert_diff_driver_down (is, js, Time_next, dt, p_half,   &
-      !                             p_full, z_full,   &
-      !                             diff_m(is:ie,js:je,:),         &
-      !                             diff_t(is:ie,js:je,:),         &
-      !                             um ,vm ,tm ,qm ,rm(:,:,:,1:ntp), &
-      !                             dtau_du, dtau_dv, tau_x, tau_y,  &
-      !                             udt, vdt, tdt, qdt, rdt,       &
-      !                             Surf_diff,                     &
-      !                           !   diff_t_clubb=diff_t_clubb,   &   ! RASF
-      !                             mask=mask, kbot=kbot           )
+        call vert_diff_driver_down (is, js, Time_next, dt, p_half,   &
+                                  p_full, z_full,   &
+                                  diff_m(is:ie,js:je,:),         &
+                                  diff_t(is:ie,js:je,:),         &
+                                  um ,vm ,tm ,qm ,rm(:,:,:,1:ntp), &
+                                  dtau_du, dtau_dv, tau_x, tau_y,  &
+                                  udt, vdt, tdt, qdt, rdt,       &
+                                  Surf_diff,                     &
+                                !   diff_t_clubb=diff_t_clubb,   &   ! RASF
+                                  mask=mask, kbot=kbot           )
     !   endif
 
       ! if (id_tdt_phys_vdif_dn > 0) then
