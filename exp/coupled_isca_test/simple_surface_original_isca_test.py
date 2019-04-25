@@ -23,7 +23,7 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('original_isca_grey_rad_comparison_dry_no_add_phys_t_surf_rad_post_sc_3', codebase=cb)
+exp = Experiment('original_isca_grey_rad_comparison_dry_no_add_phys_t_surf_rad_post_sc_6', codebase=cb)
 
 exp.inputfiles = [os.path.join(base_dir,'input/grid_spec.nc'), os.path.join(base_dir,'input/analytic_t_surf_1.nc')]
 

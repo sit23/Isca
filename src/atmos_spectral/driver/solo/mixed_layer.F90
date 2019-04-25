@@ -650,6 +650,8 @@ if(do_sc_sst) then !mj sst read from input file
 	     
 end if
 
+! write(6,*) maxval(land_sea_heat_capacity), minval(land_sea_heat_capacity), dt
+
 if ((.not.do_sc_sst).or.(do_sc_sst.and.specify_sst_over_ocean_only)) then
   !s use the land_sea_heat_capacity calculated in mixed_layer_init
 
