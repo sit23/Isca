@@ -802,6 +802,7 @@ if(turb) then
 
       pbltop(is:ie,js:je) = z_pbl(:,:) !s added so that z_pbl can be used subsequently by damping_driver.
 
+      ! write(6,*) maxval(diff_t), minval(diff_t), maxval(diff_m), minval(diff_m), maxval(z_pbl), minval(z_pbl)
 !
 !! Don't zero these derivatives as the surface flux depends implicitly
 !! on the lowest level values
@@ -830,6 +831,20 @@ if(turb) then
    non_diff_dt_tg  = dt_tg
    non_diff_dt_qg  = dt_tracers(:,:,:,nsphum)
 
+  !  write(6,*) 'max in tau_x, tau_y', maxval(flux_u), minval(flux_u), maxval(flux_v), minval(flux_v)
+  !  write(6,*) 'max in dt_tg', maxval(dt_tg), minval(dt_tg)
+
+  !  write(6,*) 'before', 1, 1, delta_t, maxval(ug(:,:,:,previous)), maxval(vg(:,:,:,previous)),  maxval(tg(:,:,:,previous)),       &
+  !  maxval(grid_tracers(:,:,:,previous,nsphum)),           &
+  !  maxval(grid_tracers(:,:,:,previous,:)), maxval(diff_m(:,:,:)), &
+  !  maxval(diff_t(:,:,:)),          maxval(p_half(:,:,:,current)), &
+  !  maxval(p_full(:,:,:,current)),  maxval(z_full(:,:,:,current)), &
+  !  maxval(flux_u(:,:)),                      maxval(flux_v(:,:)), &
+  !  maxval(dtaudu_atm(:,:)),              maxval(dtaudv_atm(:,:)), &
+  !  maxval(dt_ug(:,:,:)),                    maxval(dt_vg(:,:,:)), &
+  !  maxval(dt_tg(:,:,:)),        maxval(dt_tracers(:,:,:,nsphum)), &
+  !  maxval(dt_tracers(:,:,:,:)),         maxval(diss_heat(:,:,:))
+  ! write(6,*) 'mom heat', maxval(diff_m), maxval(diff_t)
    call gcm_vert_diff_down (1, 1,                                          &
                             delta_t,             ug(:,:,:,previous),       &
                             vg(:,:,:,previous),  tg(:,:,:,previous),       &
@@ -843,6 +858,18 @@ if(turb) then
                             dt_tg(:,:,:),        dt_tracers(:,:,:,nsphum), &
                             dt_tracers(:,:,:,:),         diss_heat(:,:,:), &
                             Tri_surf)
+    ! write(6,*) 'max out tau_x, tau_y', maxval(flux_u), minval(flux_u), maxval(flux_v), minval(flux_v)
+  ! write(6,*) 'after', 1, 1, delta_t, maxval(ug(:,:,:,previous)), maxval(vg(:,:,:,previous)),  maxval(tg(:,:,:,previous)),       &
+  ! maxval(grid_tracers(:,:,:,previous,nsphum)),           &
+  ! maxval(grid_tracers(:,:,:,previous,:)), maxval(diff_m(:,:,:)), &
+  ! maxval(diff_t(:,:,:)),          maxval(p_half(:,:,:,current)), &
+  ! maxval(p_full(:,:,:,current)),  maxval(z_full(:,:,:,current)), &
+  ! maxval(flux_u(:,:)),                      maxval(flux_v(:,:)), &
+  ! maxval(dtaudu_atm(:,:)),              maxval(dtaudv_atm(:,:)), &
+  ! maxval(dt_ug(:,:,:)),                    maxval(dt_vg(:,:,:)), &
+  ! maxval(dt_tg(:,:,:)),        maxval(dt_tracers(:,:,:,nsphum)), &
+  ! maxval(dt_tracers(:,:,:,:)),         maxval(diss_heat(:,:,:))                            
+  ! write(6,*) 'max out dt_tg', maxval(dt_tg), minval(dt_tg)
 ! !
 ! update surface temperature
 !
@@ -866,7 +893,9 @@ if(turb) then
                               albedo(:,:))
    endif
 
+  !  write(6,*) 'before', 1, 1, delta_t, maxval(dt_tg(:,:,:)), maxval(dt_tracers(:,:,:,nsphum)), maxval(dt_tracers(:,:,:,:))
    call gcm_vert_diff_up (1, 1, delta_t, Tri_surf, dt_tg(:,:,:), dt_tracers(:,:,:,nsphum), dt_tracers(:,:,:,:))
+  !  write(6,*) 'after', 1, 1, delta_t, maxval(dt_tg(:,:,:)), maxval(dt_tracers(:,:,:,nsphum)), maxval(dt_tracers(:,:,:,:))
 
    if(id_diff_dt_ug > 0) used = send_data(id_diff_dt_ug, dt_ug - non_diff_dt_ug, Time)
    if(id_diff_dt_vg > 0) used = send_data(id_diff_dt_vg, dt_vg - non_diff_dt_vg, Time)

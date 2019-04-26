@@ -206,15 +206,21 @@ module vert_diff_driver_mod
        where (q_2 < 0.0)  q_2 = 0.0
      endif
     
+    ! write(6,*) 'mom heat', maxval(diff_mom), maxval(diff_heat)
+
     !--> cjg
+    !  write(6,*) 'before', is, js, delt, maxval(u), maxval(v), maxval(tt), maxval(q_2), maxval(trs(:,:,:,1:ntp)), maxval(diff_mom), maxval(diff_heat), maxval(p_half), maxval(p_full), maxval(z_full), maxval(tau_x), maxval(tau_y), maxval(dtau_du), maxval(dtau_dv), maxval(dt_u), maxval(dt_v), maxval(dt_t), maxval(dt_q), maxval(dt_trs(:,:,:,1:ntp)), maxval(dissipative_heat), maxval(kbot)
+
      call gcm_vert_diff_down (is, js, delt, u, v, tt, q_2, trs(:,:,:,1:ntp), &
                               diff_mom, diff_heat,                           &
                               p_half, p_full, z_full,                        &
                               tau_x, tau_y, dtau_du, dtau_dv,                &
                               dt_u, dt_v, dt_t, dt_q, dt_trs(:,:,:,1:ntp),   &
-                              dissipative_heat, Surf_diff, kbot ) !cjg
+                              dissipative_heat, Surf_diff ) !cjg
     !<--cjg
-    
+
+    ! write(6,*) 'after', is, js, delt, maxval(u), maxval(v), maxval(tt), maxval(q_2), maxval(trs(:,:,:,1:ntp)), maxval(diff_mom), maxval(diff_heat), maxval(p_half), maxval(p_full), maxval(z_full), maxval(tau_x), maxval(tau_y), maxval(dtau_du), maxval(dtau_dv), maxval(dt_u), maxval(dt_v), maxval(dt_t), maxval(dt_q), maxval(dt_trs(:,:,:,1:ntp)), maxval(dissipative_heat), maxval(kbot)
+                              
     !-----------------------------------------------------------------------
     !-----------------------------------------------------------------------
     !---- to do diagnostics on dt_u, and dt_v at this point add 
@@ -309,8 +315,9 @@ module vert_diff_driver_mod
         je = js + size(p_half,2) -1
     !-----------------------------------------------------------------------
     
-        call gcm_vert_diff_up (is, js, delt, Surf_diff, dt_t, dt_q, dt_tr, kbot)
-    
+        ! write(6,*) 'before', is, js, delt, maxval(dt_t), maxval(dt_q), maxval(dt_tr)
+        call gcm_vert_diff_up (is, js, delt, Surf_diff, dt_t, dt_q, dt_tr)
+        ! write(6,*) 'after', is, js, delt, maxval(dt_t), maxval(dt_q), maxval(dt_tr)    
     
     !-----------------------------------------------------------------------
     !---- to do diagnostics on dt_t and dt_q at this point add in the

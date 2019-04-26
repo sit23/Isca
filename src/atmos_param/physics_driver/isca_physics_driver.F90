@@ -1440,9 +1440,9 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 
       if (print_s_messages) write(6,*) 'made it to idmp call'
     if (do_grey_radiation) then
-      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, net_surf_sw_down_grey=net_surf_sw_down_grey, surf_lw_down_grey = surf_lw_down_grey, coszen_out = coszen_idmp, albedo_in = albedo )  
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., net_surf_sw_down_grey=net_surf_sw_down_grey, surf_lw_down_grey = surf_lw_down_grey, coszen_out = coszen_idmp, albedo_in = albedo )  
     else
-      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., mask, kbot, coszen_out = coszen_idmp, albedo_in = albedo )
+      call idealized_radiation_and_optional_surface_flux(is, js, Time, dt, p_half, p_full, z_half, z_full, u, v, t, r, t_surf_rad, udt, vdt, tdt, rdt, .false., coszen_out = coszen_idmp, albedo_in = albedo )
     endif
     
 !     call get_nhum(nhum)
@@ -1538,7 +1538,7 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                            p_full, p_half, z_full, z_half,          &
                            um, vm, tm, qm, rm(:,:,:,1:ntp), &
                            udt, vdt, tdt, qdt, rdt,&
-                           z_pbl , mask, kbot)
+                           z_pbl)
       if (print_s_messages) write(6,*) 'done damping driver'
       call mpp_clock_end ( damping_clock )
 
@@ -1569,11 +1569,11 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                              u, v, t, q, r(:,:,:,1:ntp), um, vm,     &
                              tm, qm, rm(:,:,:,1:ntp),                &
                              udt, vdt, tdt, qdt, rdt,                &
-                             diff_t_vert, diff_m_vert, gust, z_pbl,  &
-                             mask=mask, kbot=kbot             )
+                             diff_t_vert, diff_m_vert, gust, z_pbl)
      call mpp_clock_end ( turb_clock )
      pbltop(is:ie,js:je) = z_pbl(:,:)
      if (print_s_messages) write(6,*) 'Done vert turb driver'
+!      write(6,*) maxval(diff_t_vert), minval(diff_t_vert), maxval(diff_m_vert), minval(diff_m_vert), maxval(z_pbl), minval(z_pbl)
       ! if (id_tdt_phys_turb > 0) then
       !   used = send_data ( id_tdt_phys_turb, +2.0*tdt(:,:,:), &
       !                      Time_next, is, js, 1, rmask=mask )
@@ -1619,27 +1619,27 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
 !
 !    in the code below alpha = dt / tau_diff
 !---------------------------------------------------------------------
-      ! if (diffusion_smooth) then
-      !   call get_time (Time_next - Time, sec, day)
-      !   dt2 = real(sec + day*86400)
-      !   alpha = dt2/tau_diff
-      !   diff_m(is:ie,js:je,:) = (diff_m(is:ie,js:je,:) +       &
-      !                            alpha*(diff_m_vert(:,:,:) +  &
-      !                            diff_cu_mo(is:ie,js:je,:)) )/&
-      !                            (1. + alpha)
-      !   where (diff_m(is:ie,js:je,:) < diff_min)
-      !     diff_m(is:ie,js:je,:) = 0.0
-      !   end where
-      !   diff_t(is:ie,js:je,:) = (diff_t(is:ie,js:je,:) +      &
-      !                            alpha*diff_t_vert(:,:,:) )/  &
-      !                            (1. + alpha)
-      !   where (diff_t(is:ie,js:je,:) < diff_min)
-      !     diff_t(is:ie,js:je,:) = 0.0
-      !   end where
-      ! else
-      !   diff_t(is:ie,js:je,:) = diff_t_vert
-      !   diff_m(is:ie,js:je,:) = diff_m_vert + diff_cu_mo(is:ie, js:je,:)
-      ! end if
+      if (diffusion_smooth) then
+        call get_time (Time_next - Time, sec, day)
+        dt2 = real(sec + day*86400)
+        alpha = dt2/tau_diff
+        diff_m(is:ie,js:je,:) = (diff_m(is:ie,js:je,:) +       &
+                                 alpha*(diff_m_vert(:,:,:) +  &
+                                 diff_cu_mo(is:ie,js:je,:)) )/&
+                                 (1. + alpha)
+        where (diff_m(is:ie,js:je,:) < diff_min)
+          diff_m(is:ie,js:je,:) = 0.0
+        end where
+        diff_t(is:ie,js:je,:) = (diff_t(is:ie,js:je,:) +      &
+                                 alpha*diff_t_vert(:,:,:) )/  &
+                                 (1. + alpha)
+        where (diff_t(is:ie,js:je,:) < diff_min)
+          diff_t(is:ie,js:je,:) = 0.0
+        end where
+      else
+        diff_t(is:ie,js:je,:) = diff_t_vert
+        diff_m(is:ie,js:je,:) = diff_m_vert + diff_cu_mo(is:ie, js:je,:)
+      end if
 
 !-----------------------------------------------------------------------
 !    call vert_diff_driver_down to calculate the first pass atmos-
@@ -1672,6 +1672,9 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
     !                               diff_t_clubb=diff_t_clubb(is:ie,js:je,:),   &   ! cjg
     !                               mask=mask, kbot=kbot           )
     !  else
+      ! write(6,*) 'max in tau_x, tau_y', maxval(tau_x), minval(tau_x), maxval(tau_y), minval(tau_y)
+      ! write(6,*) 'max in dt_tg', maxval(tdt), minval(tdt)
+
         call vert_diff_driver_down (is, js, Time_next, dt, p_half,   &
                                   p_full, z_full,   &
                                   diff_m(is:ie,js:je,:),         &
@@ -1679,10 +1682,10 @@ real,  dimension(:,:,:), intent(out)  ,optional :: diffm, difft
                                   um ,vm ,tm ,qm ,rm(:,:,:,1:ntp), &
                                   dtau_du, dtau_dv, tau_x, tau_y,  &
                                   udt, vdt, tdt, qdt, rdt,       &
-                                  Surf_diff,                     &
-                                !   diff_t_clubb=diff_t_clubb,   &   ! RASF
-                                  mask=mask, kbot=kbot           )
+                                  Surf_diff           )
     !   endif
+      ! write(6,*) 'max out dt_tg', maxval(tdt), minval(tdt)
+      ! write(6,*) 'max out tau_x, tau_y', maxval(tau_x), minval(tau_x), maxval(tau_y), minval(tau_y)
 
       ! if (id_tdt_phys_vdif_dn > 0) then
       !   used = send_data ( id_tdt_phys_vdif_dn, +2.0*tdt(:,:,:), &
@@ -2026,27 +2029,9 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
       !   endif
       ! end do
 
-! ---> h1g, 2012-08-28, save temperature and moisture tendencies due to surface fluxes at lowest-level
-      if( .not. l_host_applies_sfc_fluxes ) then
-          tdt_shf(:,:) = tdt(:, :, kmax)
-          qdt_lhf(:,:) = qdt(:, :, kmax)
-      endif
-! <--- h1g, 2012-08-28
-
       call mpp_clock_begin ( diff_up_clock )
       call vert_diff_driver_up (is, js, Time_next, dt, p_half,   &
-                                Surf_diff, tdt, qdt, rdt, mask=mask,  &
-                                kbot=kbot)
-
-! ---> h1g, 2012-08-28, save temperature and moisture tendencies due to surface fluxes at lowest-level
-      if( .not. l_host_applies_sfc_fluxes ) then
-          tdt_shf(:,:) = tdt(:, :, kmax) - tdt_shf(:,:)
-          qdt_lhf(:,:) = qdt(:, :, kmax) - qdt_lhf(:,:)
-
-          tdt(:, :, kmax) = tdt(:, :, kmax) - tdt_shf(:,:)
-          qdt(:, :, kmax) = qdt(:, :, kmax) - qdt_lhf(:,:)
-      endif
-! <--- h1g, 2012-08-28
+                                Surf_diff, tdt, qdt, rdt)
 
       radturbten(is:ie,js:je,:) = radturbten(is:ie,js:je,:) + tdt(:,:,:)
       call mpp_clock_end ( diff_up_clock )
@@ -2098,8 +2083,7 @@ logical,                intent(in),   optional :: hydrostatic, phys_hydrostatic
                fl_lsrain(is:ie,js:je,:), fl_lssnow(is:ie,js:je,:),  &
                fl_ccrain(is:ie,js:je,:), fl_ccsnow(is:ie,js:je,:),    &
            fl_donmca_rain(is:ie,js:je,:), fl_donmca_snow(is:ie,js:je,:), &
-                           gust_cv, area, lon, lat,   &
-                           mask=mask, kbot=kbot)      
+                           gust_cv, area, lon, lat)      
                            
         if (print_s_messages) write(6,*) 'Done moist processes'                           
         call mpp_clock_end ( moist_processes_clock )
