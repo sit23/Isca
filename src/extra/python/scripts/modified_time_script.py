@@ -1,12 +1,13 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 import pdb
 import sys
 from datetime import datetime
 
 
-def calculate_month_run_time(exp_dir_list, plot_against_wall_time=True, file_to_use_for_timing = 'logfile.000000.out'):
+def calculate_month_run_time(exp_dir_list, plot_against_wall_time=True, file_to_use_for_timing = 'logfile.000000.out', source_dir_list = None, legend_label_list=None):
     """A script that takes a list of experiment names as input, and plots the time taken to run each month in that experiment vs the wall time. """
 
     try:
@@ -18,7 +19,16 @@ def calculate_month_run_time(exp_dir_list, plot_against_wall_time=True, file_to_
 
     for exp_dir in exp_dir_list:
 
-        exp_dir_full = GFDL_DATA+'/'+exp_dir+'/'
+        if source_dir_list is not None:
+            source_dir_present = source_dir_list[exp_dir_list.index(exp_dir)]
+        else:
+            source_dir_present = GFDL_DATA
+
+        if source_dir_present == 'GFDL_DATA':
+            source_dir_present = GFDL_DATA
+        
+        
+        exp_dir_full = source_dir_present+'/'+exp_dir+'/'
 
         #Finds all the months for particular experiment
         months_to_check=os.listdir(exp_dir_full)
@@ -53,12 +63,19 @@ def calculate_month_run_time(exp_dir_list, plot_against_wall_time=True, file_to_
         print(('removing anomalously long delta_t for months ', [month_num_arr[month] for month in months_idx_to_remove], [delta_t_arr[month] for month in months_idx_to_remove]))
         delta_t_arr[np.where(np.abs(delta_t_arr) > 10.*np.mean(delta_t_arr))] = np.nan
 
+        matplotlib.rcParams.update({'font.size': 22})
+
+        if legend_label_list is None:
+            label_to_use = exp_dir
+        else:
+            label_to_use = legend_label_list[exp_dir_list.index(exp_dir)]
+
         #Plots results for particular experiment
         if plot_against_wall_time:
-            plt.plot(end_t_arr,delta_t_arr, label=exp_dir)   
+            plt.plot(end_t_arr,delta_t_arr, label=label_to_use)   
             plt.xlabel('Wall time (GMT)')                 
         else:
-            plt.plot(month_num_arr[:-1], delta_t_arr, label=exp_dir)                
+            plt.plot(month_num_arr[:-1], delta_t_arr, label=label_to_use)                
             plt.xlabel('Month number')
         
     plt.legend()
@@ -66,9 +83,11 @@ def calculate_month_run_time(exp_dir_list, plot_against_wall_time=True, file_to_
 
 if __name__=="__main__":
 
-    exp_dir_list = ['bog_fixed_sst_low_bog_a_ocean_topog_85']
+    exp_dir_list = ['dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_no_deep_velocity', 'dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_50_deep_velocity_wavenumber_6.0', 'dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_50_deep_velocity', 'dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_50_deep_velocity_wavenumber_12.0']
+    source_dir = ['GFDL_DATA', '/scratch/sit204/mounts/gv5/sit204/data_isca/', '/scratch/sit204/mounts/gv5/sit204/data_isca/', '/scratch/sit204/mounts/isca_data']
+    label_list = None
 
-    calculate_month_run_time(exp_dir_list, plot_against_wall_time=False, file_to_use_for_timing='git_hash_used.txt')
+    calculate_month_run_time(exp_dir_list, plot_against_wall_time=False, file_to_use_for_timing='git_hash_used.txt', source_dir_list = source_dir, legend_label_list=label_list)
 
     plt.show()
 
