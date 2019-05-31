@@ -31,9 +31,9 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
-exp = Experiment('dry_giant_planet_3d_60_levels_with_conv_with_diff_mk4_no_deep_velocity', codebase=cb)
+exp = Experiment('dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_no_deep_velocity', codebase=cb)
 
-exp.inputfiles = [os.path.join(base_dir,'input/jupiter_column_with_diff_input_file_4300.nc')]
+exp.inputfiles = [os.path.join(base_dir,'input/jupiter_column_with_diff_input_file_4300_mk2.nc')]
 
 #Tell model how to write diagnostics
 diag = DiagTable()
@@ -50,6 +50,7 @@ diag.add_field('dynamics', 'sphum', time_avg=True)
 diag.add_field('dynamics', 'ucomp', time_avg=True)
 diag.add_field('dynamics', 'vcomp', time_avg=True)
 diag.add_field('dynamics', 'temp', time_avg=True)
+diag.add_field('dynamics', 'omega', time_avg=True)
 diag.add_field('atmosphere', 'rh', time_avg=True)
 #diag.add_field('atmosphere', 'precipitation', time_avg=True)
 diag.add_field('atmosphere', 'dt_qg_convection', time_avg=True)
@@ -95,7 +96,7 @@ exp.namelist = namelist = Namelist({
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,			
-     'dt_atmos':1800,
+     'dt_atmos':1200,
      'current_date' : [1,1,1,0,0,0],
      'calendar' : 'no_calendar'
     },
@@ -251,7 +252,7 @@ exp.namelist = namelist = Namelist({
     # },
 
     'ic_from_external_file_nml': {
-        'file_name':'INPUT/jupiter_column_with_diff_input_file_4300.nc',    
+        'file_name':'INPUT/jupiter_column_with_diff_input_file_4300_mk2.nc',    
     },    
 
     'constants_nml': {

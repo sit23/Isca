@@ -267,7 +267,6 @@ namelist = Namelist({
             'variable_drag': False,
             'zero_eq_drag':False,
             'do_energy_conserv_ray':True,
-            'deep_velocity_magnitude': 50.,
 	},
 
 #Set parameters for dry convection scheme
@@ -291,8 +290,8 @@ namelist = Namelist({
 
 if __name__=="__main__":
 
-    for wavenumber in [12., 36., 48.]:
-        exp = Experiment('dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_50_deep_velocity_wavenumber_'+str(wavenumber), codebase=cb)
+    for amplitude in [25]:
+        exp = Experiment('dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_'+str(amplitude)+'_deep_velocity_wavenumber_24.0', codebase=cb)
 
         exp.inputfiles = [os.path.join(base_dir,'input/jupiter_column_with_diff_input_file_4300_mk2.nc')]
 
@@ -304,10 +303,11 @@ if __name__=="__main__":
 
         exp.update_namelist({
             'rayleigh_bottom_drag_nml': {
-                'deep_velocity_wavenumber':wavenumber,
+                'deep_velocity_wavenumber':24.,
+                'deep_velocity_magnitude':amplitude,
             }
         })
 
-        exp.run(1, multi_node=True, use_restart=False, num_cores=NCORES)
+        exp.run(1, multi_node=False, use_restart=False, num_cores=NCORES)
         for i in range(2,456):
-            exp.run(i, num_cores=NCORES, multi_node=True)
+            exp.run(i, num_cores=NCORES, multi_node=False)
