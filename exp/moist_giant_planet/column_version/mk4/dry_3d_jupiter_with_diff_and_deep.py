@@ -291,7 +291,7 @@ namelist = Namelist({
 
 if __name__=="__main__":
 
-    for wavenumber in [6.,12.]:
+    for wavenumber in [12.,36.]:
         exp = Experiment('dry_giant_planet_3d_60_levels_with_conv_with_diff_mk5_50_deep_velocity_wavenumber_'+str(wavenumber), codebase=cb)
 
         exp.inputfiles = [os.path.join(base_dir,'input/jupiter_column_with_diff_input_file_4300_mk2.nc')]
@@ -308,6 +308,6 @@ if __name__=="__main__":
             }
         })
 
-        exp.run(1, multi_node=False, use_restart=False, num_cores=NCORES)
+        exp.run(1, multi_node=True, use_restart=False, num_cores=NCORES)
         for i in range(2,456):
-            exp.run(i, num_cores=NCORES, multi_node=False)
+            exp.run(i, num_cores=NCORES, multi_node=True)
