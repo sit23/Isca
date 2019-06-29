@@ -1,0 +1,32 @@
+
+"TRACER", "atmos_mod", "sphum"
+          "longname",  "specific humidity"
+          "units",     "kg/kg"
+          "numerical_representation", "grid"
+	  "hole_filling",             "off"
+          "advect_vert",              "finite_volume_parabolic"
+          "robert_filter",            "on"
+          "profile_type", "fixed",   "surface_value=0.0" / 
+# sphum must be present on land as well
+ "TRACER", "land_mod",     "sphum"
+           "longname",     "specific humidity"
+           "units",        "kg/kg" /          
+### MDPPM for T,S
+"prog_tracers","ocean_mod","temp"
+horizontal-advection-scheme = mdppm
+vertical-advection-scheme = mdppm
+restart_file  = ocean_temp_salt.res.nc
+ppm_hlimiter=2
+ppm_vlimiter=2
+const_init_tracer=.true.
+const_init_value=4.0
+/
+"prog_tracers","ocean_mod","salt"
+horizontal-advection-scheme = mdppm
+vertical-advection-scheme = mdppm
+restart_file  = ocean_temp_salt.res.nc
+ppm_hlimiter=2
+ppm_vlimiter=2
+const_init_tracer=.true.
+const_init_value=10.0
+/

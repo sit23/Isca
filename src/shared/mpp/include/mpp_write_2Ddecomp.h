@@ -1,24 +1,3 @@
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!                                                                   !!
-!!                   GNU General Public License                      !!
-!!                                                                   !!
-!! This file is part of the Flexible Modeling System (FMS).          !!
-!!                                                                   !!
-!! FMS is free software; you can redistribute it and/or modify it    !!
-!! under the terms of the GNU General Public License as published by !!
-!! the Free Software Foundation, either version 3 of the License, or !!
-!! (at your option) any later version.                               !!
-!!                                                                   !!
-!! FMS is distributed in the hope that it will be useful,            !!
-!! but WITHOUT ANY WARRANTY; without even the implied warranty of    !!
-!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the      !!
-!! GNU General Public License for more details.                      !!
-!!                                                                   !!
-!! You should have received a copy of the GNU General Public License !!
-!! along with FMS. if not, see: http://www.gnu.org/licenses/gpl.txt  !!
-!!                                                                   !!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
     subroutine MPP_WRITE_2DDECOMP_2D_( unit, field, domain, data, tstamp, tile_count, default_data)
       integer, intent(in) :: unit
       type(fieldtype), intent(in) :: field
@@ -225,7 +204,7 @@
           end if
       else if(mpp_file(unit)%io_domain_exist ) then
           if( halos_are_global )then
-              call mpp_update_domains( data, domain, position = position )
+              if(npes .GT. 1) call mpp_update_domains( data, domain, position = position )
               if(mpp_file(unit)%write_on_this_pe ) then
                  call write_record( unit, field, size(data(:,:,:,:)), data, tstamp)
               endif

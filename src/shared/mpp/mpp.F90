@@ -1,32 +1,29 @@
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!                                                                   !!
-!!                   GNU General Public License                      !!
-!!                                                                   !!
-!! This file is part of the Flexible Modeling System (FMS).          !!
-!!                                                                   !!
-!! FMS is free software; you can redistribute it and/or modify it    !!
-!! under the terms of the GNU General Public License as published by !!
-!! the Free Software Foundation, either version 3 of the License, or !!
-!! (at your option) any later version.                               !!
-!!                                                                   !!
-!! FMS is distributed in the hope that it will be useful,            !!
-!! but WITHOUT ANY WARRANTY; without even the implied warranty of    !!
-!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the      !!
-!! GNU General Public License for more details.                      !!
-!!                                                                   !!
-!! You should have received a copy of the GNU General Public License !!
-!! along with FMS. if not, see: http://www.gnu.org/licenses/gpl.txt  !!
-!!                                                                   !!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-!            Communication for message-passing codes
-
+!-----------------------------------------------------------------------
+!                 Communication for message-passing codes
+!
+! AUTHOR: V. Balaji (V.Balaji@noaa.gov)
+!         SGI/GFDL Princeton University
+!
+! This program is free software; you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation; either version 2 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! For the full text of the GNU General Public License,
+! write to: Free Software Foundation, Inc.,
+!           675 Mass Ave, Cambridge, MA 02139, USA.  
+!-----------------------------------------------------------------------
 module mpp_mod
 !a generalized communication package for use with shmem and MPI
 !will add: co_array_fortran, MPI2
-!Balaji (GFDL.Climate.Model.Info@noaa.gov) 11 May 1998
+!Balaji (V.Balaji@noaa.gov) 11 May 1998
 
-! <CONTACT EMAIL="GFDL.Climate.Model.Info@noaa.gov">
+! <CONTACT EMAIL="V.Balaji@noaa.gov">
 !   V. Balaji
 ! </CONTACT>
 
@@ -168,6 +165,7 @@ module mpp_mod
   use mpp_parameter_mod, only : CLOCK_MODULE, CLOCK_ROUTINE, CLOCK_LOOP, CLOCK_INFRA
   use mpp_parameter_mod, only : MAX_EVENTS, MAX_BINS, MAX_EVENT_TYPES, MAX_CLOCKS
   use mpp_parameter_mod, only : MAXPES, EVENT_WAIT, EVENT_ALLREDUCE, EVENT_BROADCAST
+  use mpp_parameter_mod, only : EVENT_ALLTOALL
   use mpp_parameter_mod, only : EVENT_RECV, EVENT_SEND, MPP_READY, MPP_WAIT
   use mpp_parameter_mod, only : mpp_parameter_version=>version, mpp_parameter_tagname=>tagname
   use mpp_parameter_mod, only : DEFAULT_TAG
@@ -176,6 +174,7 @@ module mpp_mod
   use mpp_parameter_mod, only : COMM_TAG_9,  COMM_TAG_10, COMM_TAG_11, COMM_TAG_12
   use mpp_parameter_mod, only : COMM_TAG_13, COMM_TAG_14, COMM_TAG_15, COMM_TAG_16
   use mpp_parameter_mod, only : COMM_TAG_17, COMM_TAG_18, COMM_TAG_19, COMM_TAG_20
+  use mpp_parameter_mod, only : MPP_FILL_INT,MPP_FILL_DOUBLE
   use mpp_data_mod,      only : stat, mpp_stack, ptr_stack, status, ptr_status, sync, ptr_sync  
   use mpp_data_mod,      only : mpp_from_pe, ptr_from, remote_data_loc, ptr_remote
   use mpp_data_mod,      only : mpp_data_version=>version, mpp_data_tagname=>tagname
@@ -202,7 +201,7 @@ private
   public :: COMM_TAG_9,  COMM_TAG_10, COMM_TAG_11, COMM_TAG_12
   public :: COMM_TAG_13, COMM_TAG_14, COMM_TAG_15, COMM_TAG_16
   public :: COMM_TAG_17, COMM_TAG_18, COMM_TAG_19, COMM_TAG_20
-
+  public :: MPP_FILL_INT,MPP_FILL_DOUBLE
 
   !--- public data from mpp_data_mod ------------------------------
 !  public :: request
@@ -214,11 +213,13 @@ private
   public :: mpp_get_current_pelist, mpp_set_current_pelist, mpp_get_current_pelist_name
   public :: mpp_clock_id, mpp_clock_set_grain, mpp_record_timing_data, get_unit
   public :: read_ascii_file, read_input_nml, mpp_clock_begin, mpp_clock_end
+  public :: get_ascii_file_num_lines
+  public :: mpp_record_time_start, mpp_record_time_end
 
   !--- public interface from mpp_comm.h ------------------------------
   public :: mpp_chksum, mpp_max, mpp_min, mpp_sum, mpp_transmit, mpp_send, mpp_recv
   public :: mpp_broadcast, mpp_malloc, mpp_init, mpp_exit
-  public :: mpp_gather
+  public :: mpp_gather, mpp_scatter, mpp_alltoall
 #ifdef use_MPI_GSM
   public :: mpp_gsm_malloc, mpp_gsm_free
 #endif
@@ -664,6 +665,45 @@ private
      module procedure mpp_gather_int4_1dv
      module procedure mpp_gather_real4_1dv
      module procedure mpp_gather_real8_1dv
+     module procedure mpp_gather_pelist_int4_2d
+     module procedure mpp_gather_pelist_int4_3d
+     module procedure mpp_gather_pelist_real4_2d
+     module procedure mpp_gather_pelist_real4_3d
+     module procedure mpp_gather_pelist_real8_2d
+     module procedure mpp_gather_pelist_real8_3d
+  end interface
+
+  !#####################################################################
+  ! <INTERFACE NAME="mpp_scatter">
+  !  <OVERVIEW>
+  !    gather information onto root pe.
+  !  </OVERVIEW>
+  ! </INTERFACE>
+  interface mpp_scatter
+     module procedure mpp_scatter_pelist_int4_2d
+     module procedure mpp_scatter_pelist_int4_3d
+     module procedure mpp_scatter_pelist_real4_2d
+     module procedure mpp_scatter_pelist_real4_3d
+     module procedure mpp_scatter_pelist_real8_2d
+     module procedure mpp_scatter_pelist_real8_3d
+  end interface
+
+  !#####################################################################
+  ! <interface name="mpp_alltoall">
+  !   <overview>
+  !     scatter a vector across all PEs
+  !     (e.g. transpose the vector and PE index)
+  !   </overview>
+  ! </interface>
+  interface mpp_alltoall
+     module procedure mpp_alltoall_int4
+     module procedure mpp_alltoall_int8
+     module procedure mpp_alltoall_real4
+     module procedure mpp_alltoall_real8
+     module procedure mpp_alltoall_int4_v
+     module procedure mpp_alltoall_int8_v
+     module procedure mpp_alltoall_real4_v
+     module procedure mpp_alltoall_real8_v
   end interface
 
 
@@ -1062,11 +1102,24 @@ private
      module procedure mpp_chksum_i8_2d
      module procedure mpp_chksum_i8_3d
      module procedure mpp_chksum_i8_4d
+     module procedure mpp_chksum_i8_5d
+     module procedure mpp_chksum_i8_1d_rmask
+     module procedure mpp_chksum_i8_2d_rmask
+     module procedure mpp_chksum_i8_3d_rmask
+     module procedure mpp_chksum_i8_4d_rmask
+     module procedure mpp_chksum_i8_5d_rmask
+
 #endif
      module procedure mpp_chksum_i4_1d
      module procedure mpp_chksum_i4_2d
      module procedure mpp_chksum_i4_3d
      module procedure mpp_chksum_i4_4d
+     module procedure mpp_chksum_i4_5d
+     module procedure mpp_chksum_i4_1d_rmask
+     module procedure mpp_chksum_i4_2d_rmask
+     module procedure mpp_chksum_i4_3d_rmask
+     module procedure mpp_chksum_i4_4d_rmask
+     module procedure mpp_chksum_i4_5d_rmask
      module procedure mpp_chksum_r8_0d
      module procedure mpp_chksum_r8_1d
      module procedure mpp_chksum_r8_2d
@@ -1185,19 +1238,21 @@ private
   integer, parameter :: INPUT_STR_LENGTH = 256
 ! public variable needed for reading input.nml from an internal file
   character(len=INPUT_STR_LENGTH), dimension(:), allocatable, public :: input_nml_file
+  logical :: read_ascii_file_on = .FALSE.
 !***********************************************************************
 
   character(len=128), public :: version= &
        '$Id mpp.F90 $'
   character(len=128), public :: tagname= &
-       '$Name: siena_201211 $'
+       '$Name$'
 
   integer, parameter :: MAX_REQUEST_MIN  = 10000
   integer            :: request_multiply = 20
 
   logical :: etc_unit_is_stderr = .false.
   integer :: max_request = 0
-  namelist /mpp_nml/ etc_unit_is_stderr, request_multiply
+  logical :: sync_all_clocks = .false.
+  namelist /mpp_nml/ etc_unit_is_stderr, request_multiply, mpp_record_timing_data, sync_all_clocks
 
   contains
 #include <system_clock.h>

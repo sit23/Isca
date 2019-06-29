@@ -1,26 +1,5 @@
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!                                                                   !!
-!!                   GNU General Public License                      !!
-!!                                                                   !!
-!! This file is part of the Flexible Modeling System (FMS).          !!
-!!                                                                   !!
-!! FMS is free software; you can redistribute it and/or modify it    !!
-!! under the terms of the GNU General Public License as published by !!
-!! the Free Software Foundation, either version 3 of the License, or !!
-!! (at your option) any later version.                               !!
-!!                                                                   !!
-!! FMS is distributed in the hope that it will be useful,            !!
-!! but WITHOUT ANY WARRANTY; without even the implied warranty of    !!
-!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the      !!
-!! GNU General Public License for more details.                      !!
-!!                                                                   !!
-!! You should have received a copy of the GNU General Public License !!
-!! along with FMS. if not, see: http://www.gnu.org/licenses/gpl.txt  !!
-!!                                                                   !!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
 ! -*-f90-*-
-! $Id: mpp_util_mpi.inc,v 19.0.2.1.2.1 2012/05/24 20:01:32 Zhi.Liang Exp $
+! $Id$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                             !
@@ -30,10 +9,14 @@
 
 subroutine mpp_error_basic( errortype, errormsg )
   !a very basic error handler
+#ifdef __INTEL_COMPILER
+  ! Needs special traceback module for intel compile RASF
+   use ifcore
+#endif
   !uses ABORT and FLUSH calls, may need to use cpp to rename
   integer,                    intent(in) :: errortype
   character(len=*), intent(in), optional :: errormsg
-  character(len=256)                     :: text
+  character(len=512)                     :: text
   logical                                :: opened
   integer                                :: istat, out_unit, errunit
 
@@ -50,7 +33,7 @@ subroutine mpp_error_basic( errortype, errormsg )
      text = 'WARNING: non-existent errortype (must be NOTE|WARNING|FATAL)'
   end select
 
-  if( npes.GT.1 )write( text,'(a,i5)' )trim(text)//' from PE', pe   !this is the mpp part
+  if( npes.GT.1 )write( text,'(a,i6)' )trim(text)//' from PE', pe   !this is the mpp part
   if( PRESENT(errormsg) )text = trim(text)//': '//trim(errormsg)
 
   out_unit = stdout()
@@ -69,6 +52,10 @@ subroutine mpp_error_basic( errortype, errormsg )
         call FLUSH(out_unit)
 #ifdef sgi_mipspro
         call TRACE_BACK_STACK_AND_PRINT()
+#endif
+#ifdef __INTEL_COMPILER
+  ! Get traceback and return quietly for correct abort
+        call TRACEBACKQQ(user_exit_code=-1)
 #endif
         call MPI_ABORT( MPI_COMM_WORLD, 1, error )
      end if
@@ -161,11 +148,11 @@ subroutine mpp_sync( pelist, do_self )
   integer                       :: n
 
   dself=.true.; if(PRESENT(do_self))dself=do_self
-  if(dself)call mpp_sync_self(pelist)
+!  if(dself)call mpp_sync_self(pelist)
 
   n = get_peset(pelist); if( peset(n)%count.EQ.1 )return
 
-  if( current_clock.NE.0 )call SYSTEM_CLOCK(start_tick)
+  if( debug .and. (current_clock.NE.0) )call SYSTEM_CLOCK(start_tick)
 #ifdef use_MPI_SMA
   if( n.EQ.world_peset_num )then
      call SHMEM_BARRIER_ALL() !special call is faster
@@ -176,7 +163,7 @@ subroutine mpp_sync( pelist, do_self )
   call MPI_BARRIER( peset(n)%id, error )
 #endif
 
-  if( current_clock.NE.0 )call increment_current_clock(EVENT_WAIT)
+  if( debug .and. (current_clock.NE.0) )call increment_current_clock(EVENT_WAIT)
 
   return
 end subroutine mpp_sync
@@ -194,7 +181,7 @@ subroutine mpp_sync_self( pelist, check, request, msg_size, msg_type)
 
   integer                       :: i, m, n, stride, my_check, rsize
 
-  if( current_clock.NE.0 )call SYSTEM_CLOCK(start_tick)
+  if( debug .and. (current_clock.NE.0) )call SYSTEM_CLOCK(start_tick)
   my_check = EVENT_SEND
   if(present(check)) my_check = check
   if( my_check .NE. EVENT_SEND .AND. my_check .NE. EVENT_RECV ) then
@@ -220,6 +207,7 @@ subroutine mpp_sync_self( pelist, check, request, msg_size, msg_type)
         endif
 
         do m = 1, size(request(:))
+           if( request(m) == MPI_REQUEST_NULL ) cycle
            call MPI_WAIT(request(m), stat, error )
            call MPI_GET_COUNT(stat, msg_type(m), rsize, error)
            if(msg_size(m) .NE. rsize) then
@@ -250,7 +238,7 @@ subroutine mpp_sync_self( pelist, check, request, msg_size, msg_type)
         cur_recv_request = 0
      end select 
   endif
-  if( current_clock.NE.0 )call increment_current_clock(EVENT_WAIT)
+  if( debug .and. (current_clock.NE.0) )call increment_current_clock(EVENT_WAIT)
   return
 end subroutine mpp_sync_self
 

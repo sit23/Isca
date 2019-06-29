@@ -12,6 +12,8 @@ ppdir=./                 # path to directory containing the tool for combining d
 # 2. Load the necessary tools into the environment
 source $GFDL_BASE/src/extra/env/$GFDL_ENV
 netcdf_flags=`nc-config --cflags --libs`
+netcdf_flags+=' -lnetcdf'
+echo ${netcdf_flags}
 #--------------------------------------------------------------------------------------------------------
 # compile combine tool
 #cd $ppdir

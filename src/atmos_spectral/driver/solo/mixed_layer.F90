@@ -43,11 +43,9 @@ use   diag_manager_mod, only: register_diag_field, register_static_field, send_d
 
 use   time_manager_mod, only: time_type
 
-use     transforms_mod, only: get_deg_lat, get_deg_lon, grid_domain
-
 use      vert_diff_mod, only: surf_diff_type
 
-use         mpp_domains_mod, only: mpp_get_global_domain !s added to enable qflux reading
+use         mpp_domains_mod, only: mpp_get_global_domain, domain2D !s added to enable qflux reading
 
 ! mj know about surface topography
 use spectral_dynamics_mod,only: get_surf_geopotential
@@ -81,7 +79,6 @@ logical :: load_qflux = .false.
 logical :: time_varying_qflux = .false.
 real    :: tconst = 305.0
 real    :: delta_T = 40.0
-logical :: prescribe_initial_dist = .false.
 real    :: albedo_value    = 0.06
 
 !s Surface heat capacity options
@@ -126,7 +123,7 @@ character(len=256) :: flux_lhe_anom_file_name  = 'INPUT/flux_lhe_anom.nc'
 character(len=256) :: flux_lhe_anom_field_name = 'flux_lhe_anom'
 
 namelist/mixed_layer_nml/ evaporation, depth, qflux_amp, qflux_width, tconst,&
-                              delta_T, prescribe_initial_dist,albedo_value,  &
+                              delta_T,albedo_value,  &
                               land_depth,trop_depth,                         &  !mj
                               trop_cap_limit, heat_cap_limit, np_cap_factor, &  !mj
 			                        do_qflux,do_warmpool,        &  !mj
@@ -206,27 +203,26 @@ real inv_cp_air
 contains
 !=================================================================================================================================
 
-subroutine mixed_layer_init(is, ie, js, je, num_levels, t_surf, bucket_depth, axes, Time, albedo, rad_lonb_2d,rad_latb_2d, land, restart_file_bucket_depth)
+subroutine mixed_layer_init(is, ie, js, je, num_levels, t_surf, bucket_depth, axes, Time, albedo, rad_lon, rad_lat, rad_lonb_2d,rad_latb_2d, land, restart_file_bucket_depth, grid_domain_in)
 
 type(time_type), intent(in)       :: Time
 real, intent(out), dimension(:,:) :: t_surf, albedo
 real, intent(out), dimension(:,:,:) :: bucket_depth
 integer, intent(in), dimension(4) :: axes
-real, intent(in), dimension(:,:) :: rad_lonb_2d, rad_latb_2d
+real, intent(in), dimension(:,:) :: rad_lon, rad_lat, rad_lonb_2d, rad_latb_2d
 integer, intent(in) :: is, ie, js, je, num_levels
+type(domain2D), intent(in) :: grid_domain_in
 
 logical, intent(in), dimension(:,:) :: land
 logical, intent(in)                 :: restart_file_bucket_depth
 
-
-integer :: j
 real    :: rad_qwidth
 integer:: ierr, io, unit, num_tr, n, global_num_lon, global_num_lat
 character(32) :: tr_name
 
 ! mj shallower ocean in tropics, land-sea contrast
  real :: trop_capacity,land_capacity,lon,lat,loc_cap
- integer :: i,k
+ integer :: i,j,k
 integer, dimension(4) :: siz
 character(len=12) :: ctmp1='     by     ', ctmp2='     by     '
 
@@ -288,12 +284,13 @@ allocate(land_mask                 (is:ie, js:je)); land_mask=land
 ! latitude will be needed for oceanic q flux
 !s Moved up slightly so that rad_lat_2d can be used in initial temperature distribution if necessary.
 
-call get_deg_lat(deg_lat)
 do j=js,je
-  rad_lat_2d(:,j) = deg_lat(j)*PI/180.
+deg_lat(j) = rad_lat(is,j)*180./PI
 enddo
-!mj get lon for land_sea_heat_capacity
-call get_deg_lon(deg_lon)
+
+do i=is,ie
+deg_lon(i) = rad_lon(i,js)*180./PI
+enddo
 
 !s Adding MiMA options
    if(do_sc_sst) do_read_sst = .true.
@@ -314,10 +311,10 @@ call get_deg_lon(deg_lon)
 if (file_exist('INPUT/mixed_layer.res.nc')) then
 
    call nullify_domain()
-   call read_data(trim('INPUT/mixed_layer.res'), 't_surf',   t_surf, grid_domain)
+   call read_data(trim('INPUT/mixed_layer.res'), 't_surf',   t_surf, grid_domain_in)
    
    if (restart_file_bucket_depth) then
-       call read_data(trim('INPUT/mixed_layer.res'), 'bucket_depth', bucket_depth, grid_domain)
+       call read_data(trim('INPUT/mixed_layer.res'), 'bucket_depth', bucket_depth, grid_domain_in)
    endif
 
 else if (file_exist('INPUT/swamp.res')) then
@@ -331,14 +328,10 @@ else if( do_read_sst ) then !s Added so that if we are reading sst values then w
 
    call interpolator( sst_interp, Time, t_surf, trim(sst_file) )
 
-elseif (prescribe_initial_dist) then
+else 
 !  call error_mesg('mixed_layer','mixed_layer restart file not found - initializing from prescribed distribution', WARNING)
 
     t_surf(:,:) = tconst - delta_T*((3.*sin(rad_lat_2d)**2.)-1.)/3.
-
-else
-
-  call error_mesg('mixed_layer','mixed_layer restart file not found - initializing from lowest model level temp', WARNING)
 
 endif
 
@@ -374,10 +367,10 @@ if (load_qflux) then
 	else
 
 	   if(file_exist(trim('INPUT/'//qflux_file_name//'.nc'))) then
-	     call mpp_get_global_domain(grid_domain, xsize=global_num_lon, ysize=global_num_lat)
+	     call mpp_get_global_domain(grid_domain_in, xsize=global_num_lon, ysize=global_num_lat)
 	     call field_size(trim('INPUT/'//qflux_file_name//'.nc'), trim(qflux_field_name), siz)
 	     if ( siz(1) == global_num_lon .or. siz(2) == global_num_lat ) then
-	       call read_data(trim('INPUT/'//qflux_file_name//'.nc'), trim(qflux_field_name), ocean_qflux, grid_domain)
+	       call read_data(trim('INPUT/'//qflux_file_name//'.nc'), trim(qflux_field_name), ocean_qflux, grid_domain_in)
 	     else
 	       write(ctmp1(1: 4),'(i4)') siz(1)
 	       write(ctmp1(9:12),'(i4)') siz(2)
@@ -657,6 +650,8 @@ if(do_sc_sst) then !mj sst read from input file
 	     
 end if
 
+! write(6,*) maxval(land_sea_heat_capacity), minval(land_sea_heat_capacity), dt
+
 if ((.not.do_sc_sst).or.(do_sc_sst.and.specify_sst_over_ocean_only)) then
   !s use the land_sea_heat_capacity calculated in mixed_layer_init
 
@@ -732,20 +727,21 @@ if ( id_ice_conc > 0 ) used = send_data ( id_ice_conc, ice_concentration, Time )
 end subroutine read_ice_conc
 !=================================================================================================================================
 
-subroutine mixed_layer_end(t_surf, bucket_depth, restart_file_bucket_depth)
+subroutine mixed_layer_end(t_surf, bucket_depth, restart_file_bucket_depth, grid_domain_in)
 
 real, intent(inout), dimension(:,:) :: t_surf
 real, intent(inout), dimension(:,:,:) :: bucket_depth
 logical, intent(in)                 :: restart_file_bucket_depth
+type(domain2D), intent(in)          :: grid_domain_in
 integer:: unit
 
 if(.not.module_is_initialized) return
 
 ! write a restart file for the surface temperature
 call nullify_domain()
-call write_data(trim('RESTART/mixed_layer.res'), 't_surf',   t_surf, grid_domain)
+call write_data(trim('RESTART/mixed_layer.res'), 't_surf',   t_surf, grid_domain_in)
 if (restart_file_bucket_depth) then
-    call write_data(trim('RESTART/mixed_layer.res'), 'bucket_depth',   bucket_depth, grid_domain)
+    call write_data(trim('RESTART/mixed_layer.res'), 'bucket_depth',   bucket_depth, grid_domain_in)
 endif
 
 module_is_initialized = .false.

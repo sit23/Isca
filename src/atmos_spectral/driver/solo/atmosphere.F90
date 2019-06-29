@@ -114,7 +114,7 @@ subroutine atmosphere_init(Time_init, Time, Time_step_in)
 type (time_type), intent(in)  :: Time_init, Time, Time_step_in
 
 integer :: seconds, days, lon_max, lat_max, ntr, nt, i, j, nml_unit, io, stdlog_unit
-integer, dimension(4) :: siz
+integer, dimension(4) :: siz, axes_send
 real, dimension(2) :: time_pointers
 character(len=64) :: file, tr_name
 character(len=256) :: message
@@ -246,8 +246,10 @@ do j = js,je+1
   rad_latb_2d(:,j) = rad_latb(j)
 enddo
 
+axes_send = get_axis_id()
+
 if(idealized_moist_model) then
-   call idealized_moist_phys_init(Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, tg(:,:,num_levels,current))
+   call idealized_moist_phys_init(is, ie, js, je, num_levels, axes_send, surf_geopotential, Time, Time_step, nhum, rad_lon_2d, rad_lat_2d, rad_lonb_2d, rad_latb_2d, grid_domain)
 else
    call hs_forcing_init(get_axis_id(), Time, rad_lonb_2d, rad_latb_2d, rad_lat_2d)
 endif
@@ -355,7 +357,7 @@ deallocate (deg_lon, rad_lon_2d, deg_lat, rad_lat_2d)
 
 call set_domain(grid_domain)
 if(idealized_moist_model) then
-    call idealized_moist_phys_end
+    call idealized_moist_phys_end(grid_domain)
 else
     call hs_forcing_end
 endif

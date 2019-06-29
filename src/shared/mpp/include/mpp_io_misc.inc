@@ -1,26 +1,6 @@
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!                                                                   !!
-!!                   GNU General Public License                      !!
-!!                                                                   !!
-!! This file is part of the Flexible Modeling System (FMS).          !!
-!!                                                                   !!
-!! FMS is free software; you can redistribute it and/or modify it    !!
-!! under the terms of the GNU General Public License as published by !!
-!! the Free Software Foundation, either version 3 of the License, or !!
-!! (at your option) any later version.                               !!
-!!                                                                   !!
-!! FMS is distributed in the hope that it will be useful,            !!
-!! but WITHOUT ANY WARRANTY; without even the implied warranty of    !!
-!! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the      !!
-!! GNU General Public License for more details.                      !!
-!!                                                                   !!
-!! You should have received a copy of the GNU General Public License !!
-!! along with FMS. if not, see: http://www.gnu.org/licenses/gpl.txt  !!
-!!                                                                   !!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 ! -*-f90-*-
-! $Id: mpp_io_misc.inc,v 19.0 2012/01/06 22:03:22 fms Exp $
+! $Id$
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                      !
@@ -86,6 +66,12 @@
       read(unit_nml,mpp_io_nml,iostat=io_status)
       close(unit_nml)
 #endif
+
+      if (io_status > 0) then
+         call mpp_error(FATAL,'=>mpp_io_init: Error reading input.nml')
+      endif
+
+
       outunit = stdout(); logunit=stdlog()
       write(outunit, mpp_io_nml)
       write(logunit, mpp_io_nml)
@@ -110,11 +96,12 @@
       default_field%type = -1
       default_field%natt = -1
       default_field%ndim = -1
+      default_field%checksum = 0
 !largest possible 4-byte reals
       default_field%min = -huge(1._4)
       default_field%max =  huge(1._4)
-      default_field%missing = -1e36
-      default_field%fill = -1e36
+      default_field%missing = MPP_FILL_DOUBLE ! now using netcdf:NF_FILL_DOUBLE instead of -1e36
+      default_field%fill = MPP_FILL_DOUBLE ! now using netcdf:NF_FILL_DOUBLE instead of -1e36
       default_field%scale = 1.0
       default_field%add = 0.0
       default_field%pack = 1
@@ -124,6 +111,7 @@
       default_axis%units = 'nounits'
       default_axis%longname = 'noname'
       default_axis%cartesian = 'none'
+      default_axis%compressed = 'unspecified'
       default_axis%calendar = 'unspecified'
       default_axis%sense = 0
       default_axis%len = -1

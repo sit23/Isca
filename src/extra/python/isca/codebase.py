@@ -266,6 +266,13 @@ class IscaCodeBase(CodeBase):
     name = 'isca'
     executable_name = 'isca.x'
 
+class IscaMOMCodeBase(CodeBase):
+    """The Full coupled Isca Stack.
+    This includes moist dynamics and MOM ocean model.
+    """
+    name = 'iscaMOM'
+    executable_name = 'isca_MOM.x'
+
 class GreyCodeBase(CodeBase):
     """The Frierson model.
     This is the closest to the Frierson model, with moist dynamics and a
@@ -300,8 +307,6 @@ class DryCodeBase(GreyCodeBase):
     #path_names_file = P(_module_directory, 'templates', 'dry_path_names')
     name = 'dry'
     executable_name = 'held_suarez.x'
-
-
 
 class ShallowCodeBase(CodeBase):
     """The Shallow Water Equations.
