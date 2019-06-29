@@ -6,7 +6,7 @@ from isca import ShallowCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
 
 import pdb
 
-NCORES = 32
+NCORES = 2
 base_dir = os.path.dirname(os.path.realpath(__file__))
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
@@ -28,8 +28,8 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 #Tell model how to write diagnostics
 diag = DiagTable()
-diag.add_file('atmos_monthly', 30, 'days', time_units='days')
-# diag.add_file('atmos_daily', 1, 'days', time_units='days')
+# diag.add_file('atmos_monthly', 30, 'days', time_units='days')
+# diag.add_file('atmos_da/ily', 1, 'days', time_units='days')
 
 #Tell model which diagnostics to write
 diag.add_field('shallow_diagnostics', 'ucomp', time_avg=True)
@@ -41,8 +41,8 @@ diag.add_field('shallow_diagnostics', 'pv', time_avg=True)
 diag.add_field('shallow_diagnostics', 'pv_corrected', time_avg=True)
 diag.add_field('shallow_diagnostics', 'stream', time_avg=True)
 diag.add_field('shallow_diagnostics', 'deep_geopot', time_avg=True)
-# diag.add_field('shallow_diagnostics', 'trs', time_avg=True)
-# diag.add_field('shallow_diagnostics', 'tr', time_avg=True)
+diag.add_field('shallow_diagnostics', 'trs', time_avg=True)
+diag.add_field('shallow_diagnostics', 'tr', time_avg=True)
 diag.add_field('stirring_mod', 'stirring', time_avg=True)
 # diag.add_field('stirring_mod', 'stirring_amp', time_avg=True)
 diag.add_field('stirring_mod', 'stirring_sqr', time_avg=True)
@@ -61,7 +61,7 @@ diag.add_field('shallow_diagnostics', 'u_rms', time_avg=True)
 #Define values for the 'core' namelist
 namelist = Namelist({
     'main_nml':{
-     'days'   : 30,
+     'days'   : 3,
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,
@@ -84,10 +84,10 @@ namelist = Namelist({
     },
 
  'shallow_dynamics_nml':{
-   'num_lon'             : 1024,
-   'num_lat'             : 512,
-   'num_fourier'         : 341,
-   'num_spherical'       : 342,
+   'num_lon'             : 128,
+   'num_lat'             : 64,
+   'num_fourier'         : 42,
+   'num_spherical'       : 43,
    'fourier_inc'         : 1,
    'damping_option'      : 'resolution_dependent',
    'damping_order'       : 4,
@@ -116,9 +116,9 @@ namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
 
-    for forcing_amplitude in [7.5, 5., 10.]:
+    for forcing_amplitude in [7.5]:
 
-        for damping_time in [ 10000., 1000., 100000.]:
+        for damping_time in [ 10000.]:
             u_deep_mag_val = 50.
 
             if u_deep_mag_val!=0.:
@@ -129,7 +129,7 @@ if __name__=="__main__":
             for u_deep_merid in u_deep_merid_arr:
 
                 ld_value = 0.025
-                exp = Experiment('high_res_small_forcing_giant_planet_fixed_deep_ics_forced_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid))+'_strong_forcing_'+str(forcing_amplitude), codebase=cb)
+                exp = Experiment('mac_testing_high_res_small_forcing_giant_planet_fixed_deep_ics_forced_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid))+'_strong_forcing_'+str(forcing_amplitude), codebase=cb)
 
                 exp.diag_table = diag 
                 exp.namelist = namelist 
@@ -171,5 +171,5 @@ if __name__=="__main__":
                 })
 
                 exp.run(1, use_restart=False, num_cores=NCORES, multi_node=True)
-                for i in range(2,721):
-                    exp.run(i, num_cores=NCORES, multi_node=True)
+                # for i in range(2,721):
+                #     exp.run(i, num_cores=NCORES, multi_node=True)
