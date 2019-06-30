@@ -210,11 +210,21 @@ else
   future = previous
 endif
 
-call shallow_physics(Time,                                 &
-                     Dyn%Tend%u, Dyn%Tend%v, Dyn%Tend%h,   &
-                     Dyn%Grid%u, Dyn%Grid%v, Dyn%Grid%h,   &
-                     delta_t, previous, current,           &
-                     Phys)
+if (Dyn%grid_tracer) then
+  call shallow_physics(Time,                                &
+                      Dyn%Tend%u, Dyn%Tend%v, Dyn%Tend%h,   &
+                      Dyn%Grid%u, Dyn%Grid%v, Dyn%Grid%h,   &
+                      delta_t, previous, current,           &
+                      Phys,                                 &
+                      Dyn%Grid%tr, Dyn%Grid%evap,           &
+                      Dyn%Grid%precip, Dyn%Grid%rh, Dyn%Tend%tr)
+else
+  call shallow_physics(Time,                                &
+                      Dyn%Tend%u, Dyn%Tend%v, Dyn%Tend%h,   &
+                      Dyn%Grid%u, Dyn%Grid%v, Dyn%Grid%h,   &
+                      delta_t, previous, current,           &
+                      Phys)
+endif
 
 call shallow_dynamics(Time, Time_init, &
                       Dyn, previous, current, future, delta_t) 

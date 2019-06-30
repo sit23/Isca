@@ -77,7 +77,7 @@ character(len=128) :: tagname = '$Name: siena_201207 $'
 
 type grid_type
    real, pointer, dimension(:,:,:) :: u=>NULL(), v=>NULL(), vor=>NULL(), div=>NULL(), h=>NULL(), trs=>NULL(), tr=>NULL()
-   real, pointer, dimension(:,:)   :: stream=>NULL(), pv=>NULL(), deep_geopot=>NULL()
+   real, pointer, dimension(:,:)   :: stream=>NULL(), pv=>NULL(), deep_geopot=>NULL(), evap=>NULL(), precip=>NULL(), rh=>NULL()
 end type
 type spectral_type
    complex, pointer, dimension(:,:,:) :: vor=>NULL(), div=>NULL(), h=>NULL(), trs=>NULL()
@@ -249,6 +249,9 @@ call fv_advection_init(num_lon, num_lat, glat_bnd, 360./float(fourier_inc))
 if(Dyn%grid_tracer) then
   allocate(Dyn%Grid%tr (is:ie, js:je, num_time_levels))
   allocate(Dyn%Tend%tr (is:ie, js:je))
+  allocate(Dyn%Grid%evap (is:ie, js:je))
+  allocate(Dyn%Grid%precip (is:ie, js:je))  
+  allocate(Dyn%Grid%rh (is:ie, js:je))  
 endif
 
 if(Dyn%spec_tracer) then
@@ -282,10 +285,16 @@ if(Time == Time_init) then
   
   if(Dyn%grid_tracer) then
     Dyn%Grid%tr = 0.0
-    do j = js, je
-      if(deg_lat(j) > 10.0 .and. deg_lat(j) < 20.0) Dyn%Grid%tr(:,j,1) =  1.0
-      if(deg_lat(j) > 70.0 )                        Dyn%Grid%tr(:,j,1) = -1.0
-    end do
+    Dyn%Grid%evap = 0.0
+    Dyn%Grid%precip = 0.0    
+    ! do j = js, je
+    !   do i = is, ie
+      ! if(deg_lat(j) > 10.0 .and. deg_lat(j) < 20.0) Dyn%Grid%tr(:,j,1) =  1.0
+      ! if(deg_lat(j) > 70.0 )                        Dyn%Grid%tr(:,j,1) = -1.0
+    !   enddo
+    ! end do
+    call random_number(Dyn%Grid%tr(:,:,1))
+    Dyn%Grid%tr(:,:,1) = (Dyn%Grid%tr(:,:,1)/maxval(Dyn%Grid%tr(:,:,1)))*1.e-5
   endif
   
   if(Dyn%spec_tracer) then
