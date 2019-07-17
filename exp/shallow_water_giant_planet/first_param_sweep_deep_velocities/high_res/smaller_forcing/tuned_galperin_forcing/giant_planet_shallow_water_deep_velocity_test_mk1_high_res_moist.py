@@ -112,7 +112,7 @@ namelist = Namelist({
    'sat_constant'    : 1.0e-5,
    'precip_constant' : 1.0e-7,
    'evap_prefactor'  : 1.0e-7,
-   'latent_heat_prefactor' : 0.0,
+   'latent_heat_prefactor' : 1.0,
    },
 
  'stirring_nml': {
@@ -138,7 +138,7 @@ if __name__=="__main__":
             for u_deep_merid in u_deep_merid_arr:
 
                 ld_value = 0.025
-                exp = Experiment('mac_testing_mk16_high_res_small_forcing_giant_planet_fixed_deep_ics_forced_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid))+'_strong_forcing_'+str(forcing_amplitude), codebase=cb)
+                exp = Experiment('mac_testing_mk18_high_res_small_forcing_giant_planet_fixed_deep_ics_forced_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid))+'_strong_forcing_'+str(forcing_amplitude), codebase=cb)
 
                 exp.diag_table = diag 
                 exp.namelist = namelist 

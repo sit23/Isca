@@ -220,7 +220,7 @@ dt_hg = dt_hg - kappa_t*(hg(:,:,previous) - h_eq)
 ! evap = constant * mod(velocity) * (q_atmosphere - q_saturated)
 
 if (present(tr_local)) then
-  tr_sat       = sat_constant * exp(1./hg(:,:,previous) - 1./h_eq) !Approximation to Cl-Cl
+  tr_sat       = sat_constant * exp(h_0/hg(:,:,previous) - h_0/h_eq) !Approximation to Cl-Cl
   evap_local   = max(evap_prefactor * sqrt(ug(:,:,previous)**2. + vg(:,:,previous)**2.) * (tr_sat-tr_local(:,:,previous)), 0.) !Approx to bulk aero
   rh_local     = tr_local(:,:,previous)/tr_sat 
   super_sat    = max(rh_local - 1.0, 0.0) !Finding supersaturation using rh
