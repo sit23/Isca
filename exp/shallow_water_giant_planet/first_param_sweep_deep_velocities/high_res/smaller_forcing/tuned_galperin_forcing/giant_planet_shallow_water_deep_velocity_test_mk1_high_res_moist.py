@@ -6,7 +6,7 @@ from isca import ShallowCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
 
 import pdb
 
-NCORES = 2
+NCORES = 16
 base_dir = os.path.dirname(os.path.realpath(__file__))
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
@@ -28,8 +28,8 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 
 #Tell model how to write diagnostics
 diag = DiagTable()
-# diag.add_file('atmos_monthly', 30, 'days', time_units='days')
-diag.add_file('atmos_daily', 1, 'days', time_units='days')
+diag.add_file('atmos_monthly', 30, 'days', time_units='days')
+# diag.add_file('atmos_daily', 1, 'days', time_units='days')
 
 #Tell model which diagnostics to write
 diag.add_field('shallow_diagnostics', 'ucomp', time_avg=True)
@@ -111,8 +111,8 @@ namelist = Namelist({
    'h_amp'           :  0.,
    'h_itcz'          :  0.,
    'sat_constant'    : 1.0e-5,
-   'precip_timescale' : 1.0e5,
-   'evap_prefactor'  : 1.0,
+   'precip_timescale' : 1.0e7,
+   'evap_prefactor'  : 0.024,
    'latent_heat_prefactor' : 1.0,
    },
 
@@ -126,7 +126,7 @@ namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
 
-    for forcing_amplitude in [7.5]:
+    for precip_timescale in [1e3, 1e4, 1e5, 1e6, 1e7]:
 
         for damping_time in [ 0.]:
             u_deep_mag_val = 0.
@@ -138,8 +138,8 @@ if __name__=="__main__":
 
             for u_deep_merid in u_deep_merid_arr:
 
-                ld_value = 10.0
-                exp = Experiment('mac_testing_mk24_high_res_small_forcing_giant_planet_fixed_deep_ics_forced_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid))+'_strong_forcing_'+str(forcing_amplitude), codebase=cb)
+                ld_value = 0.025
+                exp = Experiment('moist_shallow_giant_planet_precip_timescale_'+str(precip_timescale)+'_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid)), codebase=cb)
 
                 exp.diag_table = diag 
                 exp.namelist = namelist 
@@ -165,6 +165,7 @@ if __name__=="__main__":
                     'shallow_physics_nml': {
                         'h_0': equilibrium_geopotential, 
                         'therm_damp_time' : rotation_period * damping_time, #Thermal damping time in Scott and Polvani is 1 rotation period (v_l = 1)
+                        'precip_timescale': precip_timescale
                     },
                     'constants_nml': {
                         'omega': omega,
@@ -172,7 +173,7 @@ if __name__=="__main__":
                     },
                     'stirring_nml': {
                         'decay_time':10.*rotation_period, #Scott and Polvani use decorrelation time of 10 planetary rotations - i.e. a long time for Jupiter. 
-                        'amplitude':0.e-13*forcing_amplitude,
+                        'amplitude':0.e-13,
                         'n_total_forcing_max': 170,
                         'n_total_forcing_min': 164,
 
@@ -181,5 +182,5 @@ if __name__=="__main__":
                 })
 
                 exp.run(1, use_restart=False, num_cores=NCORES, multi_node=False)
-                for i in range(2,121):
+                for i in range(2,25):
                     exp.run(i, num_cores=NCORES, multi_node=False)
