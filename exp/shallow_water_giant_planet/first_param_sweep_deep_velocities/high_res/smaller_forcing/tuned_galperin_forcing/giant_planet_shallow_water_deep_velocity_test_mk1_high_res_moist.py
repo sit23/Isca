@@ -89,10 +89,10 @@ namelist = Namelist({
     },
 
  'shallow_dynamics_nml':{
-   'num_lon'             : 128,
-   'num_lat'             : 64,
-   'num_fourier'         : 42,
-   'num_spherical'       : 43,
+   'num_lon'             : 512,
+   'num_lat'             : 256,
+   'num_fourier'         : 170,
+   'num_spherical'       : 171,
    'fourier_inc'         : 1,
    'damping_option'      : 'resolution_dependent',
    'damping_order'       : 4,
@@ -102,6 +102,7 @@ namelist = Namelist({
    'spec_tracer'         : False,
    'robert_coeff'        : 0.04,
    'robert_coeff_tracer' : 0.04,
+   'sat_range_initial'   : 2.e-5,
     },
 
  'shallow_physics_nml':{
@@ -110,8 +111,8 @@ namelist = Namelist({
    'h_amp'           :  0.,
    'h_itcz'          :  0.,
    'sat_constant'    : 1.0e-5,
-   'precip_constant' : 1.0e-7,
-   'evap_prefactor'  : 1.0e-7,
+   'precip_timescale' : 1.0e5,
+   'evap_prefactor'  : 1.0,
    'latent_heat_prefactor' : 1.0,
    },
 
@@ -127,8 +128,8 @@ if __name__=="__main__":
 
     for forcing_amplitude in [7.5]:
 
-        for damping_time in [ 10000.]:
-            u_deep_mag_val = 50.
+        for damping_time in [ 0.]:
+            u_deep_mag_val = 0.
 
             if u_deep_mag_val!=0.:
                 u_deep_merid_arr = [27]
@@ -137,8 +138,8 @@ if __name__=="__main__":
 
             for u_deep_merid in u_deep_merid_arr:
 
-                ld_value = 0.025
-                exp = Experiment('mac_testing_mk18_high_res_small_forcing_giant_planet_fixed_deep_ics_forced_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid))+'_strong_forcing_'+str(forcing_amplitude), codebase=cb)
+                ld_value = 10.0
+                exp = Experiment('mac_testing_mk24_high_res_small_forcing_giant_planet_fixed_deep_ics_forced_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid))+'_strong_forcing_'+str(forcing_amplitude), codebase=cb)
 
                 exp.diag_table = diag 
                 exp.namelist = namelist 

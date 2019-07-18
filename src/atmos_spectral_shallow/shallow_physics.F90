@@ -96,13 +96,13 @@ real    :: h_width         =  15.0
 real    :: h_itcz          = 1.e05
 real    :: itcz_width      =  4.0
 real    :: sat_constant    = 1.0
-real    :: precip_constant = 1.0
+real    :: precip_timescale = 1.0
 real    :: evap_prefactor  = 1.0
 real    :: latent_heat_prefactor = 1.0
 
 namelist /shallow_physics_nml/ fric_damp_time, therm_damp_time, del_h, h_0, &
                                h_amp, h_lon, h_lat, h_width, &
-                               itcz_width, h_itcz, sat_constant, precip_constant, &
+                               itcz_width, h_itcz, sat_constant, precip_timescale, &
                                evap_prefactor, latent_heat_prefactor
 !========================================================================
 
@@ -224,10 +224,10 @@ if (present(tr_local)) then
   evap_local   = max(evap_prefactor * sqrt(ug(:,:,previous)**2. + vg(:,:,previous)**2.) * (tr_sat-tr_local(:,:,previous)), 0.) !Approx to bulk aero
   rh_local     = tr_local(:,:,previous)/tr_sat 
   super_sat    = max(rh_local - 1.0, 0.0) !Finding supersaturation using rh
-  precip_local = precip_constant * super_sat * tr_sat ! Calculate precip using amount tracer is above tr_sat
+  precip_local = super_sat * tr_sat / precip_timescale ! Calculate precip using amount tracer is above tr_sat
 
   dt_tr_local = dt_tr_local + (evap_local - precip_local) !Tracer tendency prop to p-e
-  dt_hg = dt_hg + latent_heat_prefactor * HLV * (evap_local - precip_local) !Latent heat prefactor coukld be set to zero to decouple tracer from height eq.
+  dt_hg = dt_hg + latent_heat_prefactor * HLV * (-1.*precip_local) !Latent heat prefactor coukld be set to zero to decouple tracer from height eq.
 
 endif
 

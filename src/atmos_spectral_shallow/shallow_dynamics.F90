@@ -137,6 +137,8 @@ real    :: u_deep_mag          = 0.
 real    :: n_merid_deep_flow   = 3.
 real    :: u_upper_mag_init    = 0.
 
+real    :: sat_range_initial   = 1.e-5
+
 logical :: spec_tracer      = .true.
 logical :: grid_tracer      = .true.
 
@@ -153,7 +155,8 @@ namelist /shallow_dynamics_nml/ check_fourier_imag,          &
                           valid_range_v, cutoff_wn,          &
                           raw_filter_coeff,                  &
                           u_deep_mag, n_merid_deep_flow,     &
-                          u_upper_mag_init
+                          u_upper_mag_init,                  &
+                          sat_range_initial
 
 contains
 
@@ -294,7 +297,7 @@ if(Time == Time_init) then
     !   enddo
     ! end do
     call random_number(Dyn%Grid%tr(:,:,1))
-    Dyn%Grid%tr(:,:,1) = (Dyn%Grid%tr(:,:,1)/maxval(Dyn%Grid%tr(:,:,1)))*1.e-5
+    Dyn%Grid%tr(:,:,1) = (Dyn%Grid%tr(:,:,1)/maxval(Dyn%Grid%tr(:,:,1)))*sat_range_initial
   endif
   
   if(Dyn%spec_tracer) then

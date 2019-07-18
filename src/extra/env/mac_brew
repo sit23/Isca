@@ -5,3 +5,4 @@ export F90=mpifort
 export CC=gcc-8
 export CDEFS=" -DMACOS "
 export NETCDF_LIBS=" -I/usr/local/include "
+export NC_LIBS_LOCAL="-L/usr/local/Cellar/netcdf/4.6.3/lib -lnetcdf "
