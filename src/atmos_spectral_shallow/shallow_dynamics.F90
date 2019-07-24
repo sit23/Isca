@@ -77,7 +77,7 @@ character(len=128) :: tagname = '$Name: siena_201207 $'
 
 type grid_type
    real, pointer, dimension(:,:,:) :: u=>NULL(), v=>NULL(), vor=>NULL(), div=>NULL(), h=>NULL(), trs=>NULL(), tr=>NULL()
-   real, pointer, dimension(:,:)   :: stream=>NULL(), pv=>NULL(), deep_geopot=>NULL(), evap=>NULL(), precip=>NULL(), rh=>NULL()
+   real, pointer, dimension(:,:)   :: stream=>NULL(), pv=>NULL(), deep_geopot=>NULL(), evap=>NULL(), precip=>NULL(), rh=>NULL(), tr_sat=>NULL()
 end type
 type spectral_type
    complex, pointer, dimension(:,:,:) :: vor=>NULL(), div=>NULL(), h=>NULL(), trs=>NULL()
@@ -139,6 +139,11 @@ real    :: u_upper_mag_init    = 0.
 
 real    :: sat_range_initial   = 1.e-5
 
+real    :: gauss_bump_width    = 15.
+real    :: deg_lon_centre      = 180.
+real    :: deg_lat_centre      = 0.
+real    :: small_gridpoint_amp = 0.
+
 logical :: spec_tracer      = .true.
 logical :: grid_tracer      = .true.
 
@@ -156,7 +161,9 @@ namelist /shallow_dynamics_nml/ check_fourier_imag,          &
                           raw_filter_coeff,                  &
                           u_deep_mag, n_merid_deep_flow,     &
                           u_upper_mag_init,                  &
-                          sat_range_initial
+                          sat_range_initial,                 &
+                          gauss_bump_width, deg_lon_centre,  &
+                          deg_lat_centre, small_gridpoint_amp
 
 contains
 
@@ -168,7 +175,7 @@ type(dynamics_type), intent(inout)  :: Dyn
 type(time_type)    , intent(in)     :: Time, Time_init
 real               , intent(in)     :: dt_real
 
-integer :: i, j
+integer :: i, j, i_tick, j_tick
 
 real,    allocatable, dimension(:)   :: glon_bnd, glat_bnd
 real :: xx, yy, dd, deep_geopot_global_mean
@@ -255,6 +262,7 @@ if(Dyn%grid_tracer) then
   allocate(Dyn%Grid%evap (is:ie, js:je))
   allocate(Dyn%Grid%precip (is:ie, js:je))  
   allocate(Dyn%Grid%rh (is:ie, js:je))  
+  allocate(Dyn%Grid%tr_sat (is:ie, js:je))  
 endif
 
 if(Dyn%spec_tracer) then
@@ -296,8 +304,16 @@ if(Time == Time_init) then
       ! if(deg_lat(j) > 70.0 )                        Dyn%Grid%tr(:,j,1) = -1.0
     !   enddo
     ! end do
-    call random_number(Dyn%Grid%tr(:,:,1))
-    Dyn%Grid%tr(:,:,1) = (Dyn%Grid%tr(:,:,1)/maxval(Dyn%Grid%tr(:,:,1)))*sat_range_initial
+    if (small_gridpoint_amp==0.) then
+        call random_number(Dyn%Grid%tr(:,:,1))
+        Dyn%Grid%tr(:,:,1) = (Dyn%Grid%tr(:,:,1)/maxval(Dyn%Grid%tr(:,:,1)))*sat_range_initial
+    else
+        do i_tick = is, ie 
+            do j_tick = js, je
+                Dyn%Grid%tr(i_tick,j_tick,1) = small_gridpoint_amp * exp(-((deg_lon(i_tick)-deg_lon_centre)**2. + (deg_lat(j_tick)-deg_lat_centre)**2.)/gauss_bump_width)
+            enddo
+        enddo
+    endif
   endif
   
   if(Dyn%spec_tracer) then

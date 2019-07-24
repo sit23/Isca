@@ -56,7 +56,7 @@ character(len=84) :: mod_name = 'shallow_diagnostics'
 
 logical :: module_is_initialized = .false.
 
-integer :: id_vor, id_stream, id_pv, id_u, id_v, id_div, id_h, id_trs, id_tr, id_d_geopot, id_u_sqd, id_v_sqd, id_h_sqd, id_u_sqd_mean, id_v_sqd_mean, id_h_sqd_mean, id_ekin, id_ekin_density, id_eq_geopot, id_e_kin_real_units, id_e_pot_real_units, id_e_tot_real_units, id_u_rms, id_evap, id_precip, id_rh
+integer :: id_vor, id_stream, id_pv, id_u, id_v, id_div, id_h, id_trs, id_tr, id_d_geopot, id_u_sqd, id_v_sqd, id_h_sqd, id_u_sqd_mean, id_v_sqd_mean, id_h_sqd_mean, id_ekin, id_ekin_density, id_eq_geopot, id_e_kin_real_units, id_e_pot_real_units, id_e_tot_real_units, id_u_rms, id_evap, id_precip, id_rh, id_tr_sat
 
 integer :: is, ie, js, je
 
@@ -130,6 +130,8 @@ id_u_rms = register_diag_field(mod_name, 'u_rms' , Time, 'r_rms'              , 
 id_evap   = register_diag_field(mod_name, 'evap' ,   axis_2d, Time, 'evap'              , 'kg/kg'      ) 
 id_precip = register_diag_field(mod_name, 'precip' , axis_2d, Time, 'precip'              , 'kg/kg'      ) 
 id_rh = register_diag_field(mod_name, 'rh' , axis_2d, Time, 'rh'              , 'none'      ) 
+id_tr_sat = register_diag_field(mod_name, 'tr_sat' , axis_2d, Time, 'tr_sat'              , 'kg/kg'      ) 
+
 
 module_is_initialized = .true.
 
@@ -258,6 +260,10 @@ endif
 
 if (id_rh > 0) then
     used = send_data(id_rh, Grid%rh, time)
+endif
+
+if (id_tr_sat > 0) then
+    used = send_data(id_tr_sat, Grid%tr_sat, time)
 endif
 
 return

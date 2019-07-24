@@ -100,10 +100,15 @@ real    :: precip_timescale = 1.0
 real    :: evap_prefactor  = 1.0
 real    :: latent_heat_prefactor = 1.0
 
+logical :: gv_formulation_tr_sat = .false.
+real    :: alpha_gv        = 20.0
+
+
 namelist /shallow_physics_nml/ fric_damp_time, therm_damp_time, del_h, h_0, &
                                h_amp, h_lon, h_lat, h_width, &
                                itcz_width, h_itcz, sat_constant, precip_timescale, &
-                               evap_prefactor, latent_heat_prefactor
+                               evap_prefactor, latent_heat_prefactor, gv_formulation_tr_sat, &
+                               alpha_gv
 !========================================================================
 
 contains
@@ -194,7 +199,7 @@ end subroutine shallow_physics_init
 subroutine shallow_physics(Time, dt_ug, dt_vg, dt_hg, ug, vg, hg,   &
                              delta_t, previous, current, Phys,      &
                              tr_local, evap_local,                  &
-                             precip_local, rh_local, dt_tr_local)
+                             precip_local, rh_local, tr_sat_local, dt_tr_local)
 
 real, intent(inout),  dimension(is:ie, js:je)    :: dt_ug, dt_vg, dt_hg
 real, intent(in)   ,  dimension(is:ie, js:je, 2) :: ug, vg, hg
@@ -205,10 +210,10 @@ integer, intent(in)  :: previous, current
 type(time_type), intent(in)    :: Time
 type(phys_type), intent(inout) :: Phys
 
-real, intent(inout),  dimension(is:ie, js:je), optional :: evap_local, precip_local, dt_tr_local, rh_local
+real, intent(inout),  dimension(is:ie, js:je), optional :: evap_local, precip_local, dt_tr_local, rh_local, tr_sat_local
 real, intent(inout),  dimension(is:ie, js:je, 2), optional :: tr_local
 
-real, dimension(is:ie, js:je) :: tr_sat, super_sat
+real, dimension(is:ie, js:je) :: super_sat
 
 dt_ug = dt_ug - kappa_m*ug(:,:,previous)
 dt_vg = dt_vg - kappa_m*vg(:,:,previous)
@@ -220,11 +225,16 @@ dt_hg = dt_hg - kappa_t*(hg(:,:,previous) - h_eq)
 ! evap = constant * mod(velocity) * (q_atmosphere - q_saturated)
 
 if (present(tr_local)) then
-  tr_sat       = sat_constant * exp(h_0/hg(:,:,previous) - h_0/h_eq) !Approximation to Cl-Cl
-  evap_local   = max(evap_prefactor * sqrt(ug(:,:,previous)**2. + vg(:,:,previous)**2.) * (tr_sat-tr_local(:,:,previous)), 0.) !Approx to bulk aero
-  rh_local     = tr_local(:,:,previous)/tr_sat 
+  if (gv_formulation_tr_sat) then
+    tr_sat_local       = sat_constant * exp(alpha_gv * (1. - hg(:,:,previous)/h_0 )) !Approximation to Cl-Cl
+  else
+    tr_sat_local       = sat_constant * exp(alpha_gv*(h_0/hg(:,:,previous) - h_0/h_eq)) !Approximation to Cl-Cl
+  endif
+
+  evap_local   = max(evap_prefactor * sqrt(ug(:,:,previous)**2. + vg(:,:,previous)**2.) * (tr_sat_local-tr_local(:,:,previous)), 0.) !Approx to bulk aero
+  rh_local     = tr_local(:,:,previous)/tr_sat_local
   super_sat    = max(rh_local - 1.0, 0.0) !Finding supersaturation using rh
-  precip_local = super_sat * tr_sat / precip_timescale ! Calculate precip using amount tracer is above tr_sat
+  precip_local = super_sat * tr_sat_local / precip_timescale ! Calculate precip using amount tracer is above tr_sat_local
 
   dt_tr_local = dt_tr_local + (evap_local - precip_local) !Tracer tendency prop to p-e
   dt_hg = dt_hg + latent_heat_prefactor * HLV * (-1.*precip_local) !Latent heat prefactor coukld be set to zero to decouple tracer from height eq.

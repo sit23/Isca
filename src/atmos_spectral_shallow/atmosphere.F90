@@ -217,7 +217,8 @@ if (Dyn%grid_tracer) then
                       delta_t, previous, current,           &
                       Phys,                                 &
                       Dyn%Grid%tr, Dyn%Grid%evap,           &
-                      Dyn%Grid%precip, Dyn%Grid%rh, Dyn%Tend%tr)
+                      Dyn%Grid%precip, Dyn%Grid%rh,         &
+                      Dyn%Grid%tr_sat, Dyn%Tend%tr          )
 else
   call shallow_physics(Time,                                &
                       Dyn%Tend%u, Dyn%Tend%v, Dyn%Tend%h,   &
