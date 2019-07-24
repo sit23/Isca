@@ -43,6 +43,7 @@ diag.add_field('shallow_diagnostics', 'stream', time_avg=True)
 diag.add_field('shallow_diagnostics', 'deep_geopot', time_avg=True)
 # diag.add_field('shallow_diagnostics', 'trs', time_avg=True)
 diag.add_field('shallow_diagnostics', 'tr', time_avg=True)
+diag.add_field('shallow_diagnostics', 'tr_sat', time_avg=True)
 diag.add_field('shallow_diagnostics', 'evap', time_avg=True)
 diag.add_field('shallow_diagnostics', 'precip', time_avg=True)
 diag.add_field('shallow_diagnostics', 'rh', time_avg=True)
@@ -102,7 +103,6 @@ namelist = Namelist({
    'spec_tracer'         : False,
    'robert_coeff'        : 0.04,
    'robert_coeff_tracer' : 0.04,
-   'sat_range_initial'   : 2.e-5,
     },
 
  'shallow_physics_nml':{
@@ -110,7 +110,6 @@ namelist = Namelist({
    'h_0'             :  3.e04, #Scott and Polvani begin with L_D_polar = 10 radii in size, i.e. depth of 9,910 metres.
    'h_amp'           :  0.,
    'h_itcz'          :  0.,
-   'sat_constant'    : 1.0e-5,
    'precip_timescale' : 1.0e7,
    'evap_prefactor'  : 0.024,
    'latent_heat_prefactor' : 1.0,
@@ -126,9 +125,10 @@ namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
 
-    for precip_timescale in [1e5]:
-
-        for damping_time in [ 1., 10., 100., 1000.]:
+    for sat_constant_scale in [1000., 10000.]:
+        evap_prefactor = 0.0000024
+        precip_timescale = 1e5
+        for damping_time in [ 1000., 100., 10.]:
             u_deep_mag_val = 0.
 
             if u_deep_mag_val!=0.:
@@ -139,7 +139,7 @@ if __name__=="__main__":
             for u_deep_merid in u_deep_merid_arr:
 
                 ld_value = 0.025
-                exp = Experiment('moist_shallow_giant_planet_precip_timescale_'+str(precip_timescale)+'_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid)), codebase=cb)
+                exp = Experiment('moist_shallow_giant_planet_precip_timescale_'+str(precip_timescale)+'evap_prefactor_'+str(evap_prefactor)+'_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid))+'_gv_formulation_2_tr_sat'+'_sat_constant_'+str(sat_constant_scale), codebase=cb)
 
                 exp.diag_table = diag 
                 exp.namelist = namelist 
@@ -160,12 +160,17 @@ if __name__=="__main__":
                     'shallow_dynamics_nml':{
                         'h_0': equilibrium_geopotential,
                         'u_deep_mag'   : u_deep_mag_val,
-                        'n_merid_deep_flow': u_deep_merid,                    
+                        'n_merid_deep_flow': u_deep_merid,     
+                        'sat_range_initial'   : 2.e-5 * sat_constant_scale,
                     },
                     'shallow_physics_nml': {
                         'h_0': equilibrium_geopotential, 
                         'therm_damp_time' : rotation_period * damping_time, #Thermal damping time in Scott and Polvani is 1 rotation period (v_l = 1)
-                        'precip_timescale': precip_timescale
+                        'precip_timescale': precip_timescale,
+                        'evap_prefactor'  : evap_prefactor, 
+                        'gv_formulation_tr_sat': True,
+                        'sat_constant'    : 1.0e-5 * sat_constant_scale,
+
                     },
                     'constants_nml': {
                         'omega': omega,

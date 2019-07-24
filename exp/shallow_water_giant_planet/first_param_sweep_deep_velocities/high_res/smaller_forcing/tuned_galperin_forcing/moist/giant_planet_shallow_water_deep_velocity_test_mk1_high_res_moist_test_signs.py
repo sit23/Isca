@@ -6,7 +6,7 @@ from isca import ShallowCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
 
 import pdb
 
-NCORES = 16
+NCORES = 2
 base_dir = os.path.dirname(os.path.realpath(__file__))
 # a CodeBase can be a directory on the computer,
 # useful for iterative development
@@ -29,7 +29,9 @@ cb.compile()  # compile the source code to working directory $GFDL_WORK/codebase
 #Tell model how to write diagnostics
 diag = DiagTable()
 # diag.add_file('atmos_monthly', 30, 'days', time_units='days')
-diag.add_file('atmos_daily', 1, 'days', time_units='days')
+# diag.add_file('atmos_daily', 1, 'days', time_units='days')
+diag.add_file('atmos_timestep', 100, 'seconds', time_units='days')
+
 
 #Tell model which diagnostics to write
 diag.add_field('shallow_diagnostics', 'ucomp', time_avg=True)
@@ -46,6 +48,7 @@ diag.add_field('shallow_diagnostics', 'tr', time_avg=True)
 diag.add_field('shallow_diagnostics', 'evap', time_avg=True)
 diag.add_field('shallow_diagnostics', 'precip', time_avg=True)
 diag.add_field('shallow_diagnostics', 'rh', time_avg=True)
+diag.add_field('shallow_diagnostics', 'tr_sat', time_avg=True)
 
 
 diag.add_field('stirring_mod', 'stirring', time_avg=True)
@@ -66,11 +69,11 @@ diag.add_field('shallow_diagnostics', 'u_rms', time_avg=True)
 #Define values for the 'core' namelist
 namelist = Namelist({
     'main_nml':{
-     'days'   : 30,
+     'days'   : 0,
      'hours'  : 0,
      'minutes': 0,
-     'seconds': 0,
-     'dt_atmos': 600,
+     'seconds': 1000,
+     'dt_atmos': 100,
      'calendar': 'no_calendar',
     },
 
@@ -103,7 +106,6 @@ namelist = Namelist({
    'robert_coeff'        : 0.04,
    'robert_coeff_tracer' : 0.04,
    'sat_range_initial'   : 0.,
-   'small_gridpoint_amp': 2.e-5,
     },
 
  'shallow_physics_nml':{
@@ -127,9 +129,10 @@ namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
 
-    for precip_timescale in [1e3, ]:
-
-        for damping_time in [ 0.]:
+    for deg_lat_centre in [0., 15., 30., 45., 60., 75. ]:
+        precip_timescale = 1e3
+        for sat_constant_scale in [ 10000.]:
+            damping_time = 0.
             u_deep_mag_val = 0.
 
             if u_deep_mag_val!=0.:
@@ -140,7 +143,7 @@ if __name__=="__main__":
             for u_deep_merid in u_deep_merid_arr:
 
                 ld_value = 0.025
-                exp = Experiment('test_signs_moist_shallow_giant_planet_precip_timescale_'+str(precip_timescale)+'_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid)), codebase=cb)
+                exp = Experiment('test_signs_ex_diag_moist_shallow_giant_planet_precip_timescale_'+str(precip_timescale)+'_'+str(damping_time)+'_rad_damping_ld_'+str(ld_value)+'_udeep_mag_'+str(u_deep_mag_val)+'_u_deep_merid_'+str(int(u_deep_merid))+'_sat_constant_'+str(sat_constant_scale)+'_lat_centre_'+str(deg_lat_centre)+'_gv_form_2', codebase=cb)
 
                 exp.diag_table = diag 
                 exp.namelist = namelist 
@@ -161,12 +164,19 @@ if __name__=="__main__":
                     'shallow_dynamics_nml':{
                         'h_0': equilibrium_geopotential,
                         'u_deep_mag'   : u_deep_mag_val,
-                        'n_merid_deep_flow': u_deep_merid,                    
+                        'n_merid_deep_flow': u_deep_merid,     
+                        'deg_lat_centre': deg_lat_centre,
+                        'small_gridpoint_amp': 2.e-5* sat_constant_scale,
+
                     },
                     'shallow_physics_nml': {
                         'h_0': equilibrium_geopotential, 
                         'therm_damp_time' : rotation_period * damping_time, #Thermal damping time in Scott and Polvani is 1 rotation period (v_l = 1)
-                        'precip_timescale': precip_timescale
+                        'precip_timescale': precip_timescale,
+                        'gv_formulation_tr_sat': True,
+                        'sat_constant'    : 1.0e-5 * sat_constant_scale,
+                        # 'alpha_gv': -20.,
+
                     },
                     'constants_nml': {
                         'omega': omega,
@@ -183,5 +193,5 @@ if __name__=="__main__":
                 })
 
                 exp.run(1, use_restart=False, num_cores=NCORES, multi_node=False)
-                for i in range(2,2):
+                for i in range(2,3):
                     exp.run(i, num_cores=NCORES, multi_node=False)
