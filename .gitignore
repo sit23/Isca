@@ -29,3 +29,5 @@ src/preprocessing/generate_grids/*/exec/*
 src/preprocessing/generate_grids/*/workdir/*
 test/.cache
 test/results.xml
+*.sh.e*
+*.sh.o*
