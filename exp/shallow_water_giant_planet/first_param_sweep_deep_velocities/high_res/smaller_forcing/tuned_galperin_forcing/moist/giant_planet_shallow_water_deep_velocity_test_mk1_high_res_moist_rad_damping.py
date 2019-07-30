@@ -71,7 +71,7 @@ namelist = Namelist({
      'hours'  : 0,
      'minutes': 0,
      'seconds': 0,
-     'dt_atmos': 600,
+     'dt_atmos': 300,
      'calendar': 'no_calendar',
     },
 
@@ -125,10 +125,10 @@ namelist = Namelist({
 #Lets do a run!
 if __name__=="__main__":
 
-    for sat_constant_scale in [1000., 10000.]:
+    for sat_constant_scale in [100000., 1000000.]:
         evap_prefactor = 0.0000024
         precip_timescale = 1e5
-        for damping_time in [ 1000., 100., 10.]:
+        for damping_time in [ 10000., 0.]:
             u_deep_mag_val = 0.
 
             if u_deep_mag_val!=0.:
@@ -187,5 +187,5 @@ if __name__=="__main__":
                 })
 
                 exp.run(1, use_restart=False, num_cores=NCORES, multi_node=False)
-                for i in range(2,49):
+                for i in range(2,241):
                     exp.run(i, num_cores=NCORES, multi_node=False)
