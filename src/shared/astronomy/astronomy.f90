@@ -1469,7 +1469,7 @@ end subroutine diurnal_solar_2d
 !
 subroutine diurnal_solar_1d (lat, lon, gmt, time_since_ae, cosz, &
                              fracday, rrsun, dt, allow_negative_cosz, &
-                             half_day_out)
+                             half_day_out, true_anom, dec, ang)
 
 !--------------------------------------------------------------------
 !    diurnal_solar_1d takes 1-d input fields, adds a second dimension
@@ -1485,6 +1485,7 @@ real,                intent(out)          :: rrsun
 real,                intent(in), optional :: dt
 logical,             intent(in), optional :: allow_negative_cosz
 real, dimension(:),  intent(out), optional :: half_day_out
+real,                intent(out), optional :: true_anom, dec, ang
 
 !---------------------------------------------------------------------
 !  local variables
@@ -1503,9 +1504,10 @@ real, dimension(:),  intent(out), optional :: half_day_out
 !--------------------------------------------------------------------
 !     if (present(dt)) then
         call diurnal_solar_2d (lat_2d, lon_2d, gmt, time_since_ae,&
-                               cosz_2d, fracday_2d, rrsun, dt=dt, &
-                               allow_negative_cosz=allow_negative_cosz, &
-                               half_day_out=halfday_2d)
+                               cosz_2d, fracday_2d, rrsun, dt, &
+                               allow_negative_cosz, &
+                               halfday_2d, &
+                               true_anom, dec, ang)
 !     else
 !       call diurnal_solar_2d (lat_2d, lon_2d, gmt, time_since_ae, &
 !                              cosz_2d, fracday_2d, rrsun)
@@ -1574,7 +1576,7 @@ end subroutine diurnal_solar_1d
 !
 subroutine diurnal_solar_0d (lat, lon, gmt, time_since_ae, cosz,  &
                              fracday, rrsun, dt, allow_negative_cosz, &
-                             half_day_out)
+                             half_day_out, true_anom, dec, ang)
 
 !--------------------------------------------------------------------
 !    diurnal_solar_0d takes scalar input fields, makes them into 2d
@@ -1587,6 +1589,7 @@ real, intent(out)          :: cosz, fracday, rrsun
 real, intent(in), optional :: dt
 logical,intent(in), optional :: allow_negative_cosz
 real, intent(out), optional :: half_day_out
+real, intent(out), optional :: true_anom, dec, ang
 
 !--------------------------------------------------------------------
 !  local variables:
@@ -1604,9 +1607,10 @@ real, intent(out), optional :: half_day_out
 !--------------------------------------------------------------------
 !     if (present(dt)) then
         call diurnal_solar_2d (lat_2d, lon_2d, gmt, time_since_ae,  &
-                               cosz_2d, fracday_2d, rrsun, dt=dt, &
-                               allow_negative_cosz=allow_negative_cosz, &
-                               half_day_out=halfday_2d)
+                               cosz_2d, fracday_2d, rrsun, dt, &
+                               allow_negative_cosz, &
+                               halfday_2d, &
+                               true_anom, dec, ang)
 !     else
 !       call diurnal_solar_2d (lat_2d, lon_2d, gmt, time_since_ae, &
 !                              cosz_2d, fracday_2d, rrsun)
