@@ -180,7 +180,7 @@ contains
    real, intent(out),    dimension(:,:)  , optional :: t_grnd
 
 !-----------------------------------------------------------------------
-   real, dimension(size(t,1),size(t,2))           :: ps, diss_heat, h_trop
+   real, dimension(size(t,1),size(t,2))           :: ps, diss_heat, h_trop, t_grnd_out
    real, dimension(size(t,1),size(t,2),size(t,3)) :: ttnd, utnd, vtnd, teq, pmass
    real, dimension(size(r,1),size(r,2),size(r,3)) :: rst, rtnd
    integer :: i, j, k, kb, n, num_tracers
@@ -238,7 +238,8 @@ contains
 !-----------------------------------------------------------------------
 !     thermal forcing for held & suarez (1994) benchmark calculation
       if (trim(equilibrium_t_option) == 'top_down') then
-         call top_down_newtonian_damping(Time, lat, lon, ps, p_full, p_half, t, ttnd, teq, dt, h_trop, t_grnd, zfull, mask )
+         call top_down_newtonian_damping(Time, lat, lon, ps, p_full, p_half, t, ttnd, teq, dt, h_trop, t_grnd_out, zfull, mask )
+         if (present(t_grnd)) t_grnd = t_grnd_out
       else
          call newtonian_damping ( Time, lat, lon, ps, p_full, p_half, t, ttnd, teq, mask )
       endif
@@ -256,7 +257,7 @@ contains
 
       if (trim(equilibrium_t_option) == 'top_down') then    
           if (id_h_trop > 0) used = send_data ( id_h_trop, h_trop, Time)
-          if (id_t_grnd > 0) used = send_data ( id_t_grnd, t_grnd, Time)
+          if (id_t_grnd > 0) used = send_data ( id_t_grnd, t_grnd_out, Time)
       endif
       
 !-----------------------------------------------------------------------
@@ -1126,44 +1127,44 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
 !  ----- compute equilibrium temperature (teq) -----
 
-        if (pure_rad_equil) then
-            teq(:,:,k) = (olr * (tau_s*exp(-zfull(:,:,k)/(1000.*h_a))+1)/(2.*stefan))**0.25
-        else
-            teq(:,:,k) = t_trop + lapse*(h_trop-zfull(:,:,k)/1000)
-        endif
+      if (pure_rad_equil) then
+          teq(:,:,k) = (olr * (tau_s*exp(-zfull(:,:,k)/(1000.*h_a))+1)/(2.*stefan))**0.25
+      else
+          teq(:,:,k) = t_trop + lapse*(h_trop-zfull(:,:,k)/1000)
+      endif
         
-        if (stratosphere_t_option == 'c_above_tp') then
-            do i=1, size(t,1)
-            do j=1, size(t,2)
-                if(zfull(i,j,k)/1000 >= h_trop(i,j)) then
-                 	teq(i,j,k) = tstr(i,j)
-                endif
-            enddo
-            enddo
-        elseif (stratosphere_t_option == 'hs_like') then
-                teq(:,:,k) = max(teq(:,:,k), tstr(:,:))
-		elseif (stratosphere_t_option == 'extend_tp') then
-			do i=1,size(t,1)
-			do j=1,size(t,1)
-                if (zfull(i,j,k)/1000 >= h_trop(i,j)) then
-                    teq(i,j,k) = t_trop(i,j)
-                endif
-			enddo
-			enddo
-		elseif (stratosphere_t_option == 'pure_rad_equil') then			
-            teq(:,:,k) = (olr * (tau_s*exp(-zfull(:,:,k)/(1000.*h_a))+1)/(2.*stefan))**0.25	
-		else
-			teq(:,:,k) = max(teq(:,:,k), 0.)
-        endif
+      if (stratosphere_t_option == 'c_above_tp') then
+        do i=1, size(t,1)
+          do j=1, size(t,2)
+              if(zfull(i,j,k)/1000 >= h_trop(i,j)) then
+                teq(i,j,k) = tstr(i,j)
+              endif
+          enddo
+        enddo
+      elseif (stratosphere_t_option == 'hs_like') then
+        teq(:,:,k) = max(teq(:,:,k), tstr(:,:))
+      elseif (stratosphere_t_option == 'extend_tp') then
+        do i=1,size(t,1)
+          do j=1,size(t,1)
+            if (zfull(i,j,k)/1000 >= h_trop(i,j)) then
+                teq(i,j,k) = t_trop(i,j)
+            endif
+          enddo
+        enddo
+      elseif (stratosphere_t_option == 'pure_rad_equil') then			
+        teq(:,:,k) = (olr * (tau_s*exp(-zfull(:,:,k)/(1000.*h_a))+1)/(2.*stefan))**0.25	
+      else
+        teq(:,:,k) = max(teq(:,:,k), 0.)
+      endif
 !  ----- compute damping -----
 ! ------ is symmetric about the equator, change this?? -----
-        sigma(:,:) = p_full(:,:,k)*rps(:,:)
-        where (sigma(:,:) <= 1.0 .and. sigma(:,:) > sigma_b)
-            tfactr(:,:) = tcoeff*(sigma(:,:)-sigma_b)
-            tdamp(:,:,k) = tka + cos_lat_4(:,:)*tfactr(:,:)
-        elsewhere
-            tdamp(:,:,k) = tka
-        endwhere
+      sigma(:,:) = p_full(:,:,k)*rps(:,:)
+      where (sigma(:,:) <= 1.0 .and. sigma(:,:) > sigma_b)
+          tfactr(:,:) = tcoeff*(sigma(:,:)-sigma_b)
+          tdamp(:,:,k) = tka + cos_lat_4(:,:)*tfactr(:,:)
+      elsewhere
+          tdamp(:,:,k) = tka
+      endwhere
 
     enddo
 
