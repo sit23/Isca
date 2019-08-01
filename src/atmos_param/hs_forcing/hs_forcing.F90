@@ -38,7 +38,7 @@ use           fms_mod, only: error_mesg, FATAL, file_exist,       &
                              write_version_number, stdlog,        &
                              uppercase, read_data, write_data, set_domain
 
-use  time_manager_mod, only: time_type, get_time
+use  time_manager_mod, only: time_type, get_time, length_of_year, length_of_day
 
 use  diag_manager_mod, only: register_diag_field, send_data
 
@@ -48,7 +48,7 @@ use   interpolator_mod, only: interpolate_type, interpolator_init, &
                               interpolator, interpolator_end, &
                               CONSTANT, INTERP_WEIGHTED_P
 
-use      astronomy_mod, only: diurnal_exoplanet, astronomy_init, obliq, ecc
+use      astronomy_mod, only: diurnal_exoplanet, astronomy_init, obliq, ecc, diurnal_solar
 use     transforms_mod, only: grid_domain, get_grid_domain
 
 
@@ -101,8 +101,14 @@ private
    logical :: pure_rad_equil_s_temp = .false. !When using top-down, do you want radiative convective equil (.true.) or purely radiative equilibrium (.false.)   
    logical :: use_olr_from_t_surf = .false.  
    logical :: calculate_insolation_from_orbit = .true. !If true then radaition calculated from orbital position. If false then uses annual average close to distribution for Earth.
+   logical :: use_gfdl_astronomy = .false. !Adding option to use GFDL's astronomy package (like the rest of the radiation schemes in Isca)
+   logical :: use_time_average_coszen = .true. !GFDL astronomy option
    real :: del_sol = 1.4
    real :: del_sw  = 0.0
+   real :: dt_rad_avg = -1
+   integer :: solday = -10 !s Day of year to run perpetually if do_seasonal=True and solday>0
+   real    :: equinox_day     = 0.0 !s Fraction of year [0,1] where NH autumn equinox occurs (only really useful if calendar has defined months).
+
 
    real :: peri_time=0.25, smaxis=1.5e6, albedo=0.3, frac_of_year_ae=0.0
    real :: lapse=6.5, h_a=2, tau_s=5
@@ -125,9 +131,10 @@ private
                               equilibrium_t_file, p_trop, alpha, peri_time, smaxis, albedo, &
                               lapse, h_a, tau_s, orbital_period,         &
                               heat_capacity, ml_depth, spinup_time, stratosphere_t_option, P00, &
-                              calculate_insolation_from_orbit, del_sol, &
+                              calculate_insolation_from_orbit, use_gfdl_astronomy, del_sol, &
                               pure_rad_equil, pure_rad_equil_s_temp, &
-                              use_olr_from_t_surf, frac_of_year_ae
+                              use_olr_from_t_surf, frac_of_year_ae, &
+                              use_time_average_coszen, solday, equinox_day
 
 !-----------------------------------------------------------------------
 
@@ -139,7 +146,7 @@ private
 
    real, allocatable, dimension(:,:) :: tg_prev
 
-   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping, id_mars_solar_long, id_incoming_sw, id_true_anom, id_dec
+   integer :: id_teq, id_h_trop, id_t_grnd, id_tdt, id_udt, id_vdt, id_tdt_diss, id_diss_heat, id_local_heating, id_newtonian_damping, id_mars_solar_long, id_incoming_sw, id_true_anom, id_dec, id_ang, id_rrsun
    real    :: missing_value = -1.e10
    real    :: xwidth, ywidth, xcenter, ycenter ! namelist values converted from degrees to radians
    real    :: srfamp ! local_heating_srfamp converted from deg/day to deg/sec
@@ -171,7 +178,7 @@ contains
       real, intent(in),    dimension(:,:,:), optional :: mask
    integer, intent(in),    dimension(:,:)  , optional :: kbot
    real, intent(out),    dimension(:,:)  , optional :: t_grnd
-   
+
 !-----------------------------------------------------------------------
    real, dimension(size(t,1),size(t,2))           :: ps, diss_heat, h_trop
    real, dimension(size(t,1),size(t,2),size(t,3)) :: ttnd, utnd, vtnd, teq, pmass
@@ -231,7 +238,7 @@ contains
 !-----------------------------------------------------------------------
 !     thermal forcing for held & suarez (1994) benchmark calculation
       if (trim(equilibrium_t_option) == 'top_down') then
-         call top_down_newtonian_damping(Time, lat, ps, p_full, p_half, t, ttnd, teq, dt, h_trop, t_grnd, zfull, mask )
+         call top_down_newtonian_damping(Time, lat, lon, ps, p_full, p_half, t, ttnd, teq, dt, h_trop, t_grnd, zfull, mask )
       else
          call newtonian_damping ( Time, lat, lon, ps, p_full, p_half, t, ttnd, teq, mask )
       endif
@@ -283,7 +290,7 @@ contains
 
 !#######################################################################
 
- subroutine hs_forcing_init ( axes, Time, lonb, latb, lat )
+ subroutine hs_forcing_init ( axes, Time, lonb, latb, lat, lon, dt_real )
 
 !-----------------------------------------------------------------------
 !
@@ -294,18 +301,21 @@ contains
 
            integer, intent(in) :: axes(4)
    type(time_type), intent(in) :: Time
-   real, intent(in), dimension(:,:) :: lat
+   real, intent(in), dimension(:,:) :: lat, lon
    real, intent(in), optional, dimension(:,:) :: lonb, latb
+   real, intent(in)                        :: dt_real
 
 
 !-----------------------------------------------------------------------
    integer  unit, io, ierr
 
-   real, dimension(size(lat,1),size(lat,2)) :: s, t_radbal, t_trop, h_trop, t_surf, hour_angle, tg, p2, sin_lat, sin_lat_2, olr
+   real, dimension(size(lat,1),size(lat,2)) :: s, t_radbal, t_trop, h_trop, t_surf, hour_angle, tg, p2, sin_lat, sin_lat_2, olr, coszen, fracsun, half_day_out
    integer :: spin_count, seconds, days, dt_integer
    real :: dec, orb_dist, step_days, true_anomaly, inv_rsun_sqd
    integer :: is, ie, js, je
-
+   real :: rrsun, day_in_s, r_seconds, frac_of_day, frac_of_year, gmt
+   real :: time_since_ae, r_solday, r_total_seconds, r_days, r_dt_rad_avg, dt_rad_radians, ang_out
+   integer :: year_in_s
 
    call get_grid_domain(is, ie, js, je)
    call set_domain(grid_domain)
@@ -339,6 +349,10 @@ contains
 
       twopi = 2*PI
 
+  call astronomy_init()
+
+  if(dt_rad_avg .le. 0) dt_rad_avg = dt_real !s if dt_rad_avg is set to a value in nml then it will be used instead of dt_real 
+
    ! ---- spin-up simple heat capacity used in top-down code ----
 
   if (trim(equilibrium_t_option) == 'top_down') then
@@ -363,9 +377,42 @@ contains
 		spin_count = spin_count + 1
 
         if (calculate_insolation_from_orbit) then
+          if (use_gfdl_astronomy) then
+            ! Seasonal Cycle: Use astronomical parameters to calculate insolation
+            call get_time(length_of_year(), year_in_s)
+            day_in_s = length_of_day()
+            r_days=real(step_days)
+            r_total_seconds=r_days*86400. !For this spinup phase the stepping is done in integer numbers of days
+            
+            frac_of_day = r_total_seconds / day_in_s
+          
+            if(solday .ge. 0) then
+                r_solday=real(solday)
+                frac_of_year = (r_solday*day_in_s) / year_in_s
+            else
+                frac_of_year = r_total_seconds / year_in_s
+            endif
+          
+            gmt = abs(mod(frac_of_day, 1.0)) * 2.0 * pi
+            
+            time_since_ae = modulo(frac_of_year-equinox_day, 1.0) * 2.0 * pi
+          
+            if(use_time_average_coszen) then        
+               r_dt_rad_avg=real(dt_rad_avg)
+               dt_rad_radians = 2.0*pi !For newt-cooling run we can't easily have a diurnal cycle, so average over 1 day
+               call diurnal_solar(lat, lon, gmt, time_since_ae, coszen, fracsun, rrsun, dt_rad_radians, true_anom=true_anomaly, dec=dec, ang=ang_out)
+            else
+               call diurnal_solar(lat, lon, gmt, time_since_ae, coszen, fracsun, rrsun, true_anom=true_anomaly, dec=dec, ang=ang_out)
+            end if
+          
+            s(:,:) = solar_const * coszen * rrsun
+  
+          else
             call update_orbit(dt_integer, dec, orb_dist, true_anomaly,inv_rsun_sqd)
             call calc_hour_angle(lat, dec, hour_angle)
             s(:,:) = (solar_const/pi)*inv_rsun_sqd*(hour_angle*sin(lat)*sin(dec) + cos(lat)*cos(dec)*sin(hour_angle))
+          endif
+
         else
             p2     = (1. - 3.*sin_lat_2)/4.    
             s(:,:) = 0.25 * solar_const * (1.0 + del_sol*p2 + del_sw * sin_lat)
@@ -385,7 +432,8 @@ contains
 		tg(:,:) =  stefan*86400*step_days/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
 
 		if (spin_count >= spinup_time) then
-			print *, 'SPINUP COMPLETE AFTER ', spin_count, 'ITERATIONS'
+      print *, 'SPINUP COMPLETE AFTER ', spin_count, 'ITERATIONS'
+      print *, maxval(t_surf), minval(t_surf)
 			exit
 		endif
 
@@ -458,6 +506,12 @@ contains
       id_dec = register_diag_field ( mod_name, 'dec', &
                    Time, 'Declination (orbit)', 'deg')    
 
+      id_ang = register_diag_field ( mod_name, 'ang', &
+                   Time, 'ang', 'none')
+
+      id_rrsun = register_diag_field ( mod_name, 'rrsun', &
+                   Time, 'inverse planet sun distance', 'none') 
+
       id_incoming_sw = register_diag_field ( mod_name, 'incoming_sw', axes(1:2), &
                    Time, 'Incoming short-wave flux', 'W/m**2')
                    
@@ -504,8 +558,6 @@ contains
        call interpolator_init (u_interp,    trim(u_wind_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
        call interpolator_init (v_interp,    trim(v_wind_file)//'.nc', lonb, latb, data_out_of_bounds=(/CONSTANT/))
      endif
-
-     call astronomy_init()
 
      module_is_initialized  = .true.
 
@@ -933,7 +985,7 @@ end subroutine calc_hour_angle
 
 !###################################################################
 
-subroutine top_down_newtonian_damping ( Time, lat, ps, p_full, p_half, t, tdt, teq, dt, h_trop, t_grnd, zfull, mask )
+subroutine top_down_newtonian_damping ( Time, lat, lon, ps, p_full, p_half, t, tdt, teq, dt, h_trop, t_grnd, zfull, mask )
 
 !-----------------------------------------------------------------------
 !
@@ -943,7 +995,7 @@ subroutine top_down_newtonian_damping ( Time, lat, ps, p_full, p_half, t, tdt, t
 
 type(time_type), intent(in)         :: Time
 real, intent(in)                    :: dt
-real, intent(in),  dimension(:,:)   :: lat, ps
+real, intent(in),  dimension(:,:)   :: lat, lon, ps
 real, intent(in),  dimension(:,:,:) :: p_full, t, p_half, zfull
 real, intent(out), dimension(:,:,:) :: tdt, teq
 real, intent(out), dimension(:,:)   :: h_trop
@@ -955,17 +1007,17 @@ real, intent(in),  dimension(:,:,:), optional :: mask
           real, dimension(size(t,1),size(t,2)) :: &
      sin_lat, sin_lat_2, cos_lat, cos_lat_2, cos_lat_4, &
      tstr, sigma, the, tfactr, rps, p_norm, sin_sublon_2, &
-     coszen, fracday, t_trop, s, hour_angle, t_surf, tg, t_radbal, p2, olr
+     coszen, fracday, t_trop, s, hour_angle, t_surf, tg, t_radbal, p2, olr, fracsun, half_day_out
 
        real, dimension(size(t,1),size(t,2),size(t,3)) :: tdamp, heights
        real, dimension(size(t,2),size(t,3)) :: tz
-       real :: rrsun
+       real :: rrsun, day_in_s, r_seconds, frac_of_day, frac_of_year, gmt
+       real :: time_since_ae, r_solday, r_total_seconds, r_days, r_dt_rad_avg, dt_rad_radians, ang_out
 
        integer :: k, i, j
        real    :: tcoeff, pref,  dec, orb_dist, true_anomaly, inv_rsun_sqd
-       integer :: days, seconds, dt_integer
+       integer :: days, seconds, dt_integer, year_in_s
        logical :: used
-
 
 
 !-----------------------------------------------------------------------
@@ -988,17 +1040,50 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
     if (calculate_insolation_from_orbit) then
     
-        call update_orbit(dt_integer, dec, orb_dist, true_anomaly,inv_rsun_sqd)
+        if (use_gfdl_astronomy) then
+          ! Seasonal Cycle: Use astronomical parameters to calculate insolation
+          call get_time(Time, seconds, days)
+          call get_time(length_of_year(), year_in_s)
+          day_in_s = length_of_day()
+          r_seconds = real(seconds)
+          r_days=real(days)
+          r_total_seconds=r_seconds+(r_days*86400.)
+          
+          frac_of_day = r_total_seconds / day_in_s
+        
+          if(solday .ge. 0) then
+              r_solday=real(solday)
+              frac_of_year = (r_solday*day_in_s) / year_in_s
+          else
+              frac_of_year = r_total_seconds / year_in_s
+          endif
+        
+          gmt = abs(mod(frac_of_day, 1.0)) * 2.0 * pi
+          
+          time_since_ae = modulo(frac_of_year-equinox_day, 1.0) * 2.0 * pi
+        
+          if(use_time_average_coszen) then        
+             r_dt_rad_avg=real(dt_rad_avg)
+             dt_rad_radians = 2.0*pi !For newt-cooling run we can't easily have a diurnal cycle, so average over 1 day
+             call diurnal_solar(lat, lon, gmt, time_since_ae, coszen, fracsun, rrsun, dt_rad_radians, true_anom=true_anomaly, dec=dec, ang=ang_out)
+          else
+             call diurnal_solar(lat, lon, gmt, time_since_ae, coszen, fracsun, rrsun, true_anom=true_anomaly, dec=dec, ang=ang_out)
+          end if
+        
+          s(:,:) = solar_const * coszen * rrsun
+
+        else
+          call update_orbit(dt_integer, dec, orb_dist, true_anomaly, rrsun)
+          call calc_hour_angle(lat, dec, hour_angle)
+          s(:,:) = (solar_const/pi)*rrsun*(hour_angle*sin_lat*sin(dec) + cos_lat*cos(dec)*sin(hour_angle))
+        endif
         
         if (id_mars_solar_long > 0) used = send_data ( id_mars_solar_long, modulo((180./pi)*(true_anomaly-1.905637),360.), Time)
         if (id_true_anom > 0) used = send_data ( id_true_anom, (180./pi)*(true_anomaly), Time)
         if (id_dec > 0) used = send_data ( id_dec, dec, Time)
-        
-        call calc_hour_angle(lat, dec, hour_angle)
-
-        s(:,:) = (solar_const/pi)*inv_rsun_sqd*(hour_angle*sin_lat*sin(dec) + cos_lat*cos(dec)*sin(hour_angle))
-
         if (id_incoming_sw > 0) used = send_data ( id_incoming_sw, s, Time)
+        if (id_ang > 0) used = send_data ( id_ang, ang_out, Time)
+        if (id_rrsun > 0) used = send_data ( id_rrsun, rrsun, Time)
 
     else
 
