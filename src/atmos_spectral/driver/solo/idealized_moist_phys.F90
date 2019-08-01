@@ -722,7 +722,7 @@ if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, ge
 #endif
 
 if (do_newtonian_cooling_as_rad) then
-   call hs_forcing_init(get_axis_id(), Time, rad_lonb_2d, rad_latb_2d, rad_lat_2d)
+   call hs_forcing_init(get_axis_id(), Time, rad_lonb_2d, rad_latb_2d, rad_lat_2d, rad_lon_2d, dt_real)
 endif
 
 #ifdef SOC_NO_COMPILE
