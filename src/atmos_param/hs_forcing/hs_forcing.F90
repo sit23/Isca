@@ -124,7 +124,7 @@ private
                               u_wind_file, v_wind_file, equilibrium_t_option,&
                               equilibrium_t_file, p_trop, alpha, peri_time, smaxis, albedo, &
                               lapse, h_a, tau_s, orbital_period,         &
-                              heat_capacity, ml_depth, spinup_time, stratosphere_t_option, &
+                              heat_capacity, ml_depth, spinup_time, stratosphere_t_option, P00, &
                               calculate_insolation_from_orbit, del_sol, &
                               pure_rad_equil, pure_rad_equil_s_temp, &
                               use_olr_from_t_surf, frac_of_year_ae

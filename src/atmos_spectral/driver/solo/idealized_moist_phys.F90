@@ -68,6 +68,12 @@ use rayleigh_bottom_drag_mod, only: rayleigh_bottom_drag_init, compute_rayleigh_
     use rrtm_vars
 #endif
 
+#ifdef SOC_NO_COMPILE
+    ! Socrates not included
+#else
+use socrates_interface_mod
+use soc_constants_mod
+#endif
 
 implicit none
 private
@@ -109,6 +115,7 @@ logical :: do_lscale_cond = .true.
 logical :: two_stream_gray = .true.
 logical :: do_rrtm_radiation = .false.
 logical :: do_newtonian_cooling_as_rad = .false.
+logical :: do_socrates_radiation = .false.
 
 !s MiMA uses damping
 logical :: do_damping = .false.
@@ -150,6 +157,7 @@ namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roug
                                       gp_surface, newt_relax_surface, convection_scheme,          &
                                       bucket, init_bucket_depth, init_bucket_depth_land, & !RG Add bucket 
                                       max_bucket_depth_land, robert_bucket, raw_bucket, &
+                                      do_socrates_radiation, &
                                       do_newtonian_cooling_as_rad, do_lscale_cond
 
 
@@ -717,6 +725,16 @@ if (do_newtonian_cooling_as_rad) then
    call hs_forcing_init(get_axis_id(), Time, rad_lonb_2d, rad_latb_2d, rad_lat_2d)
 endif
 
+#ifdef SOC_NO_COMPILE
+    if (do_socrates_radiation) then
+        call error_mesg('idealized_moist_phys','do_socrates_radiation is .true. but compiler flag -D SOC_NO_COMPILE used. Stopping.', FATAL)
+    endif
+#else
+if (do_socrates_radiation) then
+    call socrates_init(is, ie, js, je, num_levels, axes, Time, rad_lat, rad_lonb_2d, rad_latb_2d, Time_step_in)
+endif
+#endif
+
 if(turb) then
    call vert_turb_driver_init (rad_lonb_2d, rad_latb_2d, ie-is+1,je-js+1, &
                  num_levels,get_axis_id(),Time, doing_edt, doing_entrain)
@@ -1026,8 +1044,19 @@ if(do_newtonian_cooling_as_rad) then
                  t_grnd=t_surf(:,:))
 endif
 
+#ifdef SOC_NO_COMPILE
+    if (do_socrates_radiation) then
+        call error_mesg('idealized_moist_phys','do_socrates_radiation is .true. but compiler flag -D SOC_NO_COMPILE used. Stopping.', FATAL)
+    endif
+#else
+if (do_socrates_radiation) then
+       ! Socrates interface
+       
+    call run_socrates(Time, Time+Time_step, rad_lat, rad_lon, tg(:,:,:,previous), grid_tracers(:,:,:,previous,nsphum), t_surf(:,:), p_full(:,:,:,current), &
+                      p_half(:,:,:,current),z_full(:,:,:,current),z_half(:,:,:,current), albedo, dt_tg(:,:,:), net_surf_sw_down(:,:), surf_lw_down(:,:), delta_t)
 
-
+endif
+#endif
 
 if(gp_surface) then
 
@@ -1250,6 +1279,12 @@ if(do_damping) call damping_driver_end
 if(do_newtonian_cooling_as_rad) then
     call hs_forcing_end
 endif
+
+#ifdef SOC_NO_COMPILE
+ !No need to end socrates
+#else
+if(do_socrates_radiation) call run_socrates_end
+#endif
 
 end subroutine idealized_moist_phys_end
 !=================================================================================================================================
