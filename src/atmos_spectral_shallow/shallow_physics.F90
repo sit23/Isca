@@ -74,7 +74,7 @@ integer :: pe
 logical :: root
 
 real, allocatable, dimension(:) :: rad_lat, deg_lat, deg_lon, &
-         sin_lat, cos_lat, wts_lat
+         sin_lat, cos_lat, wts_lat, cos_lon, rad_lon
 
 real, allocatable, dimension(:,:) :: h_eq
 
@@ -106,11 +106,16 @@ real    :: alpha_gv        = 20.0
 logical :: standard_rad_damping = .true.
 real    :: therm_damping_time_global_mean = -1
 
+real    :: h_amp_tidal_locked = 0.
+logical :: showman_polvani_drag = .false.
+logical :: do_perez_becker_damping = .false.
+
 namelist /shallow_physics_nml/ fric_damp_time, therm_damp_time, del_h, h_0, &
                                h_amp, h_lon, h_lat, h_width, &
                                itcz_width, h_itcz, sat_constant, precip_timescale, &
                                evap_prefactor, latent_heat_prefactor, gv_formulation_tr_sat, &
-                               alpha_gv, q_ground_const, standard_rad_damping, therm_damping_time_global_mean
+                               alpha_gv, q_ground_const, standard_rad_damping, therm_damping_time_global_mean, &
+                               h_amp_tidal_locked, showman_polvani_drag, do_perez_becker_damping
 !========================================================================
 
 contains
@@ -163,6 +168,7 @@ allocate ( rad_lat      (js:je) )
 allocate ( deg_lat      (js:je) )
 allocate ( sin_lat      (js:je) )
 allocate ( cos_lat      (js:je) )
+allocate ( cos_lon      (is:ie) )
 allocate ( wts_lat      (js:je) )
 allocate ( deg_lon      (is:ie) )
 allocate ( h_eq   (is:ie,js:je) )
@@ -171,8 +177,10 @@ call get_wts_lat(wts_lat)
 call get_deg_lat(deg_lat)
 call get_deg_lon(deg_lon)
 rad_lat = deg_lat*atan(1.)/45. 
+rad_lon = deg_lon*atan(1.)/45. 
 sin_lat = sin(rad_lat)
 cos_lat = cos(rad_lat)
+cos_lon = cos(rad_lon)
 
 
 do j = js, je
@@ -189,6 +197,18 @@ do j = js, je
   dd = yy*yy
   h_eq(:,j) = h_eq(:,j) + h_itcz*exp(-dd)
 end do 
+
+do j=js, je
+  do i=is, ie
+    if (do_perez_becker_damping) then
+      if(cos_lon(i).ge.0) then
+        h_eq(i, j) = h_eq(i,j) + h_amp_tidal_locked*cos_lat(j)*cos_lon(i)
+      endif
+    else
+      h_eq(i, j) = h_eq(i,j) + h_amp_tidal_locked*cos_lat(j)*cos_lon(i)
+    endif
+  enddo
+enddo
 
 !if(file_exist('INPUT/shallow_physics.res')) then
 !  unit = open_restart_file(file='INPUT/shallow_physics.res',action='read')
@@ -222,21 +242,34 @@ type(phys_type), intent(inout) :: Phys
 real, intent(inout),  dimension(is:ie, js:je), optional :: evap_local, precip_local, dt_tr_local, rh_local, tr_sat_local
 real, intent(inout),  dimension(is:ie, js:je, 2), optional :: tr_local
 
-real, dimension(is:ie, js:je) :: super_sat, q_ground
+real, dimension(is:ie, js:je) :: super_sat, q_ground, q_rad
 real                          :: h_global_mean, h_eq_global_mean
 
-dt_ug = dt_ug - kappa_m*ug(:,:,previous)
-dt_vg = dt_vg - kappa_m*vg(:,:,previous)
+
 if (standard_rad_damping) then
     dt_hg = dt_hg - kappa_t*(hg(:,:,previous) - h_eq)
+    q_rad = -kappa_t*(hg(:,:,previous) - h_eq)
 else
     h_global_mean = area_weighted_global_mean(hg(:,:,previous))
     h_eq_global_mean = area_weighted_global_mean(h_eq)
     ! write(6,*) 'line 1', kappa_t_2, kappa_t, h_global_mean, h_eq_global_mean
     ! write(6,*) 'line 2', maxval((hg(:,:,previous) - h_global_mean)), maxval((h_eq-h_eq_global_mean)), (h_global_mean - h_eq_global_mean)
-    ! write(6,*) 'line 3', minval((hg(:,:,previous) - h_global_mean)), minval((h_eq-h_eq_global_mean)), (h_global_mean - h_eq_global_mean)    
-    dt_hg = dt_hg - kappa_t*((hg(:,:,previous) - h_global_mean) - (h_eq-h_eq_global_mean)) - kappa_t_2*(h_global_mean - h_eq_global_mean)
+    ! write(6,*) 'line 3', minval((hg(:,:,previous) - h_global_mean)), minval((h_eq-h_eq_global_mean)), (h_global_mean - h_eq_global_mean)  
+    q_rad  = - kappa_t*((hg(:,:,previous) - h_global_mean) - (h_eq-h_eq_global_mean)) - kappa_t_2*(h_global_mean - h_eq_global_mean)
+    dt_hg = dt_hg +  q_rad
     !This form of radiative damping damps the perturbations to the height field with kappa_t, and damps the global-mean height field back towards h_eq_global_mean on a timescale of kappa_t_2
+endif
+
+if (showman_polvani_drag) then
+  dt_ug = dt_ug - kappa_m*ug(:,:,previous) 
+  dt_vg = dt_vg - kappa_m*vg(:,:,previous)
+  where(q_rad .gt. 0.)
+    dt_ug = dt_ug -q_rad*ug(:,:,previous)/hg(:,:,previous)
+    dt_vg = dt_vg -q_rad*vg(:,:,previous)/hg(:,:,previous)    
+  endwhere
+else
+  dt_ug = dt_ug - kappa_m*ug(:,:,previous)
+  dt_vg = dt_vg - kappa_m*vg(:,:,previous)
 endif
 
 ! Put tracer updates here to do with evaporation and precipitation
