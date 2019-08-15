@@ -108,7 +108,9 @@ private
    real :: dt_rad_avg = -1
    integer :: solday = -10 !s Day of year to run perpetually if do_seasonal=True and solday>0
    real    :: equinox_day     = 0.0 !s Fraction of year [0,1] where NH autumn equinox occurs (only really useful if calendar has defined months).
-
+   logical :: use_t_surf_floor_in_t_ground = .false.
+   real :: t_surf_floor = 149.
+   real :: insolation_in_surface_prefactor = 0.0
 
    real :: peri_time=0.25, smaxis=1.5e6, albedo=0.3, frac_of_year_ae=0.0
    real :: lapse=6.5, h_a=2, tau_s=5
@@ -134,7 +136,9 @@ private
                               calculate_insolation_from_orbit, use_gfdl_astronomy, del_sol, &
                               pure_rad_equil, pure_rad_equil_s_temp, &
                               use_olr_from_t_surf, frac_of_year_ae, &
-                              use_time_average_coszen, solday, equinox_day
+                              use_time_average_coszen, solday, equinox_day, &
+                              use_t_surf_floor_in_t_ground, t_surf_floor, &
+                              insolation_in_surface_prefactor
 
 !-----------------------------------------------------------------------
 
@@ -316,7 +320,7 @@ contains
    integer :: is, ie, js, je
    real :: rrsun, day_in_s, r_seconds, frac_of_day, frac_of_year, gmt
    real :: time_since_ae, r_solday, r_total_seconds, r_days, r_dt_rad_avg, dt_rad_radians, ang_out
-   integer :: year_in_s
+   integer :: year_in_s, i_tick, j_tick
 
    call get_grid_domain(is, ie, js, je)
    call set_domain(grid_domain)
@@ -357,90 +361,104 @@ contains
    ! ---- spin-up simple heat capacity used in top-down code ----
 
   if (trim(equilibrium_t_option) == 'top_down') then
-  if(file_exist(trim('INPUT/hs_forcing.res.nc'))) then
-     !call nullify_domain()
-     call read_data(trim('INPUT/hs_forcing.res.nc'), 'tg_prev', tg_prev, grid_domain)
-	 print *, 'READING PREVIOUS HEAT CAPACITY DATA'
-  else
-	print *, 'SPINNING UP HEAT CAPACITY'
-	! spin up the surface temps with heat capacity
-	print *, 'Depth:', ml_depth
-  	tg = 250        ! starting temperature for surface
-	spin_count = 0
-	step_days = 1
-	
-    sin_lat  (:,:) = sin(lat(:,:))
-    sin_lat_2(:,:) = sin_lat(:,:)*sin_lat(:,:)
-	
-	do
-		tg_prev = tg
-		dt_integer = dt_integer + 86400*step_days		! step by a day at a time
-		spin_count = spin_count + 1
 
-        if (calculate_insolation_from_orbit) then
-          if (use_gfdl_astronomy) then
-            ! Seasonal Cycle: Use astronomical parameters to calculate insolation
-            call get_time(length_of_year(), year_in_s)
-            day_in_s = length_of_day()
-            r_days=real(step_days)
-            r_total_seconds=r_days*86400. !For this spinup phase the stepping is done in integer numbers of days
-            
-            frac_of_day = r_total_seconds / day_in_s
-          
-            if(solday .ge. 0) then
-                r_solday=real(solday)
-                frac_of_year = (r_solday*day_in_s) / year_in_s
+    if (trim(equilibrium_t_option) == 'top_down' .and. ((.not. pure_rad_equil) .and. stratosphere_t_option=='pure_rad_equil')) then
+        call error_mesg ('hs_forcing','Using stratosphere-t-option=pure_rad_equil will override top-down calculation. Change stratosphere-t-option.', FATAL)
+    endif
+
+    if(file_exist(trim('INPUT/hs_forcing.res.nc'))) then
+        !call nullify_domain()
+        call read_data(trim('INPUT/hs_forcing.res.nc'), 'tg_prev', tg_prev, grid_domain)
+        print *, 'READING PREVIOUS HEAT CAPACITY DATA'
+    else
+        print *, 'SPINNING UP HEAT CAPACITY'
+        ! spin up the surface temps with heat capacity
+        print *, 'Depth:', ml_depth
+        tg = 250        ! starting temperature for surface
+        spin_count = 0
+        step_days = 1
+        
+        sin_lat  (:,:) = sin(lat(:,:))
+        sin_lat_2(:,:) = sin_lat(:,:)*sin_lat(:,:)
+        
+        do
+            tg_prev = tg
+            dt_integer = dt_integer + 86400*step_days		! step by a day at a time
+            spin_count = spin_count + 1
+
+            if (calculate_insolation_from_orbit) then
+                if (use_gfdl_astronomy) then
+                    ! Seasonal Cycle: Use astronomical parameters to calculate insolation
+                    call get_time(length_of_year(), year_in_s)
+                    day_in_s = length_of_day()
+                    r_days=real(step_days)
+                    r_total_seconds=r_days*86400. !For this spinup phase the stepping is done in integer numbers of days
+                    
+                    frac_of_day = r_total_seconds / day_in_s
+                
+                    if(solday .ge. 0) then
+                        r_solday=real(solday)
+                        frac_of_year = (r_solday*day_in_s) / year_in_s
+                    else
+                        frac_of_year = r_total_seconds / year_in_s
+                    endif
+                
+                    gmt = abs(mod(frac_of_day, 1.0)) * 2.0 * pi
+                    
+                    time_since_ae = modulo(frac_of_year-equinox_day, 1.0) * 2.0 * pi
+                
+                    if(use_time_average_coszen) then        
+                        r_dt_rad_avg=real(dt_rad_avg)
+                        dt_rad_radians = 2.0*pi !For newt-cooling run we can't easily have a diurnal cycle, so average over 1 day
+                        call diurnal_solar(lat, lon, gmt, time_since_ae, coszen, fracsun, rrsun, dt_rad_radians, true_anom=true_anomaly, dec=dec, ang=ang_out)
+                    else
+                        call diurnal_solar(lat, lon, gmt, time_since_ae, coszen, fracsun, rrsun, true_anom=true_anomaly, dec=dec, ang=ang_out)
+                    end if
+                
+                    s(:,:) = solar_const * coszen * rrsun
+        
+                else
+                    call update_orbit(dt_integer, dec, orb_dist, true_anomaly,inv_rsun_sqd)
+                    call calc_hour_angle(lat, dec, hour_angle)
+                    s(:,:) = (solar_const/pi)*inv_rsun_sqd*(hour_angle*sin(lat)*sin(dec) + cos(lat)*cos(dec)*sin(hour_angle))
+                endif
+
             else
-                frac_of_year = r_total_seconds / year_in_s
+                p2     = (1. - 3.*sin_lat_2)/4.    
+                s(:,:) = 0.25 * solar_const * (1.0 + del_sol*p2 + del_sw * sin_lat)
+            endif            
+            
+            if (pure_rad_equil_s_temp) then
+                olr = (1-albedo)*s(:,:)
+                t_surf = (olr * (tau_s+1)/(2.*stefan))**0.25
+            else 
+                t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
+                t_trop(:,:) = t_radbal(:,:)/(2**0.25)
+
+                h_trop = 1.0/(16*lapse)*(1.3863*t_trop + sqrt((1.3863*t_trop)**2 + 32*lapse*tau_s*h_a*t_trop))
+                t_surf = t_trop + h_trop*lapse
             endif
-          
-            gmt = abs(mod(frac_of_day, 1.0)) * 2.0 * pi
             
-            time_since_ae = modulo(frac_of_year-equinox_day, 1.0) * 2.0 * pi
-          
-            if(use_time_average_coszen) then        
-               r_dt_rad_avg=real(dt_rad_avg)
-               dt_rad_radians = 2.0*pi !For newt-cooling run we can't easily have a diurnal cycle, so average over 1 day
-               call diurnal_solar(lat, lon, gmt, time_since_ae, coszen, fracsun, rrsun, dt_rad_radians, true_anom=true_anomaly, dec=dec, ang=ang_out)
-            else
-               call diurnal_solar(lat, lon, gmt, time_since_ae, coszen, fracsun, rrsun, true_anom=true_anomaly, dec=dec, ang=ang_out)
-            end if
-          
-            s(:,:) = solar_const * coszen * rrsun
-  
-          else
-            call update_orbit(dt_integer, dec, orb_dist, true_anomaly,inv_rsun_sqd)
-            call calc_hour_angle(lat, dec, hour_angle)
-            s(:,:) = (solar_const/pi)*inv_rsun_sqd*(hour_angle*sin(lat)*sin(dec) + cos(lat)*cos(dec)*sin(hour_angle))
-          endif
+            tg(:,:) =  stefan*86400*step_days/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4 + (insolation_in_surface_prefactor*s(:,:)*(1-albedo))) + tg_prev
 
-        else
-            p2     = (1. - 3.*sin_lat_2)/4.    
-            s(:,:) = 0.25 * solar_const * (1.0 + del_sol*p2 + del_sw * sin_lat)
-        endif            
-        
-        if (pure_rad_equil_s_temp) then
-            olr = (1-albedo)*s(:,:)
-            t_surf = (olr * (tau_s+1)/(2.*stefan))**0.25
-        else 
-            t_radbal = ((1-albedo)*s(:,:)/stefan)**0.25
-            t_trop(:,:) = t_radbal(:,:)/(2**0.25)
+            if (use_t_surf_floor_in_t_ground) then
+                do i_tick = 1, size(tg,1)
+                    do j_tick = 1, size(tg,2)
+                        tg(i_tick, j_tick) = max(tg(i_tick, j_tick), t_surf_floor)
+                    enddo
+                enddo
+            endif
+    
 
-            h_trop = 1.0/(16*lapse)*(1.3863*t_trop + sqrt((1.3863*t_trop)**2 + 32*lapse*tau_s*h_a*t_trop))
-            t_surf = t_trop + h_trop*lapse
-        endif
-        
-		tg(:,:) =  stefan*86400*step_days/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
+            if (spin_count >= spinup_time) then
+                print *, 'SPINUP COMPLETE AFTER ', spin_count, 'ITERATIONS'
+                print *, maxval(tg), minval(tg)
+                exit
+            endif
 
-		if (spin_count >= spinup_time) then
-      print *, 'SPINUP COMPLETE AFTER ', spin_count, 'ITERATIONS'
-      print *, maxval(t_surf), minval(t_surf)
-			exit
-		endif
+        enddo
 
-	 enddo
-
-  endif
+    endif
   endif
 
 !     ----- convert local heating variables from degrees to radians -----
@@ -1017,7 +1035,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
 
        integer :: k, i, j
        real    :: tcoeff, pref,  dec, orb_dist, true_anomaly, inv_rsun_sqd
-       integer :: days, seconds, dt_integer, year_in_s
+       integer :: days, seconds, dt_integer, year_in_s, i_tick, j_tick
        logical :: used
 
 
@@ -1098,6 +1116,13 @@ real, intent(in),  dimension(:,:,:), optional :: mask
     if (pure_rad_equil_s_temp) then
         t_surf = (olr * (tau_s+1)/(2.*stefan))**0.25
         tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
+        if (use_t_surf_floor_in_t_ground) then
+            do i_tick = 1, size(tg,1)
+                do j_tick = 1, size(tg,2)
+                    tg(i_tick, j_tick) = max(tg(i_tick, j_tick), t_surf_floor)
+                enddo
+            enddo
+        endif        
         tg_prev = tg
     else
         ! --- compute tropopause height (h_trop) and apply heat capacity
@@ -1105,12 +1130,19 @@ real, intent(in),  dimension(:,:,:), optional :: mask
         h_trop = 1.0/(16*lapse)*(1.3863*t_trop + sqrt((1.3863*t_trop)**2 + 32*lapse*tau_s*h_a*t_trop))
 
         t_surf = t_trop(:,:) + h_trop*lapse
-        tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4) + tg_prev
+        tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4 + (insolation_in_surface_prefactor*s(:,:)*(1-albedo))) + tg_prev
+        if (use_t_surf_floor_in_t_ground) then
+            do i_tick = 1, size(tg,1)
+                do j_tick = 1, size(tg,2)
+                    tg(i_tick, j_tick) = max(tg(i_tick, j_tick), t_surf_floor)
+                enddo
+            enddo
+        endif        
         tg_prev = tg
         t_trop(:,:) = tg(:,:) - h_trop*lapse
     endif
 
-        if (use_olr_from_t_surf) olr = 2.*stefan * (tg(:,:)**4.) * (1./(tau_s +1))
+    if (use_olr_from_t_surf) olr = 2.*stefan * (tg(:,:)**4.) * (1./(tau_s +1))
 
 
 	!----- stratosphere temperature ------------
