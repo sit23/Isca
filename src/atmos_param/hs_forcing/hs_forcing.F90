@@ -439,7 +439,7 @@ contains
                 t_surf = t_trop + h_trop*lapse
             endif
             
-            tg(:,:) =  stefan*86400*step_days/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4 + (insolation_in_surface_prefactor*s(:,:)*(1-albedo))) + tg_prev
+            tg(:,:) =  86400*step_days/(ml_depth*heat_capacity)*((t_surf**4 - tg_prev**4)*stefan + (insolation_in_surface_prefactor*s(:,:)*(1-albedo))) + tg_prev
 
             if (use_t_surf_floor_in_t_ground) then
                 do i_tick = 1, size(tg,1)
@@ -1130,7 +1130,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
         h_trop = 1.0/(16*lapse)*(1.3863*t_trop + sqrt((1.3863*t_trop)**2 + 32*lapse*tau_s*h_a*t_trop))
 
         t_surf = t_trop(:,:) + h_trop*lapse
-        tg(:,:) = stefan*dt/(ml_depth*heat_capacity)*(t_surf**4 - tg_prev**4 + (insolation_in_surface_prefactor*s(:,:)*(1-albedo))) + tg_prev
+        tg(:,:) = dt/(ml_depth*heat_capacity)*((t_surf**4 - tg_prev**4)*stefan + (insolation_in_surface_prefactor*s(:,:)*(1-albedo))) + tg_prev
         if (use_t_surf_floor_in_t_ground) then
             do i_tick = 1, size(tg,1)
                 do j_tick = 1, size(tg,2)
