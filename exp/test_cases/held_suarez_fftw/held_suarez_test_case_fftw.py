@@ -2,7 +2,7 @@ import numpy as np
 
 from isca import DryCodeBaseFFTW, DiagTable, Experiment, Namelist, GFDL_BASE
 
-NCORES = 16
+NCORES = 2
 RESOLUTION = 'T42', 25  # T42 horizontal resolution, 25 levels in pressure
 
 # a CodeBase can be a directory on the computer,
@@ -107,5 +107,5 @@ exp.set_resolution(*RESOLUTION)
 #Lets do a run!
 if __name__ == '__main__':
     exp.run(1, num_cores=NCORES, use_restart=False)
-    for i in range(2, 13):
-        exp.run(i, num_cores=NCORES)  # use the restart i-1 by default
+#    for i in range(2, 13):
+#        exp.run(i, num_cores=NCORES)  # use the restart i-1 by default
