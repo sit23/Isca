@@ -96,6 +96,7 @@ class CodeBase(Logger):
 
         # read path names from the default file
         self.path_names = []
+        self.path_names_to_append = [] #Adding option so that individual path names can be appended to existing lists
         self.compile_flags = []  # users can append to this to add additional compiler options
 
     @property
@@ -236,6 +237,7 @@ class CodeBase(Logger):
         # get path_names from the directory
         if not self.path_names:
             self.path_names = self.read_path_names(P(self.srcdir, 'extra', 'model', self.name, 'path_names'))
+        self.path_names.extend(self.path_names_to_append)
         self.write_path_names(self.path_names)
         path_names_str = P(self.builddir, 'path_names')
 
@@ -258,7 +260,12 @@ class CodeBase(Logger):
 
         self.log.info('Compilation complete.')
 
-
+    def enable_fftw3(self):
+        self.log.info('Going to use the FFTW3 options to run the spectral core')
+        self.compile_flags.append('-DFFTW3')
+        self.path_names_to_append.append('shared/fft/fftw.F90')    
+        self.executable_name = self.executable_name.strip('.x')+'_fftw.x'     
+        self.builddir = P(self.workdir, 'build', self.executable_name.split('.')[0])
 
 class IscaCodeBase(CodeBase):
     """The Full Isca Stack.
@@ -317,12 +324,12 @@ class SocratesCodeBase(CodeBase):
             elif GFDL_SOC is None:
                 error_mesg = 'Socrates code is required for SocratesCodebase, but source code is not provided in location GFDL_SOC='+ str(GFDL_SOC)
                 self.log.error(error_mesg)
-                raise OSError(error_mesg)
+                raise OSError(error_mesg)       
 
     def __init__(self, *args, **kwargs):
         super(SocratesCodeBase, self).__init__(*args, **kwargs)
         self.disable_rrtm()
-        self.simlink_to_soc_code()
+        self.simlink_to_soc_code() 
 
 class GreyCodeBase(CodeBase):
     """The Frierson model.
