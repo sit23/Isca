@@ -152,8 +152,9 @@ namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roug
                                       land_roughness_prefactor,               &
                                       gp_surface, convection_scheme,          &
                                       bucket, init_bucket_depth, init_bucket_depth_land, & !RG Add bucket 
-                                      max_bucket_depth_land, robert_bucket, raw_bucket, do_lscale_cond, &
-                                      do_socrates_radiation
+                                      max_bucket_depth_land, robert_bucket, raw_bucket,  &
+                                      do_lscale_cond, do_socrates_radiation
+
 
 integer, parameter :: num_time_levels = 2 !RG Add bucket - number of time levels added to allow timestepping in this module
 real, allocatable, dimension(:,:,:)   :: bucket_depth      ! RG Add bucket
