@@ -70,13 +70,14 @@ module qe_moist_convection_mod
   real    :: val_inc = 0.01
   real    :: val_min = -1.  ! calculated in get_lcl_temp_table_size
   real    :: val_max = 1.   ! calculated in get_lcl_temp_table_size
+  real    :: lcl_temp_precision = 1.e-7
 
   real, parameter  :: small = 1.e-10, &  ! to avoid division by 0 in dry limit
                       pref  = 1.e5
 
   real, allocatable, dimension(:) :: lcl_temp_table
 
-  namelist /qe_moist_convection_nml/  tau_bm, rhbm, Tmin, Tmax, val_inc
+  namelist /qe_moist_convection_nml/  tau_bm, rhbm, Tmin, Tmax, val_inc, lcl_temp_precision
 
   !------------------------------------------------------------------
   !           Description of namelist variables
@@ -1086,7 +1087,7 @@ contains
   real function lcl_temp(value, lcl_temp_guess)
     
     real, intent(in)      :: value, lcl_temp_guess
-    real, parameter       :: precision = 1.e-7
+    real                  :: precision
     integer, parameter    :: max_iter = 100
     real                  :: T, dT
     integer               :: iter 
@@ -1132,6 +1133,7 @@ contains
     ! computed by Newton iteration, up to a given precision.
 
     ! Initialization
+    precision = lcl_temp_precision
     T    = lcl_temp_guess
     dT   = precision + 1.
     iter = 0
