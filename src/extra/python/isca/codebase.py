@@ -98,6 +98,7 @@ class CodeBase(Logger):
         self.path_names = []
         self.path_names_to_append = [] #Adding option so that individual path names can be appended to existing lists
         self.compile_flags = []  # users can append to this to add additional compiler options
+        self.precision_compile_flags = ['-DOVERLOAD_C8'] #Default is to use double precision. User can change to single precision using cb.use_single_precision() before compile step 
 
     @property
     def code_is_available(self):
@@ -232,6 +233,7 @@ class CodeBase(Logger):
         #     compile_flags.append('-O%d' % optimisation)
 
         compile_flags.extend(self.compile_flags)
+        compile_flags.extend(self.precision_compile_flags)
         compile_flags_str = ' '.join(compile_flags)
 
         # get path_names from the directory
@@ -266,6 +268,15 @@ class CodeBase(Logger):
         self.path_names_to_append.append('shared/fft/fftw.F90')    
         self.executable_name = self.executable_name.strip('.x')+'_fftw.x'     
         self.builddir = P(self.workdir, 'build', self.executable_name.split('.')[0])
+
+    def use_single_precision(self):
+        self.log.info('Going to use single_precision')
+        self.precision_compile_flags = ['-DOVERLOAD_C4', '-DOVERLOAD_R4']
+        self.executable_name = self.executable_name.strip('.x')+'_single.x'
+        self.builddir = P(self.workdir, 'build', self.executable_name.split('.')[0])
+
+
+
 
 class IscaCodeBase(CodeBase):
     """The Full Isca Stack.
