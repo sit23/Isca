@@ -228,9 +228,9 @@ write(stdlog_unit, socrates_rad_nml)
     
     !Need to actually give bins arrays values    
     
-    id_soc_bins_lw = diag_axis_init('soc_bins_lw', soc_bins_lw, 'cm^-1', 'n', 'socrates lw spectral bin centers', set_name='socrates_lw_bins')
+    id_soc_bins_lw = diag_axis_init('soc_bins_lw', real(soc_bins_lw), 'cm^-1', 'n', 'socrates lw spectral bin centers', set_name='socrates_lw_bins')
 
-    id_soc_bins_sw = diag_axis_init('soc_bins_sw', soc_bins_sw, 'cm^-1', 'n', 'socrates sw spectral bin centers', set_name='socrates_sw_bins')
+    id_soc_bins_sw = diag_axis_init('soc_bins_sw', real(soc_bins_sw), 'cm^-1', 'n', 'socrates sw spectral bin centers', set_name='socrates_sw_bins')
 
     ! Register diagostic fields
     id_soc_spectral_olr = &
@@ -525,16 +525,16 @@ write(stdlog_unit, socrates_rad_nml)
     ! Hi-res output
     INTEGER, PARAMETER :: out_unit=20
     CHARACTER(len=200) :: file_name
-    REAL :: soc_spectral_olr(n_profile, size(outputted_soc_spectral_olr,3))
+    REAL(r_def) :: soc_spectral_olr(n_profile, size(outputted_soc_spectral_olr,3))
 
     ! Arrays to send to Socrates
-    real, dimension(n_profile, n_layer) :: input_p, input_t, input_mixing_ratio, &
+    real(r_def), dimension(n_profile, n_layer) :: input_p, input_t, input_mixing_ratio, &
          input_d_mass, input_density, input_layer_heat_capacity, &
          soc_heating_rate, input_o3_mixing_ratio, &
           input_co2_mixing_ratio,z_full_reshaped
-    real, dimension(n_profile, 0:n_layer) :: input_p_level, input_t_level, soc_flux_direct, &
+    real(r_def), dimension(n_profile, 0:n_layer) :: input_p_level, input_t_level, soc_flux_direct, &
          soc_flux_down, soc_flux_up, z_half_reshaped
-    real, dimension(n_profile) :: input_t_surf, input_cos_zenith_angle, input_solar_irrad, &
+    real(r_def), dimension(n_profile) :: input_t_surf, input_cos_zenith_angle, input_solar_irrad, &
          input_orog_corr, input_planet_albedo
 
 
@@ -763,9 +763,10 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
 
     integer(i_def) :: n_profile, n_layer
 
-    real(r_def), dimension(size(temp_in,1), size(temp_in,2)) :: t_surf_for_soc, rad_lat_soc, rad_lon_soc, albedo_soc
+    real(r_def), dimension(size(temp_in,1), size(temp_in,2)) :: t_surf_for_soc, rad_lat_soc, rad_lon_soc, albedo_soc, coszen_soc
     real(r_def), dimension(size(temp_in,1), size(temp_in,2), size(temp_in,3)) :: tg_tmp_soc, q_soc, ozone_soc, co2_soc, p_full_soc, output_heating_rate_sw, output_heating_rate_lw, output_heating_rate_total, z_full_soc
     real(r_def), dimension(size(temp_in,1), size(temp_in,2), size(temp_in,3)+1) :: p_half_soc, t_half_out, z_half_soc,output_soc_flux_sw_down, output_soc_flux_sw_up, output_soc_flux_lw_down, output_soc_flux_lw_up
+    real(r_def) :: rrsun_soc
 
     logical :: soc_lw_mode, used
     integer :: seconds, days, year_in_s
@@ -883,13 +884,13 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
              
             ! Send diagnostics
             if(id_soc_tdt_lw > 0) then
-                used = send_data ( id_soc_tdt_lw, output_heating_rate_lw, Time_diag)
+                used = send_data ( id_soc_tdt_lw, real(output_heating_rate_lw), Time_diag)
             endif
             if(id_soc_tdt_sw > 0) then
-                used = send_data ( id_soc_tdt_sw, output_heating_rate_sw, Time_diag)
+                used = send_data ( id_soc_tdt_sw, real(output_heating_rate_sw), Time_diag)
             endif
             if(id_soc_tdt_rad > 0) then
-                used = send_data ( id_soc_tdt_rad, output_heating_rate_total, Time_diag)
+                used = send_data ( id_soc_tdt_rad, real(output_heating_rate_total), Time_diag)
             endif 
             if(id_soc_surf_flux_lw > 0) then
                 used = send_data ( id_soc_surf_flux_lw, surf_lw_net, Time_diag)
@@ -929,7 +930,7 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
                 used = send_data ( id_soc_ozone, ozone_in, Time_diag)
             endif
             if(id_soc_spectral_olr > 0) then 
-                used = send_data ( id_soc_spectral_olr, outputted_soc_spectral_olr, Time_diag)
+                used = send_data ( id_soc_spectral_olr, real(outputted_soc_spectral_olr), Time_diag)
             endif             
 
             if (id_mars_solar_long > 0) then
@@ -1062,9 +1063,11 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
        albedo_soc = REAL(albedo_in, kind(r_def))
        z_full_soc = REAL(z_full_in, kind(r_def))
        z_half_soc = REAL(z_half_in, kind(r_def))
+       coszen_soc = REAL(coszen, kind(r_def))
+       rrsun_soc  = REAL(rrsun, kind(r_def))
 
        CALL socrates_interface(Time, rad_lat_soc, rad_lon_soc, soc_lw_mode,  &
-            tg_tmp_soc, q_soc, ozone_soc, co2_soc, t_surf_for_soc, p_full_soc, p_half_soc, z_full_soc, z_half_soc, albedo_soc, coszen, rrsun, n_profile, n_layer,     &
+            tg_tmp_soc, q_soc, ozone_soc, co2_soc, t_surf_for_soc, p_full_soc, p_half_soc, z_full_soc, z_half_soc, albedo_soc, coszen_soc, rrsun_soc, n_profile, n_layer,     &
             output_heating_rate_lw, output_soc_flux_lw_down, output_soc_flux_lw_up, output_soc_spectral_olr = outputted_soc_spectral_olr, t_half_level_out = t_half_out)
 
        tg_tmp_soc = tg_tmp_soc + output_heating_rate_lw*delta_t !Output heating rate in K/s, so is a temperature tendency
@@ -1079,7 +1082,7 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
        ! Retrieve output_heating_rate, and downward surface SW and LW fluxes
        soc_lw_mode = .FALSE.
        CALL socrates_interface(Time, rad_lat_soc, rad_lon_soc, soc_lw_mode,  &
-            tg_tmp_soc, q_soc, ozone_soc, co2_soc, t_surf_for_soc, p_full_soc, p_half_soc, z_full_soc, z_half_soc, albedo_soc, coszen, rrsun, n_profile, n_layer,     &
+            tg_tmp_soc, q_soc, ozone_soc, co2_soc, t_surf_for_soc, p_full_soc, p_half_soc, z_full_soc, z_half_soc, albedo_soc, coszen_soc, rrsun_soc, n_profile, n_layer,     &
             output_heating_rate_sw, output_soc_flux_sw_down, output_soc_flux_sw_up)
 
        tg_tmp_soc = tg_tmp_soc + output_heating_rate_sw*delta_t !Output heating rate in K/s, so is a temperature tendency
@@ -1169,13 +1172,13 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
 
         ! Send diagnostics
         if(id_soc_tdt_lw > 0) then
-            used = send_data ( id_soc_tdt_lw, output_heating_rate_lw, Time_diag)
+            used = send_data ( id_soc_tdt_lw, real(output_heating_rate_lw), Time_diag)
         endif
         if(id_soc_tdt_sw > 0) then
-            used = send_data ( id_soc_tdt_sw, output_heating_rate_sw, Time_diag)
+            used = send_data ( id_soc_tdt_sw, real(output_heating_rate_sw), Time_diag)
         endif
         if(id_soc_tdt_rad > 0) then
-            used = send_data ( id_soc_tdt_rad, output_heating_rate_total, Time_diag)
+            used = send_data ( id_soc_tdt_rad, real(output_heating_rate_total), Time_diag)
         endif 
         if(id_soc_surf_flux_lw > 0) then
             used = send_data ( id_soc_surf_flux_lw, surf_lw_net, Time_diag)
@@ -1214,7 +1217,7 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
             used = send_data ( id_soc_ozone, ozone_in, Time_diag)
         endif 
         if(id_soc_spectral_olr > 0) then 
-            used = send_data ( id_soc_spectral_olr, outputted_soc_spectral_olr, Time_diag)
+            used = send_data ( id_soc_spectral_olr, real(outputted_soc_spectral_olr), Time_diag)
         endif         
         if (id_mars_solar_long > 0) then
             used = send_data ( id_mars_solar_long, mars_solar_long, Time_diag)
