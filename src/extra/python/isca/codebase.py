@@ -337,6 +337,12 @@ class SocratesCodeBase(CodeBase):
                 self.log.error(error_mesg)
                 raise OSError(error_mesg)       
 
+    def run_socrates_single_precision(self):
+        self.compile_flags.append('-DSOC_SINGLE_PRECISION')
+        self.log.info('Socrates running with single precision')
+        self.executable_name = self.executable_name.strip('.x')+'_soc_single.x'
+        self.builddir = P(self.workdir, 'build', self.executable_name.split('.')[0])                
+
     def __init__(self, *args, **kwargs):
         super(SocratesCodeBase, self).__init__(*args, **kwargs)
         self.disable_rrtm()
