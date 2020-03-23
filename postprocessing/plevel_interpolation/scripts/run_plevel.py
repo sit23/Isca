@@ -7,11 +7,13 @@ import pdb
 import subprocess
 
 start_time=time.time()
-base_dir='/scratch/sit204/data_isca/'
-exp_name_list = ['project_3_omega_normal']
+base_dir=os.environ['GFDL_DATA']
+#exp_name_list = ['soc_ga3_files_smooth_topo_fftw_mk1_fresh_compile_long', 'soc_ga3_files_smooth_topo_old_fft_mk2_long']
+#exp_name_list = [f'soc_ga3_do_simple_false_cmip_o3_bucket_perturbed_ens_{f}' for f in range(100)]
+exp_name_list = ['soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb', 'soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_eur_anom', 'soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_asia_anom',]
 avg_or_daily_list=['monthly']
-start_file=13
-end_file=24
+start_file=361
+end_file=540
 nfiles=(end_file-start_file)+1
 
 do_extra_averaging=False #If true, then 6hourly data is averaged into daily data using cdo
@@ -44,7 +46,7 @@ if level_set=='standard':
     var_names['timestep']='-a'
     var_names['6hourly']='ucomp slp height vor t_surf vcomp omega'
     var_names['daily']='ucomp slp height vor t_surf vcomp omega temp'
-    file_suffix='_interp_new_height_temp'
+    file_suffix='_interp_new_height_temp_not_below_ground'
 
 elif level_set=='ssw_diagnostics':
     plevs['6hourly']=' -p "1000 10000"'
@@ -64,8 +66,17 @@ for exp_name in exp_name_list:
         for avg_or_daily in avg_or_daily_list:
             print(n+start_file)
 
-            nc_file_in = base_dir+'/'+exp_name+'/run%04d'%(n+start_file)+'/atmos_'+avg_or_daily+'.nc'
-            nc_file_out = out_dir+'/'+exp_name+'/run%04d'%(n+start_file)+'/atmos_'+avg_or_daily+file_suffix+'.nc'
+            number_prefix=''
+
+            if n+start_file < 1000:
+                number_prefix='0'
+            if n+start_file < 100:
+                number_prefix='00'
+            if n+start_file < 10:
+                number_prefix = '000'
+
+            nc_file_in = base_dir+'/'+exp_name+'/run'+number_prefix+str(n+start_file)+'/atmos_'+avg_or_daily+'.nc'
+            nc_file_out = out_dir+'/'+exp_name+'/run'+number_prefix+str(n+start_file)+'/atmos_'+avg_or_daily+file_suffix+'.nc'
 
             if not os.path.isfile(nc_file_out):
                 plevel_call(nc_file_in,nc_file_out, var_names = var_names[avg_or_daily], p_levels = plevs[avg_or_daily], mask_below_surface_option=mask_below_surface_set)
@@ -80,7 +91,7 @@ for exp_name in exp_name_list:
 #                two_daily_average(nc_file_out, nc_file_out_two_daily, avg_or_daily)
 
 if group_months_into_one_file:
-    avg_or_daily_list_together=['daily']
+    avg_or_daily_list_together=avg_or_daily_list
 
 
     for exp_name in exp_name_list:
