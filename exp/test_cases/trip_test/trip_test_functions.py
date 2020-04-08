@@ -22,25 +22,29 @@ def get_nml_diag(test_case_name):
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/axisymmetric/'))
         from axisymmetric_test_case import exp as exp_temp
         input_files = exp_temp.inputfiles   
-        nml_out = exp_temp.namelist             
+        nml_out = exp_temp.namelist        
+        test_case_uses_socrates_codebase = False     
 
     if 'bucket_model' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/bucket_hydrology/'))
         from bucket_model_test_case import exp as exp_temp
         input_files = exp_temp.inputfiles
-        nml_out = exp_temp.namelist        
+        nml_out = exp_temp.namelist   
+        test_case_uses_socrates_codebase = False             
              
     if 'frierson' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/frierson/'))
         from frierson_test_case import exp as exp_temp
         input_files = exp_temp.inputfiles
-        nml_out = exp_temp.namelist        
+        nml_out = exp_temp.namelist     
+        test_case_uses_socrates_codebase = False           
         
     if 'giant_planet' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/giant_planet/'))
         from giant_planet_test_case import exp as exp_temp
         input_files = exp_temp.inputfiles   
         nml_out = exp_temp.namelist
+        test_case_uses_socrates_codebase = False        
         
         #Make giant planet test case a lower resolution so that it runs in a finite time!
         nml_out['spectral_dynamics_nml']['num_fourier']=42
@@ -54,49 +58,57 @@ def get_nml_diag(test_case_name):
         from held_suarez_test_case import exp as exp_temp
         input_files = exp_temp.inputfiles
         nml_out = exp_temp.namelist
+        test_case_uses_socrates_codebase = False        
         
     if 'MiMA' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/MiMA/'))
         from MiMA_test_case import exp as exp_temp
         input_files = exp_temp.inputfiles
-        nml_out = exp_temp.namelist        
+        nml_out = exp_temp.namelist     
+        test_case_uses_socrates_codebase = False           
         
     if 'realistic_continents_fixed_sst' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/realistic_continents/'))
         from realistic_continents_fixed_sst_test_case import exp as exp_temp
         input_files = exp_temp.inputfiles   
-        nml_out = exp_temp.namelist        
+        nml_out = exp_temp.namelist 
+        test_case_uses_socrates_codebase = False               
 
     if 'realistic_continents_variable_qflux' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/realistic_continents/'))
         from realistic_continents_variable_qflux_test_case import exp as exp_temp
         input_files = exp_temp.inputfiles
-        nml_out = exp_temp.namelist        
+        nml_out = exp_temp.namelist     
+        test_case_uses_socrates_codebase = False           
 
     if 'socrates_aquaplanet' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/socrates_test/'))
         from socrates_aquaplanet import exp as exp_temp
         input_files = exp_temp.inputfiles
-        nml_out = exp_temp.namelist       
+        nml_out = exp_temp.namelist     
+        test_case_uses_socrates_codebase = True          
 
     if 'top_down_test' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/top_down_test/'))
         from top_down_test import namelist as nml_out
         input_files = []
+        test_case_uses_socrates_codebase = False        
 
     if 'variable_co2_grey' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/variable_co2_concentration/'))
         from variable_co2_grey import exp as exp_temp
         input_files = exp_temp.inputfiles      
-        nml_out = exp_temp.namelist                        
+        nml_out = exp_temp.namelist             
+        test_case_uses_socrates_codebase = False                   
 
     if 'variable_co2_rrtm' in test_case_name:
         sys.path.insert(0, os.path.join(GFDL_BASE, 'exp/test_cases/variable_co2_concentration/'))
         from variable_co2_rrtm import exp as exp_temp
         input_files = exp_temp.inputfiles
-        nml_out = exp_temp.namelist                   
+        nml_out = exp_temp.namelist      
+        test_case_uses_socrates_codebase = False                     
                  
-    return nml_out, input_files  
+    return nml_out, input_files, test_case_uses_socrates_codebase
 
 def list_all_test_cases_implemented_in_trip_test():
 
@@ -146,7 +158,7 @@ def conduct_comparison_on_test_case(base_commit, later_commit, test_case_name, r
     in the diag file. If there are any differences in the output variables then the test classed as a failure."""
 
     data_dir_dict = {}
-    nml_use, input_files_use  = get_nml_diag(test_case_name)
+    nml_use, input_files_use, use_soc_cb  = get_nml_diag(test_case_name)
     diag_use = define_simple_diag_table()
     test_pass = True
     run_complete = True
@@ -154,7 +166,7 @@ def conduct_comparison_on_test_case(base_commit, later_commit, test_case_name, r
     #Do the run for each of the commits in turn
     for s in [base_commit, later_commit]:
         exp_name = test_case_name+'_trip_test_21_'+s
-        if 'socrates' in test_case_name:
+        if use_soc_cb:
             cb = SocratesCodeBase(repo=repo_to_use, commit=s)
         else:
             cb = IscaCodeBase(repo=repo_to_use, commit=s)
