@@ -81,7 +81,7 @@ use        tracer_type_mod, only: tracer_type, tracer_type_version, tracer_type_
 use every_step_diagnostics_mod, only: every_step_diagnostics_init, every_step_diagnostics, every_step_diagnostics_end
 
 use        mpp_domains_mod, only: mpp_global_field
-use        mpp_mod,         only: NULL_PE, mpp_transmit, mpp_sync, mpp_send, mpp_broadcast, mpp_recv
+use        mpp_mod,         only: NULL_PE, mpp_transmit, mpp_sync, mpp_send, mpp_broadcast, mpp_recv, mpp_max
 
 use       polvani_2004_mod, only: polvani_2004
 use       polvani_2007_mod, only: polvani_2007, polvani_2007_tracer_init, get_polvani_2007_tracers
@@ -106,7 +106,7 @@ character(len=128), parameter :: tagname = '$Name: siena_201211 $'
 ! variables needed for diagnostics
 integer :: id_ps, id_u, id_v, id_t, id_vor, id_div, id_omega, id_wspd, id_slp
 integer :: id_pres_full, id_pres_half, id_zfull, id_zhalf, id_vort_norm, id_EKE
-integer :: id_uu, id_vv, id_tt, id_omega_omega, id_uv, id_omega_t, id_vw, id_uw, id_ut, id_vt, id_v_vor
+integer :: id_uu, id_vv, id_tt, id_omega_omega, id_uv, id_omega_t, id_vw, id_uw, id_ut, id_vt, id_v_vor, id_uz, id_vz, id_omega_z
 integer, allocatable, dimension(:) :: id_tr, id_utr, id_vtr, id_wtr !extra advection diags added by RG
 real :: gamma, expf, expf_inverse
 character(len=8) :: mod_name = 'dynamics'
@@ -155,7 +155,9 @@ logical :: do_mass_correction     = .true. , &
            use_virtual_temperature= .false., &
            use_implicit           = .true.,  &
            triang_trunc           = .true.,  &
-           graceful_shutdown      = .false.
+           graceful_shutdown      = .false., &
+		   make_symmetric         = .false. !GC/RG Add namelist option to run model as zonally symmetric
+
 
 integer :: damping_order       = 2, &
            damping_order_vor   =-1, &
@@ -198,6 +200,7 @@ real    :: damping_coeff       = 1.15740741e-4, & ! (one tenth day)**-1
         water_correction_limit = 0.0, & !mj
            raw_filter_coeff    = 1.0     !st Default value of 1.0 turns the RAW part of the filtering off. 0.5 is the desired value, but this appears unstable. Requires further testing.
 
+logical :: json_logging = .false.    ! print steps to std out in a machine readable format
 !===============================================================================================
 
 real, dimension(2) :: valid_range_t = (/100.,500./)
@@ -210,13 +213,15 @@ namelist /spectral_dynamics_nml/ use_virtual_temperature, damping_option, cutoff
                                  alpha_implicit, vert_difference_option,                             &
                                  reference_sea_level_press, lon_max, lat_max, num_levels,            &
                                  num_fourier, num_spherical, fourier_inc, triang_trunc,              &
-                                 vert_coord_option, scale_heights, surf_res,      &
+                                 vert_coord_option, scale_heights, surf_res,                         &
                                  p_press, p_sigma, exponent, ocean_topog_smoothing, initial_sphum,   &
                                  valid_range_t, eddy_sponge_coeff, zmu_sponge_coeff, zmv_sponge_coeff,&
                                  print_interval, num_steps, initial_state_option,                    &
                                  water_correction_limit,                                             & !mj
                                  raw_filter_coeff,                                                   & !st
-                                 graceful_shutdown
+                                 graceful_shutdown, json_logging,                                    &
+                                 graceful_shutdown,                                                  &
+								 make_symmetric                                                       !GC/RG add make_symmetric option
 
 contains
 
@@ -302,7 +307,7 @@ endif
 ! which is where domains are determined.
 
 call transforms_init(radius, lat_max, lon_max, num_fourier, fourier_inc, num_spherical, south_to_north=south_to_north, &
-                     triang_trunc=triang_trunc, longitude_origin=longitude_origin)
+                     triang_trunc=triang_trunc, longitude_origin=longitude_origin, make_symmetric=make_symmetric) !GC/RG add option to run zonally symmetric model
 
 call get_grid_domain(is, ie, js, je)
 call get_spec_domain(ms, me, ns, ne)
@@ -1662,6 +1667,15 @@ id_pres_half = register_diag_field(mod_name, &
 id_zfull   = register_diag_field(mod_name, &
       'height',  axes_3d_full,       Time, 'geopotential height at full model levels','m')
 
+id_uz = register_diag_field(mod_name, &
+	  'ucomp_height',axes_3d_full,     Time, 'zonal wind * geopotential height at full model levels', 'm**2sec')
+
+id_vz = register_diag_field(mod_name, &
+      'vcomp_height',axes_3d_full,     Time, 'meridional wind * geopotential height at full model levels', 'm**2/sec')
+
+id_omega_z = register_diag_field(mod_name, &
+       'omega_height',axes_3d_full,     Time, 'dp/dt * geopotential height at full model levels', 'm*Pa/sec')
+			
 id_zhalf   = register_diag_field(mod_name, &
       'height_half',  axes_3d_half,  Time, 'geopotential height at half model levels','m')
 
@@ -1720,7 +1734,7 @@ if(id_div > 0)    used = send_data(id_div, divg, Time)
 if(id_omega > 0)  used = send_data(id_omega, wg_full, Time)
 
 if(id_zfull > 0 .or. id_zhalf > 0) then
-  call compute_pressures_and_heights(t_grid, p_surf, surf_geopotential, z_full, z_half, p_full, p_half)
+  call compute_pressures_and_heights(t_grid, p_surf, surf_geopotential, z_full, z_half, p_full, p_half, tr_grid(:,:,:,time_level,nhum))
 else if(id_pres_half > 0 .or. id_pres_full > 0 .or. id_slp > 0) then
   call pressure_variables(p_half, ln_p_half, p_full, ln_p_full, p_surf)
 endif
@@ -1777,6 +1791,18 @@ endif
 if(id_vt > 0) then
   worka3d = t_grid*v_grid
   used = send_data(id_vt, worka3d, Time)
+endif
+if(id_uz > 0) then
+  worka3d = u_grid*z_full
+  used = send_data(id_uz, worka3d, Time)
+endif
+if(id_vz > 0) then
+  worka3d = v_grid*z_full
+  used = send_data(id_vz, worka3d, Time)
+endif
+if(id_omega_z > 0) then
+  worka3d = wg_full*z_full
+  used = send_data(id_omega_z, worka3d, Time)
 endif
 
 if(size(tr_grid,5) /= num_tracers) then
@@ -1848,19 +1874,40 @@ real, intent(in), dimension(is:ie, js:je, num_levels, num_tracers) :: tr_grid
 integer :: year, month, days, hours, minutes, seconds
 character(len=4), dimension(12) :: month_name
 
+real, dimension(is:ie, js:je, num_levels) :: speed
+real :: max_speed, avgT
+
 month_name=(/' Jan',' Feb',' Mar',' Apr',' May',' Jun',' Jul',' Aug',' Sep',' Oct',' Nov',' Dec'/)
+
+speed = sqrt(u_grid*u_grid + v_grid*v_grid)
+max_speed = maxval(speed)
+call mpp_max(max_speed)
+
+avgT = area_weighted_global_mean(t_grid(:,:, num_levels))
 
 if(mpp_pe() == mpp_root_pe()) then
   if(get_calendar_type() == NO_CALENDAR) then
     call get_time(Time, seconds, days)
-    write(*,100) days, seconds
+    if (json_logging) then
+      write(*, 300) days, seconds, max_speed, avgT
+    else
+      write(*,100) days, seconds
+    end if
   else
     call get_date(Time, year, month, days, hours, minutes, seconds)
-    write(*,200) year, month_name(month), days, hours, minutes, seconds
+    if (json_logging) then
+      write(*,400) year, month, days, hours, minutes, seconds, max_speed, avgT
+    else
+      write(*,200) year, month_name(month), days, hours, minutes, seconds
+    end if
   endif
 endif
 100 format(' Integration completed through',i6,' days',i6,' seconds')
 200 format(' Integration completed through',i5,a4,i3,2x,i2,':',i2,':',i2)
+300 format(1x, '{"day":',i6,2x,',"second":', i6, &
+    2x,',"max_speed":',e13.6,3x,',"avg_T":',e13.6, 3x '}')
+400 format(1x, '{"date": "',i0.4,'-',i0.2,'-',i0.2, &
+  '", "time": "', i0.2,':', i0.2,':', i0.2, '", "max_speed":',f6.1,3x,',"avg_T":',f6.1, 3x '}')
 
 end subroutine global_integrals
 !===================================================================================

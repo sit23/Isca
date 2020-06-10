@@ -10,19 +10,17 @@ ppdir=./                 # path to directory containing the tool for combining d
 
 
 # 2. Load the necessary tools into the environment
-module purge
-module load netcdf-4.3.0-openmpi-intel
-module list
-netcdf_flags=`nf-config --fflags --flibs`
+source $GFDL_BASE/src/extra/env/$GFDL_ENV
+netcdf_flags=`nc-config --cflags --libs`
 #--------------------------------------------------------------------------------------------------------
 # compile combine tool
 #cd $ppdir
-cc -O -c `nf-config --cflags` mppnccombine.c
+$CC -O -c mppnccombine.c $netcdf_flags
 if [ $? != 0 ]; then
     echo "ERROR: could not compile combine tool"
     exit 1
 fi
-cc -O -o mppnccombine.x `nf-config --libs`  mppnccombine.o
+$CC -O -o mppnccombine.x mppnccombine.o $netcdf_flags
 if [ $? != 0 ]; then
     echo "ERROR: could not compile combine tool"
     exit 1

@@ -36,7 +36,9 @@ module constants_mod
 !   Constants are accessed through the "use" statement.
 ! </DESCRIPTION>
 
-use fms_mod,               only: open_file, check_nml_error, mpp_pe, close_file, write_version_number
+use fms_mod,               only: open_file, check_nml_error, &
+                                 mpp_pe, mpp_root_pe, stdlog, &
+                                 close_file, write_version_number, error_mesg, NOTE
 
 implicit none
 private
@@ -88,7 +90,7 @@ real, public, parameter :: RHO0R   = 1.0/RHO0
 real, public, parameter :: RHO_CP  = RHO0*CP_OCEAN
 
 !------------ water vapor constants ---------------
-! <DATA NAME="ES0" TYPE="real" DEFAULT="1.0">
+! <DATA NAME="DEF_ES0" TYPE="real" DEFAULT="1.0">
 !   Humidity factor. Controls the humidity content of the atmosphere through
 !   the Saturation Vapour Pressure expression when using DO_SIMPLE.
 ! </DATA>
@@ -114,7 +116,7 @@ real, public, parameter :: RHO_CP  = RHO0*CP_OCEAN
 !   temp where fresh water freezes
 ! </DATA>
 
-real, public, parameter :: ES0 = 1.0
+real, public, parameter :: DEF_ES0 = 1.0
 real, public, parameter :: RVGAS = 461.50
 real, public, parameter :: CP_VAPOR = 4.0*RVGAS
 real, public, parameter :: DENS_H2O = 1000.
@@ -201,6 +203,9 @@ real, public, parameter :: RHOAIR      = 1.292269
 real, public, parameter :: ALOGMIN     = -50.0
 
 !------------ miscellaneous constants ---------------
+! <DATA NAME="GAS_CONSTANT" UNITS="kg m^2 / s^2 / K / mol" TYPE="real" DEFAULT="8.3144598">
+!   Gas constant = N_A * k_B, where N_A is avagadro's number, and k_b is the boltzmann constant
+! </DATA>
 ! <DATA NAME="STEFAN" UNITS="W/m^2/deg^4" TYPE="real" DEFAULT="5.6734e-8">
 !   Stefan-Boltzmann constant
 ! </DATA>
@@ -229,6 +234,7 @@ real, public, parameter :: ALOGMIN     = -50.0
 !   a small number to prevent divide by zero exceptions
 ! </DATA>
 
+real, public, parameter :: GAS_CONSTANT = 8.314 !(Consistent with correct value of 8.3144598 and value gotten by doing earth_rdgas * wtmair / 1000 = 8.313941376)
 real, public, parameter :: STEFAN  = 5.6734e-8
 real, public, parameter :: VONKARM = 0.40
 real, public, parameter :: PI      = 3.14159265358979323846
@@ -243,6 +249,7 @@ real, public, parameter :: EPSLN   = 1.0e-40
 
 real, public, parameter :: EARTH_OMEGA = 7.2921150e-5
 real, public, parameter :: EARTH_ORBITAL_PERIOD = 365.25*SECONDS_PER_DAY
+real, public, parameter :: PSTD_MKS_EARTH = 101325.0
 
 real, public :: RADIUS = 6376.0e3
 real, public :: GRAV   = EARTH_GRAV
@@ -253,12 +260,14 @@ real, public :: orbital_rate  ! this is calculated from 2pi/orbital_period
 real, public :: solar_const = 1368.22             ! solar constant [ W/m2 ]
 real, public :: orbit_radius=1.0                  ! distance Earth-Sun [ AU ]
 real, public :: PSTD   = 1.013250E+06
-real, public :: PSTD_MKS    = 101325.0
+real, public :: PSTD_MKS    = PSTD_MKS_EARTH
 real, public :: RDGAS  = EARTH_RDGAS
 real, public :: KAPPA = EARTH_KAPPA
 real, public :: CP_AIR = EARTH_CP_AIR
+real, public :: es0 = DEF_ES0
+logical :: earthday_multiple = .false.
 
-namelist/constants_nml/ radius, grav, omega, orbital_period, pstd, pstd_mks, rdgas, kappa
+namelist/constants_nml/ radius, grav, omega, orbital_period, pstd, pstd_mks, rdgas, kappa, solar_const, earthday_multiple, es0
 
 !-----------------------------------------------------------------------
 ! version and tagname published
@@ -288,6 +297,7 @@ subroutine constants_init
     enddo
     10 call close_file (unit)
 
+    if (mpp_pe() == mpp_root_pe()) write (stdlog(),nml=constants_nml)
 
     !> SECONDS_PER_SOL is the exoplanet equivalent of seconds_per_day.
     !! It is the number of seconds between sucessive solar zeniths at longitude 0.
@@ -295,7 +305,13 @@ subroutine constants_init
     !! as this is too integral to the model calendar to change.)
     !! For Earth parameters, SECONDS_PER_SOL == SECONDS_PER_DAY
     orbital_rate = 2*pi / orbital_period
-    seconds_per_sol = abs(2*pi / (orbital_rate - omega))
+	if (earthday_multiple) then
+	    call error_mesg( 'constants_init', &
+	              	         'earthday_multiple = True. Using modified seconds_per_sol', NOTE)
+	    seconds_per_sol = 86400. * earth_omega / omega
+	else
+	    seconds_per_sol = abs(2*pi / (orbital_rate - omega))
+	endif
 
     CP_AIR = RDGAS/KAPPA
 
@@ -337,4 +353,3 @@ end module constants_mod
 !   </NOTE>
 
 ! </INFO>
-
