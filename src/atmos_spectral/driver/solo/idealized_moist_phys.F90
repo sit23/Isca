@@ -767,7 +767,8 @@ if(two_stream_gray) call two_stream_gray_rad_init(is, ie, js, je, num_levels, ge
     if (do_rrtm_radiation) then
         call error_mesg('idealized_moist_phys','do_rrtm_radiation is .true. but compiler flag -D RRTM_NO_COMPILE used. Stopping.', FATAL)
     endif
-#else    if(do_rrtm_radiation) then
+#else    
+    if(do_rrtm_radiation) then
        id=ie-is+1 !s Taking dimensions from equivalend calls in vert_turb_driver_init
        jd=je-js+1
        kd=num_levels
@@ -829,17 +830,19 @@ real, dimension(1,1,1):: tracer, tracertnd
 integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 ! additional arrays for llcs convection
-real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: theta_neil, q_neil, p_full_neil, &
-  conv_dt_tg_neil, conv_dt_qg_neil, cloud1, cloud2
-real, dimension(size(ug,1), size(ug,2), size(ug,3)+1) :: p_half_neil
+real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_llcs, q_llcs, p_full_llcs, &
+  conv_dt_tg_llcs, conv_dt_qg_llcs, cloud1_llcs, cloud2_llcs
+real, dimension(size(ug,1), size(ug,2), size(ug,3)+1) :: p_half_llcs
 ! loop variables for llcs convection
-integer :: i, j, k, kk
+integer :: i_llcs, j_llcs, k_llcs
 
-integer :: neil_flag
 
-neil_flag = 0
+!! SEARCH FOR ME BEFORE MERGEING 
+!integer :: neil_flag
 
-open(77,file='/scratch/nl290/output.dat')
+!neil_flag = 0
+
+!open(77,file='/scratch/nl290/output.dat')
 
 if(current == previous) then
    delta_t = dt_real
@@ -858,36 +861,35 @@ select case(r_conv_scheme)
 
 case(LLCS_CONV)
   ! something needs to go here to flip the arrays
-  ! also need to make theta, p_zero - use p_half(:,:,1,previous), after call to convection theta needs to be changed to temperature
+  ! also need to make theta, p_zero - use p_half(:,:,1,previous) 
   ! flip input arrays 
-  do i = 1, size(ug,1)
-    do j = 1, size(ug,2)
-      do k = 1, size(ug,3)
-        theta_neil(i,j,size(ug,3)-k+1) = tg(i,j,k,previous)*(100000/p_full(i,j,k,previous))**(rdgas/cp_air)
-        q_neil(i,j,size(ug,3)-k+1) = grid_tracers(i,j,k,previous,nsphum)
-        p_half_neil(i,j,size(ug,3)-k+2) = p_half(i,j,k,previous)
-        p_full_neil(i,j,size(ug,3)-k+1) = p_full(i,j,k,previous)
+  do i_llcs = 1, size(ug,1)
+    do j_llcs = 1, size(ug,2)
+      do k_llcs = 1, size(ug,3)
+        tg_llcs(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = tg(i_llcs,j_llcs,k_llcs,previous)
+        q_llcs(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = grid_tracers(i_llcs,j_llcs,k_llcs,previous,nsphum)
+        p_half_llcs(i_llcs,j_llcs,size(ug,3)-k_llcs+2) = p_half(i_llcs,j_llcs,k_llcs,previous)
+        p_full_llcs(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = p_full(i_llcs,j_llcs,k_llcs,previous)
       end do
-      p_half_neil(i,j,1) = p_half(i,j,size(ug,3)+1,previous) 
+      p_half_llcs(i_llcs,j_llcs,1) = p_half(i_llcs,j_llcs,size(ug,3)+1,previous) 
     end do
   end do
 
-  call llcs_control(theta_neil,q_neil,p_half_neil(:,:,1),p_half_neil,p_full_neil,conv_dt_tg_neil,conv_dt_qg_neil,cloud1,cloud2,rain)
+  call llcs_control(tg_llcs,q_llcs,p_half_llcs(:,:,1),p_half_llcs,p_full_llcs,conv_dt_tg_llcs,conv_dt_qg_llcs,cloud1_llcs,cloud2_llcs,rain)
   
-  !convert back from potential temperature to temperature, create increments and flip arrays 
-  do i = 1, size(ug,1)
-    do j = 1, size(ug,2)
-      do k = 1, size(ug,3)
-        conv_dt_tg(i,j,size(ug,3)-k+1) = conv_dt_tg_neil(i,j,k)/(100000/p_full(i,j,size(ug,3)-k+1,previous))**(rdgas/cp_air) & 
-				       - tg(i,j,size(ug,3)-k+1,previous)
-	conv_dt_qg(i,j,size(ug,3)-k+1) = conv_dt_qg_neil(i,j,k) - grid_tracers(i,j,size(ug,3)-k+1,previous,nsphum)		
+  ! create increments and flip arrays 
+  do i_llcs = 1, size(ug,1)
+    do j_llcs = 1, size(ug,2)
+      do k_llcs = 1, size(ug,3)
+        conv_dt_tg(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = conv_dt_tg_llcs(i_llcs,j_llcs,k_llcs) - tg(i_llcs,j_llcs,k_llcs,previous)
+        conv_dt_qg(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = conv_dt_qg_llcs(i_llcs,j_llcs,k_llcs) - grid_tracers(i_llcs,j_llcs,size(ug,3)-k_llcs+1,previous,nsphum)		
       end do 
-        if (rain(i,j)>1e-8) then
-           write(77,*) 'input'
- 	   write(77,*) tg(i,j,:,previous)
-	   write(77,*) 'increment'
-	   write(77,*) conv_dt_tg(i,j,:)
-	end if 
+        !if (rain(i,j)>1e-8) then
+        !   write(77,*) 'input'
+        !   write(77,*) tg(i,j,:,previous)
+      	!   write(77,*) 'increment'
+	      !   write(77,*) conv_dt_tg(i,j,:)
+	      !end if 
       !end do
     end do
   end do

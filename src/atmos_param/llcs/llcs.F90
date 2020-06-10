@@ -63,8 +63,8 @@ CONTAINS
 ! -- UM WRAPPER -- !
 ! ----------------------------------------------------------------------
 
-SUBROUTINE llcs_control(t_s_array, q_s_array, p_surf_array,             &
-     p_half_array, p_full_array, t_f_array, q_f_array, qcl_array,       &
+SUBROUTINE llcs_control(temp_s_array, q_s_array, p_surf_array,             &
+     p_half_array, p_full_array, temp_f_array, q_f_array, qcl_array,       &
      cfl_array, rain_array)
 
 !USE yomhook, ONLY: lhook, dr_hook
@@ -73,7 +73,7 @@ SUBROUTINE llcs_control(t_s_array, q_s_array, p_surf_array,             &
 IMPLICIT NONE
 
 ! INPUTS
-REAL, INTENT(IN) :: t_s_array(:,:,:), q_s_array(:,:,:),                 &
+REAL, INTENT(IN) :: temp_s_array(:,:,:), q_s_array(:,:,:),                 &
                     p_half_array(:,:,:), p_full_array(:,:,:)
 REAL, INTENT(IN) :: p_surf_array(:,:)
 
@@ -81,7 +81,7 @@ REAL, INTENT(IN) :: p_surf_array(:,:)
 INTEGER :: a, b, dim1, dim2, nlevels
 
 ! OUTPUTS
-REAL, INTENT(OUT) :: t_f_array(:,:,:), q_f_array(:,:,:),                &
+REAL, INTENT(OUT) :: temp_f_array(:,:,:), q_f_array(:,:,:),                &
      qcl_array(:,:,:), cfl_array(:,:,:)
 REAL, INTENT(OUT) :: rain_array(:,:)
 
@@ -93,16 +93,16 @@ CHARACTER(LEN=*), PARAMETER :: RoutineName = 'LLCS_CONTROL'
 
 !IF (lhook) CALL dr_hook(ModuleName//':'//RoutineName,zhook_in,zhook_handle)
 
-nlevels = SIZE(t_s_array,3)
-dim1 = SIZE(t_s_array,1)
-dim2 = SIZE(t_s_array,2)
+nlevels = SIZE(temp_s_array,3)
+dim1 = SIZE(temp_s_array,1)
+dim2 = SIZE(temp_s_array,2)
 
 DO a = 1 , dim1
   DO b = 1 , dim2
 
-    CALL convection_scheme(t_s_array(a,b,:), q_s_array(a,b,:),          &
+    CALL convection_scheme(temp_s_array(a,b,:), q_s_array(a,b,:),          &
     p_surf_array(a,b), p_half_array(a,b,:), p_full_array(a,b,:),        &
-    nlevels, t_f_array(a,b,:), q_f_array(a,b,:), qcl_array(a,b,:),      &
+    nlevels, temp_f_array(a,b,:), q_f_array(a,b,:), qcl_array(a,b,:),      &
     cfl_array(a,b,:),rain_array(a,b))
   END DO
 END DO
@@ -132,8 +132,8 @@ END SUBROUTINE llcs_control
 ! -- THE CONVECTION SCHEME -- !
 ! ----------------------------------------------------------------------
 
-SUBROUTINE convection_scheme(theta_start, q_start, p_surf, p_half,      &
-p_full, nlevels, theta_final, q_final, qcl_inc, cloud_frac, rain_sec)
+SUBROUTINE convection_scheme(temp_start, q_start, p_surf, p_half,      &
+p_full, nlevels, temp_final, q_final, qcl_inc, cloud_frac, rain_sec)
 
 ! Required inputs are potential temperature, specific humidity, pressure
 ! on full model levels, pressure on half model levels and surface
@@ -191,11 +191,11 @@ IMPLICIT NONE
 
 ! INPUTS
 INTEGER, INTENT(IN) :: nlevels
-REAL, INTENT(IN) :: theta_start(:), q_start(:), p_full(:), p_half(:)
+REAL, INTENT(IN) :: temp_start(:), q_start(:), p_full(:), p_half(:)
 REAL, INTENT(IN) :: p_surf
 
 ! FOR CALCULATION
-REAL :: theta_adjust(nlevels), theta_noq_adjust(nlevels),               &
+REAL :: theta_start(nlevels), theta_adjust(nlevels), theta_noq_adjust(nlevels),               &
         theta_adj_rlx(nlevels), theta_noq_adj_rlx(nlevels),             &
         q_adjust(nlevels), q_adj_rlx(nlevels), q_conserve(nlevels),     &
         q_dummy(nlevels)
@@ -204,17 +204,17 @@ INTEGER :: convbase, cloudbase, final_level, j, moist_has_happened,     &
 REAL :: rh_use
 
 ! OUTPUTS
-REAL, INTENT(OUT) :: theta_final(:), q_final(:), qcl_inc(:),            &
+REAL, INTENT(OUT) :: temp_final(:), q_final(:), qcl_inc(:),            &
      cloud_frac(:)
 REAL, INTENT(OUT) :: rain_sec
 
 ! The scheme calls subroutines below here
 
 ! 1, Initialise variables.
-CALL initialise(theta_start, theta_adjust, theta_noq_adjust,            &
-theta_adj_rlx, theta_noq_adj_rlx, theta_final, q_start, q_adjust,       &
+CALL initialise(temp_start, theta_start, theta_adjust, theta_noq_adjust,            &
+theta_adj_rlx, theta_noq_adj_rlx, temp_final, q_start, q_adjust,       &
 q_adj_rlx, q_conserve, q_dummy, q_final, qcl_inc, cloud_frac,           &
-final_level, moist_has_happened, convection_flag)
+final_level, moist_has_happened, convection_flag, p_full)
 
 ! 2 & 3), Diagnose and then perform convection.
 DO j = 1, (nlevels-1)
@@ -266,10 +266,10 @@ IF (convection_flag  ==  1) THEN ! convection has happened so we need to
   ! 9), Conserve enthalpy
   IF (moist_has_happened == 1) THEN
     CALL conserve(nlevels, theta_start, theta_adj_rlx, theta_noq_adj_rlx, &
-         p_full, p_half, p_surf, theta_final)
+         p_full, p_half, p_surf, temp_final)
   ELSE
     CALL conserve(nlevels, theta_start, theta_adj_rlx, theta_adj_rlx,   &
-         p_full, p_half, p_surf, theta_final)
+         p_full, p_half, p_surf, temp_final)
   END IF
 
 END IF
@@ -288,11 +288,11 @@ END SUBROUTINE convection_scheme
 ! -- ROUTINES CALLED BY THE CONVECTION SCHEME -- !
 ! ----------------------------------------------------------------------
 
-SUBROUTINE initialise(theta_start, theta_adjust,                        &
-theta_noq_adjust, theta_adj_rlx, theta_noq_adj_rlx, theta_final,        &
+SUBROUTINE initialise(temp_start, theta_start, theta_adjust,                        &
+theta_noq_adjust, theta_adj_rlx, theta_noq_adj_rlx, temp_final,         &
 q_start, q_adjust, q_adj_rlx, q_conserve, q_dummy, q_final,             &
 qcl_inc, cloud_frac, final_level, moist_has_happened,                   &
-convection_flag)
+convection_flag, p_full)
 
 ! 1) INITIALISE VARIABLES
 ! This subroutine initialises working arrays by setting them equal to
@@ -306,11 +306,12 @@ convection_flag)
 IMPLICIT NONE
 
 ! Inputs
-REAL, INTENT(IN) :: theta_start(:), q_start(:)
+REAL, INTENT(IN) :: temp_start(:), q_start(:), p_full(:)
+
 
 ! Outputs
-REAL, INTENT(OUT) :: theta_adjust(:), theta_noq_adjust(:),              &
-     theta_adj_rlx(:), theta_noq_adj_rlx(:), theta_final(:)
+REAL, INTENT(OUT) :: theta_start(:), theta_adjust(:), theta_noq_adjust(:),              &
+     theta_adj_rlx(:), theta_noq_adj_rlx(:), temp_final(:)
 REAL, INTENT(OUT) :: q_adjust(:), q_adj_rlx(:), q_conserve(:),          &
      q_dummy(:), q_final(:), qcl_inc(:), cloud_frac(:)
 
@@ -318,11 +319,12 @@ INTEGER, INTENT(OUT) :: final_level, moist_has_happened, convection_flag
 
 INTEGER :: k
 
+call calc_theta(temp_start, p_full, theta_start) 
 theta_adjust = theta_start
 theta_noq_adjust = theta_start
 theta_adj_rlx = theta_start
 theta_noq_adj_rlx = theta_start
-theta_final = theta_start
+temp_final = temp_start
 
 q_adjust = q_start
 q_adj_rlx = q_start
@@ -967,7 +969,7 @@ END SUBROUTINE rain
 ! ----------------------------------------------------------------------
 
 SUBROUTINE conserve(nlevels, theta_start, theta_adj_rlx,                &
-theta_noq_adj_rlx, p_full, p_half, p_surf, theta_final)
+theta_noq_adj_rlx, p_full, p_half, p_surf, temperature_final)
 
 ! 9) ENTHALPHY CONSERVE
 ! This routine conserves energy that has been added to the column in the
@@ -991,11 +993,11 @@ REAL, INTENT(IN) :: p_half(:)
 REAL, INTENT(IN) :: p_surf
 
 ! Output
-REAL, INTENT(OUT) :: theta_final(:)
+REAL, INTENT(OUT) :: temperature_final(:)
 
 ! For calculation
 REAL :: temperature_start(nlevels), temperature_adj_rlx(nlevels),       &
-     temperature_noq_adj_rlx(nlevels), temperature_final(nlevels),      &
+     temperature_noq_adj_rlx(nlevels), & !temperature_final(nlevels),      &
      dry_heating(nlevels), mass(nlevels), p_change(nlevels),            &
      theta_dry_inc(nlevels)
 REAL :: total_heating, total_mass, temperature_correction
@@ -1005,7 +1007,7 @@ INTEGER :: stopnow, bottom, top, n, j, k
 CALL calc_temp(theta_start, p_full, temperature_start)
 CALL calc_temp(theta_adj_rlx, p_full, temperature_adj_rlx)
 CALL calc_temp(theta_noq_adj_rlx, p_full, temperature_noq_adj_rlx)
-CALL calc_temp(theta_final, p_full, temperature_final)
+!CALL calc_temp(theta_final, p_full, temperature_final)
 
 stopnow = 0 ! initialise stopnow
 
@@ -1013,7 +1015,7 @@ stopnow = 0 ! initialise stopnow
 p_change = p_half(1:nlevels) - p_half(2:(nlevels+1))
 
 theta_dry_inc = theta_noq_adj_rlx - theta_start
-theta_final = theta_adj_rlx
+
 
 n = 2 ! required for find_bounds
 
@@ -1035,8 +1037,8 @@ DO j = 1 , nlevels
       DO k = bottom , top
         temperature_final(k) = temperature_adj_rlx(k)                   &
         - temperature_correction
-        theta_final(k) = temperature_final(k) / ((p_full(k)/p_zero)     &
-        ** (kappa))
+      !  theta_final(k) = temperature_final(k) / ((p_full(k)/p_zero)     &
+      !  ** (kappa))
       END DO
     ELSE
       EXIT
@@ -1118,6 +1120,23 @@ REAL, INTENT(OUT) :: temp(:)
 temp = theta * (p_full/p_zero)**(kappa)
 
 END SUBROUTINE calc_temp
+
+! ----------------------------------------------------------------------
+
+SUBROUTINE calc_theta(temp, p_full, theta)
+
+! CALCULATE TEMPERATURE
+! This routine calculates and array containing temperatures from an
+! array containing potential temperatures.
+
+IMPLICIT NONE
+
+REAL, INTENT(IN) :: temp(:), p_full(:)
+REAL, INTENT(OUT) :: theta(:)
+
+theta = temp * (p_zero/p_full)**(kappa)
+
+END SUBROUTINE calc_theta
 
 ! ----------------------------------------------------------------------
 ! -- END OF EXTRA ROUTINES -- !
