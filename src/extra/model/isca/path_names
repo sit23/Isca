@@ -6,7 +6,6 @@ atmos_param/lscale_cond/lscale_cond.F90
 atmos_param/my25_turb/my25_turb.F90
 atmos_param/qe_moist_convection/qe_moist_convection.F90
 atmos_param/llcs/llcs.F90
-atmos_param/llcs/qsat_wat_data.F90
 atmos_param/betts_miller/betts_miller.f90
 atmos_param/ras/ras.f90
 atmos_param/sea_esf_rad/null/rad_utilities.F90

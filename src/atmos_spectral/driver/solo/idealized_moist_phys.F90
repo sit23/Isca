@@ -25,7 +25,7 @@ use         lscale_cond_mod, only: lscale_cond_init, lscale_cond, lscale_cond_en
 use qe_moist_convection_mod, only: qe_moist_convection_init, qe_moist_convection, qe_moist_convection_end
 
 
-use                    llcs, only: llcs_control
+use                llcs_mod, only: llcs_init, llcs
 
 use                 ras_mod, only: ras_init, ras_end, ras
 
@@ -750,6 +750,9 @@ case(RAS_CONV)
 
         call ras_init (do_strat, axes,Time,tracers_in_ras) 
 
+case (LLCS_CONV) 
+  call llcs_init()
+
 end select
 
 !jp not sure why these diag_fields are fenced when condensation ones above are not...
@@ -833,10 +836,10 @@ integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
 
 ! additional arrays for llcs convection
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_llcs, q_llcs, p_full_llcs, &
-  conv_dt_tg_llcs, conv_dt_qg_llcs, cloud1_llcs, cloud2_llcs
+  conv_dt_tg_llcs, conv_dt_qg_llcs, cloud1_llcs, cloud2_llcs, cloud3_llcs
 real, dimension(size(ug,1), size(ug,2), size(ug,3)+1) :: p_half_llcs
-! loop variables for llcs convection
-integer :: i_llcs, j_llcs, k_llcs
+! loop variable for llcs convection
+integer :: k_llcs
 
 
 !! SEARCH FOR ME BEFORE MERGEING 
@@ -865,39 +868,22 @@ case(LLCS_CONV)
   ! something needs to go here to flip the arrays
   ! also need to make theta, p_zero - use p_half(:,:,1,previous) 
   ! flip input arrays 
-  do i_llcs = 1, size(ug,1)
-    do j_llcs = 1, size(ug,2)
-      do k_llcs = 1, size(ug,3)
-        tg_llcs(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = tg(i_llcs,j_llcs,k_llcs,previous)
-        q_llcs(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = grid_tracers(i_llcs,j_llcs,k_llcs,previous,nsphum)
-        p_half_llcs(i_llcs,j_llcs,size(ug,3)-k_llcs+2) = p_half(i_llcs,j_llcs,k_llcs,previous)
-        p_full_llcs(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = p_full(i_llcs,j_llcs,k_llcs,previous)
-      end do
-      p_half_llcs(i_llcs,j_llcs,1) = p_half(i_llcs,j_llcs,size(ug,3)+1,previous) 
-    end do
+  do k_llcs = 1, size(ug,3)
+    tg_llcs(:,:,size(ug,3)-k_llcs+1) = tg(:,:,k_llcs,previous)
+    q_llcs(:,:,size(ug,3)-k_llcs+1) = grid_tracers(:,:,k_llcs,previous,nsphum)
+    p_half_llcs(:,:,size(ug,3)-k_llcs+2) = p_half(:,:,k_llcs,previous)
+    p_full_llcs(:,:,size(ug,3)-k_llcs+1) = p_full(:,:,k_llcs,previous)
   end do
+  p_half_llcs(:,:,1) = p_half(:,:,size(ug,3)+1,previous) 
 
-  call llcs_control(tg_llcs,q_llcs,p_half_llcs(:,:,1),p_half_llcs,p_full_llcs,conv_dt_tg_llcs,conv_dt_qg_llcs,cloud1_llcs,cloud2_llcs,rain)
+  call llcs(tg_llcs,q_llcs,cloud1_llcs, p_half_llcs,p_full_llcs,delta_t,conv_dt_tg_llcs,conv_dt_qg_llcs,cloud2_llcs,cloud3_llcs,rain)
   
   ! create increments and flip arrays 
-  do i_llcs = 1, size(ug,1)
-    do j_llcs = 1, size(ug,2)
-      do k_llcs = 1, size(ug,3)
-        conv_dt_tg(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = conv_dt_tg_llcs(i_llcs,j_llcs,k_llcs) - tg(i_llcs,j_llcs,k_llcs,previous)
-        conv_dt_qg(i_llcs,j_llcs,size(ug,3)-k_llcs+1) = conv_dt_qg_llcs(i_llcs,j_llcs,k_llcs) - grid_tracers(i_llcs,j_llcs,size(ug,3)-k_llcs+1,previous,nsphum)		
-      end do 
-        !if (rain(i,j)>1e-8) then
-        !   write(77,*) 'input'
-        !   write(77,*) tg(i,j,:,previous)
-      	!   write(77,*) 'increment'
-	      !   write(77,*) conv_dt_tg(i,j,:)
-	      !end if 
-      !end do
-    end do
-  end do
-  ! make increments 
-  !conv_dt_tg_neil = conv_dt_tg_neil - theta_neil 
-  !conv_dt_qg_neil = conv_dt_qg_neil - q_neil 
+  do k_llcs = 1, size(ug,3)
+    conv_dt_tg(:,:,size(ug,3)-k_llcs+1) = conv_dt_tg_llcs(:,:,k_llcs) - tg(:,:,size(ug,3)-k_llcs+1,previous)
+    conv_dt_qg(:,:,size(ug,3)-k_llcs+1) = conv_dt_qg_llcs(:,:,k_llcs) - grid_tracers(:,:,size(ug,3)-k_llcs+1,previous,nsphum)		
+  end do 
+
  
 
   ! increment and update fields following method for SIMPLE_BETTS_CONV
