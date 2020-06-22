@@ -122,6 +122,7 @@ real    :: ice_concentration_threshold = 0.5
 logical :: update_albedo_from_ice = .false.
 logical :: update_land_mask_from_ice = .false.
 logical :: binary_ice_albedo = .true.
+logical :: allow_qflux_over_land = .false.
 
 logical :: specify_sst_over_sea_ice = .false. !Problem with specifying SSTs when Isca has no ice model is poles are too warm. This adds the option to have a separate SST specification over SEA ice only.
 logical :: linearly_interpolate_sea_ice_temp_and_sst = .true. !Mix SST input and ice sst linearly based on ice concentration
@@ -158,7 +159,7 @@ namelist/mixed_layer_nml/ evaporation, depth, qflux_amp, qflux_width, tconst,&
                               linearly_interpolate_sea_ice_temp_and_sst,     &
                               specify_sst_over_sea_ice, ice_sst_file,        &
                               specify_sst_over_land_from_separate_file_to_ocean_sst, &
-                              land_sst_file
+                              land_sst_file, allow_qflux_over_land
 
 !=================================================================================================================================
 
@@ -672,9 +673,12 @@ beta_lw = drdt_surf
 if(load_qflux.and.time_varying_qflux) then
          call interpolator( qflux_interp, Time, ocean_qflux, trim(qflux_file_name) )
 
-	 if(update_albedo_from_ice) then
-	      where (land_ice_mask) ocean_qflux=0.
-	 endif
+         if(.not.allow_qflux_over_land) then
+             if(update_albedo_from_ice) then
+                  where (land_ice_mask) ocean_qflux=0.
+             endif
+         endif
+
 
 endif
 
