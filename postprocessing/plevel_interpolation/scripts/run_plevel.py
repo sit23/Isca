@@ -10,17 +10,18 @@ start_time=time.time()
 base_dir=os.environ['GFDL_DATA']
 #exp_name_list = ['soc_ga3_files_smooth_topo_fftw_mk1_fresh_compile_long', 'soc_ga3_files_smooth_topo_old_fft_mk2_long']
 #exp_name_list = [f'soc_ga3_do_simple_false_cmip_o3_bucket_perturbed_ens_{f}' for f in range(100)]
-exp_name_list = ['soc_ga3_do_simple_false_cmip_o3_bucket_qflux_just_output',]
+exp_name_list = ['soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_eur_anom_mk2', 'soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_asia_anom_mk2', 'soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb']
 avg_or_daily_list=['monthly']
-start_file=1
-end_file=12
+start_file=1201
+end_file=1680
 nfiles=(end_file-start_file)+1
 
 do_extra_averaging=False #If true, then 6hourly data is averaged into daily data using cdo
 group_months_into_one_file=True # If true then monthly data files and daily data files are merged into one big netcdf file each.
 level_set='standard' #Default is the standard levels used previously. ssw_diagnostics are the ones blanca requested for MiMa validation
 mask_below_surface_set=' ' #Default is to mask values that lie below the surface pressure when interpolated. For some applications, e.g. Tom Clemo's / Mark Baldwin's stratosphere index, you want to have values interpolated below ground, i.e. as if the ground wasn't there. To use this option, this value should be set to '-x '. 
-
+all_vars=False
+var_names_list = 'slp height precipitation vcomp ucomp temp_2m'
 
 try:
     out_dir
@@ -41,12 +42,19 @@ if level_set=='standard':
     plevs['6hourly']=' -p "1000 10000 25000 50000 85000 92500"'
     plevs['daily']  =' -p "1000 10000 25000 50000 85000 92500"'
     
-    var_names['monthly']='-a slp height'
+    if all_vars:
+        var_names['monthly']='-a slp height'
+    else:
+        var_names['monthly']=var_names_list
     var_names['pentad']='-a slp height'    
     var_names['timestep']='-a'
     var_names['6hourly']='ucomp slp height vor t_surf vcomp omega'
     var_names['daily']='ucomp slp height vor t_surf vcomp omega temp'
-    file_suffix='_interp_new_height_temp_not_below_ground'
+
+    if all_vars:
+        file_suffix='_interp_new_height_temp_not_below_ground'
+    else:
+        file_suffix='_interp_new_height_temp_not_below_ground_subset_vars_2'
 
 elif level_set=='ssw_diagnostics':
     plevs['6hourly']=' -p "1000 10000"'
@@ -91,7 +99,7 @@ if group_months_into_one_file:
             for n in range(nfiles):
                 nc_file_in = base_dir+'/'+exp_name+'/run%04d'%(n+start_file)+'/atmos_'+avg_or_daily+file_suffix+'.nc'
                 nc_file_string=nc_file_string+' '+nc_file_in
-            nc_file_out=base_dir+'/'+exp_name+'/atmos_'+avg_or_daily+'_together'+file_suffix+'.nc'
+            nc_file_out=base_dir+'/'+exp_name+'/atmos_'+avg_or_daily+f'_together_{start_file}_{end_file}'+file_suffix+'.nc'
             if not os.path.isfile(nc_file_out):
                 join_files(nc_file_string,nc_file_out)
 
