@@ -188,8 +188,11 @@ contains
 
 !-----------------------------------------------------------------------
 !     rayleigh damping of wind components near the surface
-
+     if (present(mask)) then
       call rayleigh_damping ( Time, ps, p_full, p_half, u, v, utnd, vtnd, mask=mask )
+     else
+      call rayleigh_damping ( Time, ps, p_full, p_half, u, v, utnd, vtnd)
+     endif
 
       if (do_conserve_energy) then
          ttnd = -((um+.5*utnd*dt)*utnd + (vm+.5*vtnd*dt)*vtnd)/CP_AIR
@@ -218,9 +221,17 @@ contains
 !-----------------------------------------------------------------------
 !     thermal forcing for held & suarez (1994) benchmark calculation
       if (trim(equilibrium_t_option) == 'top_down') then
-         call top_down_newtonian_damping(Time, lat, ps, p_full, p_half, t, ttnd, teq, dt, h_trop, zfull, mask )
+         if (present(mask)) then
+            call top_down_newtonian_damping(Time, lat, ps, p_full, p_half, t, ttnd, teq, dt, h_trop, zfull, mask )
+         else
+            call top_down_newtonian_damping(Time, lat, ps, p_full, p_half, t, ttnd, teq, dt, h_trop, zfull)         
+         endif
       else
-         call newtonian_damping ( Time, lat, lon, ps, p_full, p_half, t, ttnd, teq, mask )
+         if (present(mask)) then
+            call newtonian_damping ( Time, lat, lon, ps, p_full, p_half, t, ttnd, teq, mask )
+         else
+            call newtonian_damping ( Time, lat, lon, ps, p_full, p_half, t, ttnd, teq)            
+         endif
       endif
       tdt = tdt + ttnd
 !      if (id_newtonian_damping > 0) used = send_data(id_newtonian_damping, ttnd, Time, is, js)
@@ -256,7 +267,13 @@ contains
                endif
            endif
            rst = rm(:,:,:,n) + dt*rdt(:,:,:,n)
-           call tracer_source_sink ( flux, sink, p_half, rst, rtnd, kbot )
+           
+           if (present(kbot)) then
+            call tracer_source_sink ( flux, sink, p_half, rst, rtnd, kbot )
+           else
+            call tracer_source_sink ( flux, sink, p_half, rst, rtnd)            
+           endif
+
            rdt(:,:,:,n) = rdt(:,:,:,n) + rtnd
         enddo
       else
@@ -985,7 +1002,7 @@ real, intent(in),  dimension(:,:,:), optional :: mask
                 teq(:,:,k) = max(teq(:,:,k), tstr(:,:))
 		elseif (stratosphere_t_option == 'extend_tp') then
 			do i=1,size(t,1)
-			do j=1,size(t,1)
+			do j=1,size(t,2)
                 if (zfull(i,j,k)/1000 >= h_trop(i,j)) then
                     teq(i,j,k) = t_trop(i,j)
                 endif
