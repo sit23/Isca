@@ -9,28 +9,32 @@ import numpy as np
 
 start_time=time.time()
 #base_dir=os.environ['GFDL_DATA']
-base_dir = '/disca/share/sit204/data_from_isca_cpu/cssp_laura_exps/'
-#base_dir = '/disca/share/sit204/data_from_isca_cpu/cssp_perturb_exps/control/soc_ga3_do_simple_false_cmip_o3_bucket/'
+#base_dir = '/disca/share/sit204/data_from_isca_cpu/cssp_laura_exps/'
+base_dir = '/disca/share/sit204/data_from_isca_cpu/cssp_perturb_exps/control/soc_ga3_do_simple_false_cmip_o3_bucket/'
 #base_dir='/scratch/sit204/mounts/gv4/sit204/data_isca/'
 #exp_name_list = ['soc_ga3_files_smooth_topo_fftw_mk1_fresh_compile_long', 'soc_ga3_files_smooth_topo_old_fft_mk2_long']
 #exp_name_list = [f'soc_ga3_do_simple_false_cmip_o3_bucket_perturbed_ens_{f}' for f in range(200,400)]
 #exp_name_list = ['soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_eur_anom_mk2', 'soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_asia_anom_mk2', 'soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb']
-exp_name_list = ['soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_eur_anom_shifted_mk2']
+#exp_name_list = ['soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_eur_anom_shifted_mk2']
 #exp_name_list = ['control_exp']
-#exp_name_list = ['soc_ga3_files_smooth_topo_mk1_fresh_compile_long_cmip5_ozone']
-avg_or_daily_list=['monthly']
-start_file=361
-end_file=1680
+##exp_name_list = ['soc_ga3_files_smooth_topo_mk1_fresh_compile_long_cmip5_ozone']
+#exp_name_list = ['soc_ga3_files_smooth_topo_mk1_fresh_compile_long_ice_albedo_not_land_mask_ie_sst_jra_55_8_sbm_do_simple_false_cmip5_o3_bucket']
+#exp_name_list = ['soc_ga3_files_smooth_topo_mk1_fresh_compile_long_ice_albedo_not_land_mask_ice_sst_jra_55_8_sbm_do_simple_false_cmip5_o3_bucket']
+exp_name_list = ['control_exp']
+avg_or_daily_list=['pentad']
+start_file=601
+end_file=3480
 nfiles=(end_file-start_file)+1
 
 do_extra_averaging=False #If true, then 6hourly data is averaged into daily data using cdo
 group_months_into_one_file=True # If true then monthly data files and daily data files are merged into one big netcdf file each.
 overwrite_previous_combined_files=True
-n_splits_of_combined_nc_file = 4
+n_splits_of_combined_nc_file = 24
 level_set='standard' #Default is the standard levels used previously. ssw_diagnostics are the ones blanca requested for MiMa validation
 mask_below_surface_set=' ' #Default is to mask values that lie below the surface pressure when interpolated. For some applications, e.g. Tom Clemo's / Mark Baldwin's stratosphere index, you want to have values interpolated below ground, i.e. as if the ground wasn't there. To use this option, this value should be set to '-x '. 
 all_vars=False
-var_names_list = 'slp height precipitation vcomp ucomp temp_2m temp div flux_t flux_lhe bucket_depth'
+#var_names_list = 'slp height precipitation vcomp ucomp temp_2m temp div flux_t flux_lhe bucket_depth'
+var_names_list = 'slp height temp_2m'
 
 try:
     out_dir
@@ -53,9 +57,10 @@ if level_set=='standard':
     
     if all_vars:
         var_names['monthly']='-a slp height'
+        var_names['pentad']='-a slp height'
     else:
         var_names['monthly']=var_names_list
-    var_names['pentad']='-a slp height'    
+        var_names['pentad']=var_names_list
     var_names['timestep']='-a'
     var_names['6hourly']='ucomp slp height vor t_surf vcomp omega'
     var_names['daily']='ucomp slp height vor t_surf vcomp omega temp'
