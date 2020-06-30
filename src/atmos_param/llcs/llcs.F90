@@ -1,12 +1,16 @@
-! *****************************COPYRIGHT*******************************
-! (C) Crown copyright Met Office. All rights reserved.
-! For further details please refer to the file COPYRIGHT.txt
-! which you should have received as part of this distribution.
-! *****************************COPYRIGHT*******************************
-! Lambert-Lewis Convection Scheme (LLCS) 
-! Modified from the code llcs.F90 obtained from code.metoffice.gov.uk 
-! on 12/06/2020. 
-! Author: Neil Lewis
+! The Lambert-Lewis Convection Scheme (LLCS)
+!
+! Moist convective adjustment scheme with a dry limit. Convection can begin at any
+! model levels, and multiple isolated convective 'events' can occur in a single
+! column. 
+!
+! The scheme is documented in Appendix A of Lambert et al., 2020. Continuous
+! Structural Parametrization: A method for representing different model
+! parameterizations within one structure demonstrated for atmospheric convection,
+! J. Adv. Model Earth Sys., in review.
+!
+! Code author: Neil Lewis (Oxford), with contributions from: Ian Boutle (UK Met Office)
+! and Denis Sergeev (Exeter). 
 
 MODULE llcs_mod
 
