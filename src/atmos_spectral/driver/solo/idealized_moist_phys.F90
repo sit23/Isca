@@ -174,6 +174,11 @@ real, allocatable, dimension(:,:)   ::                                        &
      depth_change_lh,      &   ! tendency in bucket depth due to latent heat transfer     ! RG Add bucket
      depth_change_cond,    &   ! tendency in bucket depth due to condensation rain        ! RG Add bucket
      depth_change_conv,    &   ! tendency in bucket depth due to convection rain          ! RG Add bucket
+     depth_change_neg_buc, &   ! tendency in bucket depth due to the elimination of negative bucket depths
+     depth_change_neg_buc_p, &   ! tendency in bucket depth due to the elimination of negative bucket depths
+     depth_change_neg_buc_c, &   ! tendency in bucket depth due to the elimination of negative bucket depths
+     depth_change_neg_buc_f, &   ! tendency in bucket depth due to the elimination of negative bucket depths
+     empty_bucket_flag,    &   ! Array contains 1s when surface flux has tried to completely empty a bucket, and zeros where the bucket was not emptied in a timestep
      gust,                 &   ! gustiness constant
      z_pbl,                &   ! gustiness constant
      flux_t,               &   ! surface sensible heat flux
@@ -270,6 +275,11 @@ integer ::           &
      id_bucket_depth_conv, &   ! bucket depth variation induced by convection  - RG Add bucket
      id_bucket_depth_cond, &   ! bucket depth variation induced by condensation  - RG Add bucket
      id_bucket_depth_lh,   &   ! bucket depth variation induced by LH  - RG Add bucket
+     id_bucket_depth_neg_buc, &     
+     id_bucket_depth_neg_buc_p, &     
+     id_bucket_depth_neg_buc_c, &     
+     id_bucket_depth_neg_buc_f, &    
+     id_empty_bucket, & 
      id_bucket_diffusion,  &   ! diffused surface water depth 
      id_rh,          & 	 ! Relative humidity
      id_diss_heat_ray,&  ! Heat dissipated by rayleigh bottom drag if gp_surface=.True.
@@ -291,7 +301,7 @@ integer ::           &
      id_drag_t,      &
      id_drag_q,      &
      id_rho_drag,    &
-     id_q_surf0, id_flux_q_surf_part, id_flux_q_atm_part, id_flux_u, id_flux_v, id_flux_t_surf_part, id_flux_t_atm_part, id_e_sat
+     id_q_surf0, id_flux_q_surf_part, id_flux_q_atm_part, id_flux_t_surf_part, id_flux_t_atm_part, id_e_sat
 
 integer, allocatable, dimension(:,:) :: convflag ! indicates which qe convection subroutines are used
 real,    allocatable, dimension(:,:) :: rad_lat, rad_lon
@@ -443,6 +453,11 @@ allocate(bucket_depth (is:ie, js:je, num_time_levels)); bucket_depth = init_buck
 allocate(depth_change_lh(is:ie, js:je))    ; depth_change_lh = 0.0                  ! RG Add bucket
 allocate(depth_change_cond(is:ie, js:je))  ; depth_change_cond = 0.0                   ! RG Add bucket
 allocate(depth_change_conv(is:ie, js:je))  ; depth_change_conv = 0.0              ! RG Add bucket
+allocate(depth_change_neg_buc(is:ie, js:je))  ; depth_change_neg_buc = 0.0              
+allocate(depth_change_neg_buc_p(is:ie, js:je))  ; depth_change_neg_buc_p = 0.0              
+allocate(depth_change_neg_buc_c(is:ie, js:je))  ; depth_change_neg_buc_c = 0.0              
+allocate(depth_change_neg_buc_f(is:ie, js:je))  ; depth_change_neg_buc_f = 0.0        
+allocate(empty_bucket_flag(is:ie, js:je))      ; empty_bucket_flag = 0.0
 allocate(bucket_diffusion(is:ie, js:je))                   
 allocate(z_surf      (is:ie, js:je))
 allocate(t_surf      (is:ie, js:je))
@@ -670,8 +685,6 @@ id_rho_drag = register_diag_field(mod_name, 'rho_drag', axes(1:2), Time, 'rho_dr
 id_q_surf0 = register_diag_field(mod_name, 'q_surf0', axes(1:2), Time, 'q_surf0 from surface flux', '.')
 id_flux_q_surf_part = register_diag_field(mod_name, 'flux_q_surf_part', axes(1:2), Time, 'flux_q_surf_part', '.')
 id_flux_q_atm_part = register_diag_field(mod_name, 'flux_q_atm_part', axes(1:2), Time, 'flux_q_atm_part', '.')
-id_flux_u = register_diag_field(mod_name, 'flux_u', axes(1:2), Time, 'flux zonal momentum', '.')
-id_flux_v = register_diag_field(mod_name, 'flux_v', axes(1:2), Time, 'flux meridional momentum', '.')  
 id_flux_t_surf_part = register_diag_field(mod_name, 'flux_t_surf_part', axes(1:2), Time, 'flux_t_surf_part', '.')
 id_flux_t_atm_part = register_diag_field(mod_name, 'flux_t_atm_part', axes(1:2), Time, 'flux_t_atm_part', '.')  
 
@@ -686,6 +699,16 @@ if(bucket) then
        axes(1:2), Time, 'Tendency of bucket depth induced by Condensation', 'm/s')
   id_bucket_depth_lh = register_diag_field(mod_name, 'bucket_depth_lh',      &         ! RG Add bucket
        axes(1:2), Time, 'Tendency of bucket depth induced by LH', 'm/s')
+  id_bucket_depth_neg_buc = register_diag_field(mod_name, 'bucket_depth_neg_buc',  & 
+       axes(1:2), Time, 'Tendency of bucket depth induced by the cap on negative bucket depths', 'm/s')       
+  id_bucket_depth_neg_buc_p = register_diag_field(mod_name, 'bucket_depth_neg_buc_p',  & 
+       axes(1:2), Time, 'Tendency of bucket depth induced by the cap on negative bucket depths', 'm/s')  
+  id_bucket_depth_neg_buc_c = register_diag_field(mod_name, 'bucket_depth_neg_buc_c',  & 
+       axes(1:2), Time, 'Tendency of bucket depth induced by the cap on negative bucket depths', 'm/s')  
+  id_bucket_depth_neg_buc_f = register_diag_field(mod_name, 'bucket_depth_neg_buc_f',  & 
+       axes(1:2), Time, 'Tendency of bucket depth induced by the cap on negative bucket depths', 'm/s')  
+  id_empty_bucket = register_diag_field(mod_name, 'empty_bucket',  & 
+       axes(1:2), Time, 'Flag for when surface flux empties bucket', 'None')         
   id_bucket_diffusion = register_diag_field(mod_name, 'bucket_diffusion',  &  
        axes(1:2), Time, 'Diffusion rate of bucket','m/s')       
 endif
@@ -1042,11 +1065,12 @@ if(.not.gp_surface) then
                                   t_surf(:,:),                              &
                                   q_surf(:,:),                              & ! is intent(inout)
                                        bucket,                              &     ! RG Add bucket
-                    bucket_depth(:,:,current),                              &     ! RG Add bucket
+                    bucket_depth(:,:,previous),                              &     ! RG Add bucket
                         max_bucket_depth_land,                              &     ! RG Add bucket
                          depth_change_lh(:,:),                              &     ! RG Add bucket
                        depth_change_conv(:,:),                              &     ! RG Add bucket
                        depth_change_cond(:,:),                              &     ! RG Add bucket
+                       empty_bucket_flag(:,:),                              &
                                   u_surf(:,:),                              &
                                   v_surf(:,:),                              &
                                rough_mom(:,:),                              &
@@ -1346,10 +1370,35 @@ if(bucket) then
       bucket_depth(:,:,current) = bucket_depth(:,:,current) + robert_bucket * bucket_depth(:,:,future) * raw_bucket
    endif
 
+   ! Checking if future bucket without filter has lots of negative depth.
+   depth_change_neg_buc_f = 0.0      
+   where (bucket_depth(:,:,future) <= 0.) 
+    depth_change_neg_buc = depth_change_neg_buc-bucket_depth(:,:,future)
+    depth_change_neg_buc_f = depth_change_neg_buc_f-bucket_depth(:,:,previous)
+    ! bucket_depth(:,:,future) = 0.
+   endwhere  
+
    bucket_depth(:,:,future) = bucket_depth(:,:,future) + robert_bucket * (filt(:,:) + bucket_depth(:,:, future)) &
                            * (raw_bucket - 1.0)  
 
-   where (bucket_depth <= 0.) bucket_depth = 0.
+   depth_change_neg_buc = 0.0
+   depth_change_neg_buc_p = 0.0
+   depth_change_neg_buc_c = 0.0
+
+
+   where (bucket_depth(:,:,previous) <= 0.) 
+    depth_change_neg_buc = depth_change_neg_buc-bucket_depth(:,:,previous)
+    depth_change_neg_buc_p = depth_change_neg_buc_p-bucket_depth(:,:,previous)
+    bucket_depth(:,:,previous) = 0.
+   endwhere
+
+   where (bucket_depth(:,:,current) <= 0.) 
+    depth_change_neg_buc = depth_change_neg_buc-bucket_depth(:,:,current)
+    depth_change_neg_buc_c = depth_change_neg_buc_c-bucket_depth(:,:,previous)
+    bucket_depth(:,:,current) = 0.
+   endwhere
+   
+ 
 
    ! truncate surface reservoir over land points
    if (finite_bucket_depth_over_land) then
@@ -1363,6 +1412,13 @@ if(bucket) then
    if(id_bucket_depth_cond > 0) used = send_data(id_bucket_depth_cond, depth_change_cond(:,:), Time)
    if(id_bucket_depth_lh > 0) used = send_data(id_bucket_depth_lh, depth_change_lh(:,:), Time)
    if(id_bucket_diffusion > 0) used = send_data(id_bucket_diffusion, bucket_diffusion(:,:)/delta_t, Time)
+
+   if(id_bucket_depth_neg_buc > 0) used = send_data(id_bucket_depth_neg_buc, depth_change_neg_buc(:,:), Time)
+   if(id_bucket_depth_neg_buc_p > 0) used = send_data(id_bucket_depth_neg_buc_p, depth_change_neg_buc_p(:,:), Time)
+   if(id_bucket_depth_neg_buc_c > 0) used = send_data(id_bucket_depth_neg_buc_c, depth_change_neg_buc_c(:,:), Time)
+   if(id_bucket_depth_neg_buc_f > 0) used = send_data(id_bucket_depth_neg_buc_f, depth_change_neg_buc_f(:,:), Time)
+   if(id_empty_bucket > 0) used = send_data(id_empty_bucket, empty_bucket_flag(:,:), Time)
+
 
 endif
 ! end Add bucket section

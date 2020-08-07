@@ -343,8 +343,9 @@ contains
 subroutine surface_flux_1d (                                           &
      t_atm,     q_atm_in,   u_atm,     v_atm,     p_atm,     z_atm,    &
      p_surf,    t_surf,     t_ca,      q_surf,                         &
-	 bucket, bucket_depth, max_bucket_depth_land,                      & !RG Add bucket
+	  bucket, bucket_depth, max_bucket_depth_land,                      & !RG Add bucket
      depth_change_lh_1d, depth_change_conv_1d, depth_change_cond_1d,   & !RG Add bucket
+     empty_bucket_1d,                                                  &
      u_surf,    v_surf,                                                &
      rough_mom, rough_heat, rough_moist, rough_scale, gust,            &
      flux_t, flux_q, flux_r, flux_u, flux_v,                           &
@@ -373,7 +374,7 @@ subroutine surface_flux_1d (                                           &
        dhdt_surf, dedt_surf,  dedq_surf, drdt_surf,          &
        dhdt_atm,  dedq_atm,   dtaudu_atm,dtaudv_atm,         &
        w_atm,     u_star,     b_star,    q_star,             &
-       cd_m,      cd_t,       cd_q, q_surf_out               &
+       cd_m,      cd_t,       cd_q, q_surf_out,              &
        ex_del_m, ex_del_h, ex_del_q,                         & !mp586 for 10m winds and 2m temp
        temp_2m, u_10m, v_10m,                                & !mp586 for 10m winds and 2m temp
        q_2m, rh_2m                                             ! Add 2m q and RH
@@ -383,6 +384,7 @@ subroutine surface_flux_1d (                                           &
   real, intent(inout), dimension(:) :: bucket_depth                              !RG Add bucket
   real, intent(inout), dimension(:) :: depth_change_lh_1d                        !RG Add bucket
   real, intent(in), dimension(:) :: depth_change_conv_1d, depth_change_cond_1d   !RG Add bucket
+  real, intent(out), dimension(:) :: empty_bucket_1d
   real, intent(in) :: max_bucket_depth_land
   real, intent(in) :: dt
 
@@ -639,10 +641,13 @@ endif
 	        flux_q    =  rho_drag * (q_surf0 - q_atm) ! flux of water vapor  (Kg/(m**2 s))
 		end where
 
-	    depth_change_lh_1d  = flux_q * dt/dens_vapor 
+       depth_change_lh_1d  = flux_q * dt/dens_vapor 
+       empty_bucket_1d = 0.0
+      !  where (flux_q > 0.0 .and. (bucket_depth-depth_change_lh_1d) < 0.0) ! where more evaporation than what's in bucket, empty bucket
 	    where (flux_q > 0.0 .and. bucket_depth < depth_change_lh_1d) ! where more evaporation than what's in bucket, empty bucket
 	        flux_q = bucket_depth * dens_vapor / dt
-	        depth_change_lh_1d = flux_q * dt / dens_vapor
+           depth_change_lh_1d = flux_q * dt / dens_vapor
+           empty_bucket_1d = 1.0
 	    end where 
     
 	    where (bucket_depth <= 0.0)
@@ -802,6 +807,7 @@ subroutine surface_flux_0d (                                                 &
   real, dimension(1) :: bucket_depth                                 !RG Add bucket 
   real, dimension(1) :: depth_change_lh_1d                           !RG Add bucket
   real, dimension(1) :: depth_change_conv_1d, depth_change_cond_1d   !RG Add bucket
+  real, dimension(1) :: empty_bucket_1d
   real :: max_bucket_depth_land  !RG Add bucket
 
   avail = .true.
@@ -832,6 +838,7 @@ subroutine surface_flux_0d (                                                 &
        p_surf,    t_surf,     t_ca,      q_surf,                         &
 	   bucket, bucket_depth, max_bucket_depth_land,                      & !RG Add bucket
        depth_change_lh_1d, depth_change_conv_1d, depth_change_cond_1d,   & !RG Add bucket
+       empty_bucket_1d,                                                  &
        u_surf,    v_surf,                                                &
        rough_mom, rough_heat, rough_moist, rough_scale, gust,            &
        flux_t, flux_q, flux_r, flux_u, flux_v,                           &
@@ -882,8 +889,9 @@ end subroutine surface_flux_0d
 subroutine surface_flux_2d (                                           &
      t_atm,     q_atm_in,   u_atm,     v_atm,     p_atm,     z_atm,    &
      p_surf,    t_surf,     t_ca,      q_surf,                         &
-	 bucket, bucket_depth, max_bucket_depth_land,                      & !RG Add bucket
+	  bucket, bucket_depth, max_bucket_depth_land,                      & !RG Add bucket
      depth_change_lh,   depth_change_conv,   depth_change_cond,        & !RG Add bucket
+     empty_bucket,                                                     &
      u_surf,    v_surf,                                                &
      rough_mom, rough_heat, rough_moist, rough_scale, gust,            &
      flux_t,    flux_q,     flux_r,    flux_u,    flux_v,              &
@@ -920,6 +928,7 @@ subroutine surface_flux_2d (                                           &
   real, intent(inout), dimension(:,:) :: depth_change_lh ! RG Add bucket
   real, intent(in), dimension(:,:)    :: depth_change_conv, depth_change_cond ! RG Add bucket
   real, intent(in) :: max_bucket_depth_land  ! RG Add bucket
+  real, intent(out), dimension(:,:) :: empty_bucket
   real, intent(in) :: dt
 
   ! ---- local vars -----------------------------------------------------------
@@ -929,8 +938,9 @@ subroutine surface_flux_2d (                                           &
      call surface_flux_1d (                                           &
           t_atm(:,j),     q_atm_in(:,j),   u_atm(:,j),     v_atm(:,j),     p_atm(:,j),     z_atm(:,j),    &
           p_surf(:,j),    t_surf(:,j),     t_ca(:,j),      q_surf(:,j),                                   &
-		  bucket, bucket_depth(:,j), max_bucket_depth_land,                                               & !RG Add bucket
+		    bucket, bucket_depth(:,j), max_bucket_depth_land,                                               & !RG Add bucket
           depth_change_lh(:,j), depth_change_conv(:,j), depth_change_cond(:,j),                           & !RG Add bucket
+          empty_bucket(:,j),                                                                              &
           u_surf(:,j),    v_surf(:,j),                                                                    &
           rough_mom(:,j), rough_heat(:,j), rough_moist(:,j), rough_scale(:,j), gust(:,j),                 &
           flux_t(:,j),    flux_q(:,j),     flux_r(:,j),    flux_u(:,j),    flux_v(:,j),                   &
