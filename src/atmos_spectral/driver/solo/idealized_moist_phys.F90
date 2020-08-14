@@ -32,7 +32,7 @@ use      dry_convection_mod, only: dry_convection_init, dry_convection
 
 use        diag_manager_mod, only: register_diag_field, send_data
 
-use          transforms_mod, only: get_grid_domain
+use          transforms_mod, only: get_grid_domain, area_weighted_global_mean
 
 use   spectral_dynamics_mod, only: get_axis_id, get_num_levels, get_surf_geopotential, diffuse_surf_water
 
@@ -53,6 +53,8 @@ use tracer_manager_mod, only: get_number_tracers, query_method
 use  field_manager_mod, only: MODEL_ATMOS
 
 use rayleigh_bottom_drag_mod, only: rayleigh_bottom_drag_init, compute_rayleigh_bottom_drag
+
+use    global_integral_mod, only: mass_weighted_global_integral
 
 #ifdef RRTM_NO_COMPILE
     ! RRTM_NO_COMPILE not included
@@ -173,6 +175,7 @@ real, allocatable, dimension(:,:)   ::                                        &
      rough_moist,          &   ! moisture roughness length for surface_flux
      depth_change_lh,      &   ! tendency in bucket depth due to latent heat transfer     ! RG Add bucket
      depth_change_cond,    &   ! tendency in bucket depth due to condensation rain        ! RG Add bucket
+     atm_water_change_cond, &  ! change in atm water to compare with depth_change_cond to check water conservation
      depth_change_conv,    &   ! tendency in bucket depth due to convection rain          ! RG Add bucket
      depth_change_neg_buc, &   ! tendency in bucket depth due to the elimination of negative bucket depths
      depth_change_neg_buc_p, &   ! tendency in bucket depth due to the elimination of negative bucket depths
@@ -301,7 +304,11 @@ integer ::           &
      id_drag_t,      &
      id_drag_q,      &
      id_rho_drag,    &
-     id_q_surf0, id_flux_q_surf_part, id_flux_q_atm_part, id_flux_t_surf_part, id_flux_t_atm_part, id_e_sat
+     id_q_surf0, id_flux_q_surf_part, id_flux_q_atm_part, id_flux_t_surf_part, id_flux_t_atm_part, id_e_sat, &
+     id_mean_dt_bucket, id_mean_bucket_previous, id_mean_bucket_current, id_mean_bucket_future, id_mean_bucket_previous_post_filter, &
+     id_mean_bucket_current_post_filter, id_mean_bucket_future_post_filter, id_mean_bucket_future_post_filter_2, &
+     id_mean_bucket_future_post_filter_3, id_dt_bucket_actual, &
+     id_atm_water_change_cond
 
 integer, allocatable, dimension(:,:) :: convflag ! indicates which qe convection subroutines are used
 real,    allocatable, dimension(:,:) :: rad_lat, rad_lon
@@ -452,6 +459,7 @@ allocate (filt       (is:ie, js:je)); filt = 0.0              ! RG Add bucket
 allocate(bucket_depth (is:ie, js:je, num_time_levels)); bucket_depth = init_bucket_depth        ! RG Add bucket
 allocate(depth_change_lh(is:ie, js:je))    ; depth_change_lh = 0.0                  ! RG Add bucket
 allocate(depth_change_cond(is:ie, js:je))  ; depth_change_cond = 0.0                   ! RG Add bucket
+allocate(atm_water_change_cond(is:ie, js:je)) ; atm_water_change_cond = 0.0
 allocate(depth_change_conv(is:ie, js:je))  ; depth_change_conv = 0.0              ! RG Add bucket
 allocate(depth_change_neg_buc(is:ie, js:je))  ; depth_change_neg_buc = 0.0              
 allocate(depth_change_neg_buc_p(is:ie, js:je))  ; depth_change_neg_buc_p = 0.0              
@@ -658,6 +666,8 @@ id_cond_dt_tg = register_diag_field(mod_name, 'dt_tg_condensation',        &
      axes(1:3), Time, 'Temperature tendency from condensation','K/s')
 id_cond_rain = register_diag_field(mod_name, 'condensation_rain',          &
      axes(1:2), Time, 'Rain from condensation','kg/m/m/s')
+id_atm_water_change_cond = register_diag_field(mod_name, 'atm_water_change_cond',        &
+     axes(1:2), Time, 'atm mass change from condensation','kg')
 id_precip = register_diag_field(mod_name, 'precipitation',          &
      axes(1:2), Time, 'Precipitation from resolved, parameterised and snow','kg/m/m/s')
 id_cape = register_diag_field(mod_name, 'cape',          &
@@ -711,6 +721,18 @@ if(bucket) then
        axes(1:2), Time, 'Flag for when surface flux empties bucket', 'None')         
   id_bucket_diffusion = register_diag_field(mod_name, 'bucket_diffusion',  &  
        axes(1:2), Time, 'Diffusion rate of bucket','m/s')       
+
+  id_mean_dt_bucket = register_diag_field(mod_name, 'mean_dt_bucket', Time, 'Diffusion rate of bucket','m/s')
+  id_mean_bucket_previous = register_diag_field(mod_name, 'mean_bucket_previous', Time, 'Diffusion rate of bucket','m/s')
+  id_mean_bucket_current = register_diag_field(mod_name, 'mean_bucket_current', Time, 'Diffusion rate of bucket','m/s')
+  id_mean_bucket_future = register_diag_field(mod_name, 'mean_bucket_future', Time, 'Diffusion rate of bucket','m/s')
+  id_mean_bucket_previous_post_filter = register_diag_field(mod_name, 'mean_bucket_previous_post_filter', Time, 'Diffusion rate of bucket','m/s')
+  id_mean_bucket_current_post_filter = register_diag_field(mod_name, 'mean_bucket_current_post_filter', Time, 'Diffusion rate of bucket','m/s')
+  id_mean_bucket_future_post_filter = register_diag_field(mod_name, 'mean_bucket_future_post_filter', Time, 'Diffusion rate of bucket','m/s')
+  id_mean_bucket_future_post_filter_2 = register_diag_field(mod_name, 'mean_bucket_future_post_filter_2', Time, 'Diffusion rate of bucket','m/s')
+  id_mean_bucket_future_post_filter_3 = register_diag_field(mod_name, 'mean_bucket_future_post_filter_3', Time, 'Diffusion rate of bucket','m/s')
+  id_dt_bucket_actual = register_diag_field(mod_name, 'dt_bucket_actual', Time, 'Diffusion rate of bucket','m/s')
+
 endif
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -862,11 +884,17 @@ real :: delta_t
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv
 real, dimension(size(ug,1), size(ug,2)) :: flux_q_surf_part, flux_q_atm_part, flux_t_surf_part, flux_t_atm_part, e_sat_out
 
+real :: mean_dt_bucket, mean_bucket_previous, mean_bucket_current, mean_bucket_future, mean_bucket_previous_post_filter, &
+        mean_bucket_current_post_filter, mean_bucket_future_post_filter, mean_bucket_future_post_filter_2, &
+        mean_bucket_future_post_filter_3, dt_bucket_actual
+
 real, intent(in) , dimension(:,:,:), optional :: mask
 integer, intent(in) , dimension(:,:),   optional :: kbot
 
 real, dimension(1,1,1):: tracer, tracertnd
 integer :: nql, nqi, nqa   ! tracer indices for stratiform clouds
+
+integer, dimension(2) :: minloc_values
 
 if(current == previous) then
    delta_t = dt_real
@@ -1008,6 +1036,8 @@ if ( do_lscale_cond .eq. .true.) then
                                snow,                      cond_dt_tg,        &
                          cond_dt_qg )
 
+  atm_water_change_cond  = mass_weighted_global_integral(cond_dt_qg, p_half(:,:,num_levels+1,previous))
+
   cond_dt_tg = cond_dt_tg/delta_t
   cond_dt_qg = cond_dt_qg/delta_t
   depth_change_cond = rain/dens_vapor     ! RG Add bucket
@@ -1022,6 +1052,8 @@ if ( do_lscale_cond .eq. .true.) then
   if(id_cond_dt_tg > 0) used = send_data(id_cond_dt_tg, cond_dt_tg, Time)
   if(id_cond_rain  > 0) used = send_data(id_cond_rain, rain, Time)
   if(id_precip     > 0) used = send_data(id_precip, precip, Time)
+
+  if(id_atm_water_change_cond > 0) used = send_data(id_atm_water_change_cond, atm_water_change_cond, Time)
 
 endif
 
@@ -1065,7 +1097,7 @@ if(.not.gp_surface) then
                                   t_surf(:,:),                              &
                                   q_surf(:,:),                              & ! is intent(inout)
                                        bucket,                              &     ! RG Add bucket
-                    bucket_depth(:,:,previous),                              &     ! RG Add bucket
+                    bucket_depth(:,:,current),                              &     ! RG Add bucket
                         max_bucket_depth_land,                              &     ! RG Add bucket
                          depth_change_lh(:,:),                              &     ! RG Add bucket
                        depth_change_conv(:,:),                              &     ! RG Add bucket
@@ -1349,11 +1381,18 @@ if(bucket) then
   endif
 
    ! bucket time tendency
-   dt_bucket = depth_change_cond + depth_change_conv - depth_change_lh
+   dt_bucket = depth_change_cond + depth_change_conv !- depth_change_lh
+
+   mean_dt_bucket = area_weighted_global_mean(dt_bucket)
+   mean_bucket_previous = area_weighted_global_mean(bucket_depth(:,:,previous))
+   mean_bucket_current = area_weighted_global_mean(bucket_depth(:,:,current))
+   mean_bucket_future = area_weighted_global_mean(bucket_depth(:,:,future))  
+
+!     dt_bucke
    !change in bucket depth in one leapfrog timestep [m]                                 
 
    !diffuse_surf_water transforms dt_bucket to spherical, diffuses water, and transforms back
-   call diffuse_surf_water(dt_bucket,bucket_depth(:,:,previous),delta_t,damping_coeff_bucket,bucket_diffusion)
+!    call diffuse_surf_water(dt_bucket,bucket_depth(:,:,previous),delta_t,damping_coeff_bucket,bucket_diffusion)
 
    ! use the raw filter in leapfrog time stepping
 
@@ -1370,6 +1409,11 @@ if(bucket) then
       bucket_depth(:,:,current) = bucket_depth(:,:,current) + robert_bucket * bucket_depth(:,:,future) * raw_bucket
    endif
 
+   mean_bucket_previous_post_filter = area_weighted_global_mean(bucket_depth(:,:,previous))
+   mean_bucket_current_post_filter = area_weighted_global_mean(bucket_depth(:,:,current))
+   mean_bucket_future_post_filter = area_weighted_global_mean(bucket_depth(:,:,future))  
+
+
    ! Checking if future bucket without filter has lots of negative depth.
    depth_change_neg_buc_f = 0.0      
    where (bucket_depth(:,:,future) <= 0.) 
@@ -1378,8 +1422,30 @@ if(bucket) then
     ! bucket_depth(:,:,future) = 0.
    endwhere  
 
+!    minloc_values = minloc(bucket_depth(:,:,future))
+
+!    if (minloc_values(2)>=js .or. minloc_values(2)<=je) then
+!      if (bucket_depth(minloc_values(1), js+minloc_values(2), future) <0.) then
+!           write(6,*) 'minloc within processor range'
+!           write(6,*) minloc_values(1), minloc_values(2), bucket_depth(minloc_values(1), js+minloc_values(2), future), dt_bucket(minloc_values(1), js+minloc_values(2))
+!           write(6,*) 'tend', depth_change_cond(minloc_values(1), js+minloc_values(2)), depth_change_conv(minloc_values(1), js+minloc_values(2)), depth_change_lh(minloc_values(1), js+minloc_values(2))
+
+!           ! write(6,*) 'force 29 1', bucket_depth(29, 1, future), dt_bucket(29, 1)
+!           ! write(6,*), 'tend force 29 1', depth_change_cond(29, 1), depth_change_conv(29, 1), depth_change_lh(29, 1)          
+!      ! else
+!      !      write(6,*) minloc_values(1), minloc_values(2), bucket_depth(minloc_values(1), minloc_values(2), future), dt_bucket(minloc_values(1), minloc_values(2))
+!      !      write(6,*), 'tend', depth_change_cond(minloc_values(1), minloc_values(2)), depth_change_conv(minloc_values(1), minloc_values(2)), depth_change_lh(minloc_values(1), minloc_values(2))          
+!      endif
+!    else
+!      write(6,*) 'minloc out of processor range'
+!    endif
+
+
    bucket_depth(:,:,future) = bucket_depth(:,:,future) + robert_bucket * (filt(:,:) + bucket_depth(:,:, future)) &
                            * (raw_bucket - 1.0)  
+
+   mean_bucket_future_post_filter_2 = area_weighted_global_mean(bucket_depth(:,:,future))  
+
 
    depth_change_neg_buc = 0.0
    depth_change_neg_buc_p = 0.0
@@ -1407,6 +1473,10 @@ if(bucket) then
        end where
    endif
 
+   mean_bucket_future_post_filter_3 = area_weighted_global_mean(bucket_depth(:,:,future))  
+   dt_bucket_actual =  area_weighted_global_mean(bucket_depth(:,:,future))-mean_bucket_previous
+
+
    if(id_bucket_depth > 0) used = send_data(id_bucket_depth, bucket_depth(:,:,future), Time)
    if(id_bucket_depth_conv > 0) used = send_data(id_bucket_depth_conv, depth_change_conv(:,:), Time)
    if(id_bucket_depth_cond > 0) used = send_data(id_bucket_depth_cond, depth_change_cond(:,:), Time)
@@ -1418,6 +1488,17 @@ if(bucket) then
    if(id_bucket_depth_neg_buc_c > 0) used = send_data(id_bucket_depth_neg_buc_c, depth_change_neg_buc_c(:,:), Time)
    if(id_bucket_depth_neg_buc_f > 0) used = send_data(id_bucket_depth_neg_buc_f, depth_change_neg_buc_f(:,:), Time)
    if(id_empty_bucket > 0) used = send_data(id_empty_bucket, empty_bucket_flag(:,:), Time)
+
+   if(id_mean_dt_bucket > 0) used = send_data(id_mean_dt_bucket, mean_dt_bucket, Time)
+   if(id_mean_bucket_previous > 0) used = send_data(id_mean_bucket_previous, mean_bucket_previous, Time)
+   if(id_mean_bucket_current > 0) used = send_data(id_mean_bucket_current, mean_bucket_current, Time)
+   if(id_mean_bucket_future > 0) used = send_data(id_mean_bucket_future, mean_bucket_future, Time)
+   if(id_mean_bucket_previous_post_filter > 0) used = send_data(id_mean_bucket_previous_post_filter, mean_bucket_previous_post_filter, Time)
+   if(id_mean_bucket_current_post_filter > 0) used = send_data(id_mean_bucket_current_post_filter, mean_bucket_current_post_filter, Time)
+   if(id_mean_bucket_future_post_filter > 0) used = send_data(id_mean_bucket_future_post_filter, mean_bucket_future_post_filter, Time)
+   if(id_mean_bucket_future_post_filter_2 > 0) used = send_data(id_mean_bucket_future_post_filter_2, mean_bucket_future_post_filter_2, Time)
+   if(id_mean_bucket_future_post_filter_3 > 0) used = send_data(id_mean_bucket_future_post_filter_3, mean_bucket_future_post_filter_3, Time)
+   if(id_dt_bucket_actual > 0) used = send_data(id_dt_bucket_actual, dt_bucket_actual, Time)
 
 
 endif

@@ -108,7 +108,7 @@ character(len=128), parameter :: tagname = '$Name: siena_201211 $'
 integer :: id_ps, id_u, id_v, id_t, id_vor, id_div, id_omega, id_wspd, id_slp
 integer :: id_pres_full, id_pres_half, id_zfull, id_zhalf, id_vort_norm, id_EKE
 integer :: id_uu, id_vv, id_tt, id_omega_omega, id_uv, id_omega_t, id_vw, id_uw, id_ut, id_vt, id_v_vor, id_uz, id_vz, id_omega_z
-integer, allocatable, dimension(:) :: id_tr, id_utr, id_vtr, id_wtr !extra advection diags added by RG
+integer, allocatable, dimension(:) :: id_tr, id_utr, id_vtr, id_wtr, id_tr_total !extra advection diags added by RG
 real :: gamma, expf, expf_inverse
 character(len=8) :: mod_name = 'dynamics'
 integer, dimension(4) :: axis_id
@@ -1714,12 +1714,15 @@ allocate(id_tr(num_tracers))
 allocate(id_utr(num_tracers)) !Add additional diagnostics RG
 allocate(id_vtr(num_tracers)) !Add additional diagnostics RG
 allocate(id_wtr(num_tracers)) !Add additional diagnostics RG
+allocate(id_tr_total(num_tracers))
+
 do ntr=1,num_tracers
   call get_tracer_names(MODEL_ATMOS, ntr, tname, longname, units)
   id_tr(ntr) = register_diag_field(mod_name, tname, axes_3d_full, Time, longname, units)
   id_utr(ntr) = register_diag_field(mod_name, trim(tname)//trim('_u'), axes_3d_full, Time, trim(longname)//trim(' x u'), trim(units)//trim(' m/s')) !Add additional diagnostics RG
   id_vtr(ntr) = register_diag_field(mod_name, trim(tname)//trim('_v'), axes_3d_full, Time, trim(longname)//trim(' x v'), trim(units)//trim(' m/s')) !Add additional diagnostics RG
   id_wtr(ntr) = register_diag_field(mod_name, trim(tname)//trim('_w'), axes_3d_full, Time, trim(longname)//trim(' x w'), trim(units)//trim(' m/s')) !Add additional diagnostics RG
+  id_tr_total(ntr) = register_diag_field(mod_name, trim(tname)//trim('_vert_int'), (/id_lon,id_lat/), Time, trim(longname)//trim(' mass weighted integral'), trim(units)//trim(' kg/m2'))
 enddo
 
 id_vort_norm = register_diag_field(mod_name, 'vort_norm', Time, 'vorticity norm', '1/(m*sec)')
@@ -1738,7 +1741,7 @@ integer, intent(in) :: time_level
 
 real, dimension(is:ie, js:je, num_levels)    :: ln_p_full, p_full, z_full, worka3d, workb3d
 real, dimension(is:ie, js:je, num_levels+1)  :: ln_p_half, p_half, z_half
-real, dimension(is:ie, js:je)                :: t_low, slp, worka2d, workb2d
+real, dimension(is:ie, js:je)                :: t_low, slp, worka2d, workb2d, total_vapour_mass
 complex, dimension(ms:me, ns:ne, num_levels) :: vor_spec, div_spec
 complex, dimension(ms:me, ns:ne)             :: vorx, vory
 logical :: used
@@ -1840,6 +1843,12 @@ do ntr=1,num_tracers
   if(id_vtr(ntr) > 0) used = send_data(id_vtr(ntr), worka3d, Time)
   worka3d = tr_grid(:,:,:,time_level,ntr)*wg_full
   if(id_wtr(ntr) > 0) used = send_data(id_wtr(ntr), worka3d, Time)
+  if(id_tr_total(ntr)>0) then
+    total_vapour_mass = mass_weighted_global_integral(tr_grid(:,:,:,time_level,ntr), p_surf)
+    used = send_data(id_tr_total(ntr), total_vapour_mass, Time)
+  endif
+
+
 enddo
 
 if(id_slp > 0) then

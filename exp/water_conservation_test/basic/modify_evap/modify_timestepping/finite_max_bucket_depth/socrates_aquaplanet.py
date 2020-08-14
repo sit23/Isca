@@ -23,7 +23,7 @@ cb = SocratesCodeBase.from_directory(GFDL_BASE)
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
 
-exp = Experiment('soc_water_conservation_test_aquaplanet_most_basic_mk2_no_seasons_extra_output_modify_timestepping_5_finite_max', codebase=cb)
+exp = Experiment('soc_water_conservation_test_aquaplanet_most_basic_mk2_no_seasons_extra_output_modify_timestepping_5_finite_max_no_diffuse_lscale_no_evap_no_conv_current_extra_out_no_reevap', codebase=cb)
 exp.clear_rundir()
 
 inputfiles = [os.path.join(GFDL_BASE,'input/rrtm_input_files/ozone_1990.nc')]
@@ -57,6 +57,17 @@ diag.add_field('atmosphere','bucket_depth_neg_buc_p', time_avg=True)
 diag.add_field('atmosphere','bucket_depth_neg_buc_c', time_avg=True)
 diag.add_field('atmosphere','bucket_depth_neg_buc_f', time_avg=True)
 diag.add_field('atmosphere','empty_bucket', time_avg=True)
+
+diag.add_field('atmosphere','mean_dt_bucket', time_avg=True)
+diag.add_field('atmosphere','mean_bucket_previous', time_avg=True)
+diag.add_field('atmosphere','mean_bucket_current', time_avg=True)
+diag.add_field('atmosphere','mean_bucket_future', time_avg=True)
+diag.add_field('atmosphere','mean_bucket_previous_post_filter', time_avg=True)
+diag.add_field('atmosphere','mean_bucket_current_post_filter', time_avg=True)
+diag.add_field('atmosphere','mean_bucket_future_post_filter', time_avg=True)
+diag.add_field('atmosphere','mean_bucket_future_post_filter_2', time_avg=True)
+diag.add_field('atmosphere','mean_bucket_future_post_filter_3', time_avg=True)
+diag.add_field('atmosphere','dt_bucket_actual', time_avg=True)
 
 #radiative tendencies
 # diag.add_field('socrates', 'soc_tdt_lw', time_avg=True)
@@ -120,13 +131,14 @@ exp.namelist = namelist = Namelist({
         'roughness_moist':2.e-4,             
         'two_stream_gray': False,     #Use the grey radiation scheme
         'do_socrates_radiation': True,
-        'convection_scheme': 'SIMPLE_BETTS_MILLER', #Use simple Betts miller convection            
+        'convection_scheme': 'None', #Use simple Betts miller convection            
         'bucket':True, #Run with the bucket model
         'init_bucket_depth_land':  0.,
         'init_bucket_depth':  0.,
         'max_bucket_depth_land': 200.,
         'land_option': 'all_land',
         'finite_bucket_depth_over_land':False,
+        'do_lscale_cond':False,
     },
 
     'vert_turb_driver_nml': {
@@ -156,7 +168,7 @@ exp.namelist = namelist = Namelist({
     'mixed_layer_nml': {
         'tconst' : 285.,
         'prescribe_initial_dist':True,
-        'evaporation':True,  
+        'evaporation':False,  
         'depth': 4,                          #Depth of mixed layer used
         'albedo_value': 0.3,                  #Albedo value used      
     },
@@ -169,7 +181,7 @@ exp.namelist = namelist = Namelist({
     
     'lscale_cond_nml': {
         'do_simple':True,
-        'do_evap':True
+        'do_evap':False
     },
     
     'sat_vapor_pres_nml': {
@@ -199,7 +211,7 @@ exp.namelist = namelist = Namelist({
 
     'spectral_dynamics_nml': {
         'damping_order': 4,             
-        'water_correction_limit': 200.e2,
+        'water_correction_limit': 0.0,
         'reference_sea_level_press':1.0e5,
         'num_levels':40,      #How many model pressure levels to use
         'valid_range_t':[100.,800.],
@@ -220,5 +232,5 @@ if __name__=="__main__":
         #Set up the experiment object, with the first argument being the experiment name.
         #This will be the name of the folder that the data will appear in.
         exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=False)
-        for i in range(2,121):
+        for i in range(2,171):
             exp.run(i, num_cores=NCORES)
