@@ -23,7 +23,7 @@ cb = SocratesCodeBase.from_directory(GFDL_BASE)
 # create an Experiment object to handle the configuration of model parameters
 # and output diagnostics
 
-exp = Experiment('soc_water_conservation_test_aquaplanet_5_finite_max_no_diffuse_lscale_no_evap_no_conv_current_extra_out_no_reevap_3', codebase=cb)
+exp = Experiment('soc_water_conservation_test_aquaplanet_5_finite_max_no_diffuse_lscale_no_evap_no_conv_current_extra_out_no_reevap_5', codebase=cb)
 exp.clear_rundir()
 
 inputfiles = [os.path.join(GFDL_BASE,'input/rrtm_input_files/ozone_1990.nc')]
@@ -59,6 +59,12 @@ diag.add_field('atmosphere','bucket_depth_neg_buc_c', time_avg=True)
 diag.add_field('atmosphere','bucket_depth_neg_buc_f', time_avg=True)
 diag.add_field('atmosphere','empty_bucket', time_avg=True)
 diag.add_field('atmosphere','atm_water_change_cond', time_avg=True)
+diag.add_field('atmosphere','atm_water_change_non_diff', time_avg=True)
+diag.add_field('atmosphere','atm_water_change_diff', time_avg=True)
+diag.add_field('atmosphere','atm_water_change_diff_down', time_avg=True)
+diag.add_field('atmosphere','atm_water_change_tri_surf_diff_down', time_avg=True)
+diag.add_field('atmosphere','atm_water_change_tri_surf_diff_up', time_avg=True)
+
 
 diag.add_field('atmosphere','mean_dt_bucket', time_avg=True)
 diag.add_field('atmosphere','mean_bucket_previous', time_avg=True)

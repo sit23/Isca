@@ -176,6 +176,11 @@ real, allocatable, dimension(:,:)   ::                                        &
      depth_change_lh,      &   ! tendency in bucket depth due to latent heat transfer     ! RG Add bucket
      depth_change_cond,    &   ! tendency in bucket depth due to condensation rain        ! RG Add bucket
      atm_water_change_cond, &  ! change in atm water to compare with depth_change_cond to check water conservation
+     atm_water_change_non_diff, &  ! change in atm water to compare with depth_change_cond to check water conservation
+     atm_water_change_diff, &  ! change in atm water to compare with depth_change_cond to check water conservation
+     atm_water_change_diff_down, &  ! change in atm water to compare with depth_change_cond to check water conservation
+     atm_water_change_tri_surf_diff_down, &  ! change in atm water to compare with depth_change_cond to check water conservation
+     atm_water_change_tri_surf_diff_up, &  ! change in atm water to compare with depth_change_cond to check water conservation
      depth_change_conv,    &   ! tendency in bucket depth due to convection rain          ! RG Add bucket
      depth_change_neg_buc, &   ! tendency in bucket depth due to the elimination of negative bucket depths
      depth_change_neg_buc_p, &   ! tendency in bucket depth due to the elimination of negative bucket depths
@@ -308,7 +313,8 @@ integer ::           &
      id_mean_dt_bucket, id_mean_bucket_previous, id_mean_bucket_current, id_mean_bucket_future, id_mean_bucket_previous_post_filter, &
      id_mean_bucket_current_post_filter, id_mean_bucket_future_post_filter, id_mean_bucket_future_post_filter_2, &
      id_mean_bucket_future_post_filter_3, id_dt_bucket_actual, &
-     id_atm_water_change_cond
+     id_atm_water_change_cond, id_atm_water_change_non_diff, id_atm_water_change_diff, id_atm_water_change_diff_down, id_atm_water_change_tri_surf_diff_down, &
+     id_atm_water_change_tri_surf_diff_up
 
 integer, allocatable, dimension(:,:) :: convflag ! indicates which qe convection subroutines are used
 real,    allocatable, dimension(:,:) :: rad_lat, rad_lon
@@ -460,6 +466,11 @@ allocate(bucket_depth (is:ie, js:je, num_time_levels)); bucket_depth = init_buck
 allocate(depth_change_lh(is:ie, js:je))    ; depth_change_lh = 0.0                  ! RG Add bucket
 allocate(depth_change_cond(is:ie, js:je))  ; depth_change_cond = 0.0                   ! RG Add bucket
 allocate(atm_water_change_cond(is:ie, js:je)) ; atm_water_change_cond = 0.0
+allocate(atm_water_change_non_diff(is:ie, js:je)) ; atm_water_change_non_diff = 0.0
+allocate(atm_water_change_diff(is:ie, js:je)) ; atm_water_change_diff = 0.0
+allocate(atm_water_change_diff_down(is:ie, js:je)) ; atm_water_change_diff_down = 0.0
+allocate(atm_water_change_tri_surf_diff_down(is:ie, js:je)) ; atm_water_change_tri_surf_diff_down = 0.0
+allocate(atm_water_change_tri_surf_diff_up(is:ie, js:je)) ; atm_water_change_tri_surf_diff_up = 0.0
 allocate(depth_change_conv(is:ie, js:je))  ; depth_change_conv = 0.0              ! RG Add bucket
 allocate(depth_change_neg_buc(is:ie, js:je))  ; depth_change_neg_buc = 0.0              
 allocate(depth_change_neg_buc_p(is:ie, js:je))  ; depth_change_neg_buc_p = 0.0              
@@ -668,6 +679,16 @@ id_cond_rain = register_diag_field(mod_name, 'condensation_rain',          &
      axes(1:2), Time, 'Rain from condensation','kg/m/m/s')
 id_atm_water_change_cond = register_diag_field(mod_name, 'atm_water_change_cond',        &
      axes(1:2), Time, 'atm mass change from condensation','kg')
+id_atm_water_change_non_diff = register_diag_field(mod_name, 'atm_water_change_non_diff',        &
+     axes(1:2), Time, 'atm mass change from non_diffusion','kg')     
+id_atm_water_change_diff = register_diag_field(mod_name, 'atm_water_change_diff',        &
+     axes(1:2), Time, 'atm mass change from diffusion','kg')          
+id_atm_water_change_diff_down = register_diag_field(mod_name, 'atm_water_change_diff_down',        &
+     axes(1:2), Time, 'atm mass change from diffusion','kg')         
+id_atm_water_change_tri_surf_diff_down = register_diag_field(mod_name, 'atm_water_change_tri_surf_diff_down',        &
+     axes(1:2), Time, 'atm mass change from diffusion','kg')         
+id_atm_water_change_tri_surf_diff_up = register_diag_field(mod_name, 'atm_water_change_tri_surf_diff_up',        &
+     axes(1:2), Time, 'atm mass change from diffusion','kg')                
 id_precip = register_diag_field(mod_name, 'precipitation',          &
      axes(1:2), Time, 'Precipitation from resolved, parameterised and snow','kg/m/m/s')
 id_cape = register_diag_field(mod_name, 'cape',          &
@@ -1310,6 +1331,10 @@ if(turb) then
    non_diff_dt_tg  = dt_tg
    non_diff_dt_qg  = dt_tracers(:,:,:,nsphum)
 
+   atm_water_change_non_diff  = mass_weighted_global_integral(non_diff_dt_qg, p_half(:,:,num_levels+1,previous))
+   if(id_atm_water_change_non_diff > 0) used = send_data(id_atm_water_change_non_diff, atm_water_change_non_diff, Time)
+
+
    call gcm_vert_diff_down (1, 1,                                          &
                             delta_t,             ug(:,:,:,previous),       &
                             vg(:,:,:,previous),  tg(:,:,:,previous),       &
@@ -1326,6 +1351,12 @@ if(turb) then
 !
 ! update surface temperature
 !
+
+     atm_water_change_diff_down  = mass_weighted_global_integral(dt_tracers(:,:,:,nsphum) - non_diff_dt_qg, p_half(:,:,num_levels+1,previous))
+     if(id_atm_water_change_diff_down > 0) used = send_data(id_atm_water_change_diff_down, atm_water_change_diff_down, Time)
+
+     atm_water_change_tri_surf_diff_down  = area_weighted_global_mean(Tri_surf%delta_tr(:,:,nsphum))
+     if(id_atm_water_change_tri_surf_diff_down > 0) used = send_data(id_atm_water_change_tri_surf_diff_down, atm_water_change_tri_surf_diff_down, Time)
 
    if(mixed_layer_bc) then	
    call mixed_layer(                                                       &
@@ -1355,6 +1386,12 @@ if(turb) then
    if(id_diff_dt_vg > 0) used = send_data(id_diff_dt_vg, dt_vg - non_diff_dt_vg, Time)
    if(id_diff_dt_tg > 0) used = send_data(id_diff_dt_tg, dt_tg - non_diff_dt_tg, Time)
    if(id_diff_dt_qg > 0) used = send_data(id_diff_dt_qg, dt_tracers(:,:,:,nsphum) - non_diff_dt_qg, Time)
+
+   atm_water_change_diff  = mass_weighted_global_integral(dt_tracers(:,:,:,nsphum) - non_diff_dt_qg, p_half(:,:,num_levels+1,previous))
+   if(id_atm_water_change_diff > 0) used = send_data(id_atm_water_change_diff, atm_water_change_diff, Time)
+
+   atm_water_change_tri_surf_diff_up  = area_weighted_global_mean(Tri_surf%delta_tr(:,:,nsphum))
+   if(id_atm_water_change_tri_surf_diff_up > 0) used = send_data(id_atm_water_change_tri_surf_diff_up, atm_water_change_tri_surf_diff_up, Time)
 
 endif ! if(turb) then
 
