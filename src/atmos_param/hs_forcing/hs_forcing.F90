@@ -797,13 +797,16 @@ real, intent(inout), dimension(:,:) :: tm
 
 integer :: j, k
 real, dimension(size(p_half,1),size(p_half,2),size(p_half,3)-1) :: tf
-call interpolator( temp_interp, p_half, tf, trim(equilibrium_t_file))
+
+call interpolator( temp_interp, Time, p_half, tf, trim(equilibrium_t_file))
 
 do j=1,size(p_half,2)
 do k=1,size(p_half,3)-1
   tm(j,k)=sum(tf(:,j,k))/size(tf,1)
 enddo
 enddo
+
+! write(6,*) maxval(tf), minval(tf)
 end subroutine get_zonal_mean_temp
 
 !#######################################################################
