@@ -5,6 +5,7 @@ from tqdm import tqdm
 import gauss_grid as gg
 import create_timeseries as cts
 from scipy.interpolate import CubicSpline
+from jupiter_hs_bump_vert_levels import calc_merged_levels
 import pdb
 
 def set_model_params_earth(kappa = 2./7., g=9.81, rdgas=287.04, delh=60., t_zero=315., t_strat=200., delv=10., rvgas=461.50):
@@ -20,6 +21,13 @@ def set_model_params_jupiter(kappa = 2./7., g=26.0, rdgas=3605.38, delh=15., t_z
     'delh':delh, 'delv':delv, 't_zero':t_zero , 't_strat':t_strat }
 
     return model_params    
+
+def set_model_params_small_jupiter(kappa = 2./7., g=7.77, rdgas=3605.38, delh=15., t_zero=170., t_strat=110., delv=5., rvgas=461.50):
+
+    model_params= {'g':g, 'kappa':kappa, 'rdgas':rdgas, 'rvgas':rvgas, 'pref':1000., 
+    'delh':delh, 'delv':delv, 't_zero':t_zero , 't_strat':t_strat }
+
+    return model_params        
 
 def offline_lian_showman(dataset, model_params_internal, P00 = 1.e3, p_trop  = 150., alpha = 2./7,  ka = -40., ks =  -4., kf = -1., eps=0.0, sigma_b=0.7, chai_vallis=False, optional_subscript='', mode='chai_vallis', perturb_mode='B', fixed_temp=490., fixed_temp_pressure_bar=30., perturbation_mode_b_amplitude=2.6):
 
@@ -287,7 +295,7 @@ def theta_from_nsqd(dataset, model_params, temp_name='teq', nsqd_name='nsqd_tota
 
 
 
-def output_isca_input_files(dataset, list_of_vars_to_output=['teq'], planet='earth'):
+def output_isca_input_files(dataset, list_of_vars_to_output=['teq'], planet='earth', resolution_name=''):
 
     ntime=12
     npfull = dataset['pfull'].values.shape[0]
@@ -316,8 +324,15 @@ def output_isca_input_files(dataset, list_of_vars_to_output=['teq'], planet='ear
         p_half=dataset['phalf'].values[::-1]
 
         #Output it to a netcdf file. 
-        variable_name=f'{planet}_spec_teq_{temp_name}'
-        file_name=f'{variable_name}.nc'
+        if planet=='small_jupiter':
+            variable_name=f's_j_spec_teq_{temp_name}{resolution_name}'
+            file_name=f'{variable_name}.nc'
+        elif planet=='jupiter':
+            variable_name=f'j_spec_teq_{temp_name}{resolution_name}'
+            file_name=f'{variable_name}.nc'            
+        else:
+            variable_name=f'{planet}_spec_teq_{temp_name}{resolution_name}'
+            file_name=f'{variable_name}.nc'
 
 
         number_dict={}
@@ -420,17 +435,42 @@ def virt_temp(dataset,model_params, t_name='temp', sphum_name='sphum'):
 
 if __name__=="__main__":
 
-    nlat=128
-    nlon=256
+    resolution='T213_small'
     npfull = 80
     planet='jupiter'
+    merged_levels=False
+    nhigh_merged = 61
+    nlow_merged=21
+
+    if merged_levels:
+        merged_level_str = f'_{nhigh_merged}_{nlow_merged}'
+    else:
+        merged_level_str=''
+
+    if resolution=='T85':
+        nlat=128
+        nlon=256
+    elif resolution=='T213':
+        nlat=320
+        nlon=1024       
+    elif resolution=='T213_small':
+        nlat=320
+        nlon=1
+    elif resolution=='T85_small':
+        nlat=128
+        nlon=1    
 
     latitudes, latitude_bounds_2  = gg.gaussian_latitudes(int(nlat/2))
     latitude_bounds = [latitude_bound[0] for latitude_bound in latitude_bounds_2] + [latitude_bounds_2[-1][1]]
 
-    longitudes = np.linspace(0., 360., nlon, endpoint=False)
-    delta_lon = longitudes[1]-longitudes[0]
-    longitude_bounds = [lon_val-(0.5*delta_lon) for lon_val in longitudes] + [np.max(longitudes)+(0.5*delta_lon)]
+    if nlon!=1:
+        longitudes = np.linspace(0., 360., nlon, endpoint=False)
+        delta_lon = longitudes[1]-longitudes[0]
+        longitude_bounds = [lon_val-(0.5*delta_lon) for lon_val in longitudes] + [np.max(longitudes)+(0.5*delta_lon)]
+    else:
+        longitudes = np.asarray([180.])
+        longitude_bounds = np.asarray([0., 360.])
+
     time_arr_adj=np.arange(15,360,30)
 
     lon_array_2d, lat_array_2d = np.meshgrid(longitudes, latitudes)
@@ -439,17 +479,36 @@ if __name__=="__main__":
     # lat_array  = np.linspace(-90., 90., num=128)
     if planet=='earth':
         phalf_array = np.linspace(1200., 0., num=npfull+1, endpoint=True)
+        pfull_array = [0.5*(phalf_array[pidx]+phalf_array[pidx-1]) for pidx in range(1,npfull+1)]      
     elif planet=='jupiter':
-        zhalf_array = np.linspace(0., 5., num=npfull, endpoint=True) #only use npfull so that 0. can be added at the end to make nphalf
-        phalf_array = 10.*1000.*np.exp(-zhalf_array)
-        phalf_array = np.concatenate((phalf_array, np.array([0.])))        
+        if merged_levels:
+            phalf_array, pfull_array, zhalf_array, zfull_array = calc_merged_levels(nlow_merged, nhigh_merged)            
+        else:
+            zhalf_array = np.linspace(0., 5., num=npfull, endpoint=True) #only use npfull so that 0. can be added at the end to make nphalf
+            phalf_array = 10.*1200.*np.exp(-zhalf_array)
+            phalf_array = np.concatenate((phalf_array, np.array([0.])))        
+            zhalf_array = np.concatenate((zhalf_array, np.array([np.inf])))   
+            pfull_array = [0.5*(phalf_array[pidx]+phalf_array[pidx-1]) for pidx in range(1,npfull+1)] 
+            zfull_array = [0.5*(zhalf_array[pidx]+zhalf_array[pidx-1]) for pidx in range(1,npfull+1)]                     
+    elif planet=='small_jupiter':
+        if merged_levels:
+            phalf_array, pfull_array, zhalf_array, zfull_array = calc_merged_levels(nlow_merged, nhigh_merged)                        
+        else:
+            zhalf_array = np.linspace(0., 5., num=npfull, endpoint=True) #only use npfull so that 0. can be added at the end to make nphalf
+            phalf_array = 10.*1200.*np.exp(-zhalf_array)
+            phalf_array = np.concatenate((phalf_array, np.array([0.])))  
+            zhalf_array = np.concatenate((zhalf_array, np.array([np.inf])))   
+            pfull_array = [0.5*(phalf_array[pidx]+phalf_array[pidx-1]) for pidx in range(1,npfull+1)] 
+            zfull_array = [0.5*(zhalf_array[pidx]+zhalf_array[pidx-1]) for pidx in range(1,npfull+1)]             
 
-    pfull_array = [0.5*(phalf_array[pidx]+phalf_array[pidx-1]) for pidx in range(1,npfull+1)] 
+
 
     if planet=='earth':
         model_params=set_model_params_earth()
     elif planet=='jupiter':
         model_params=set_model_params_jupiter()
+    elif planet=='small_jupiter':
+        model_params=set_model_params_small_jupiter()        
 
     dataset = xar.Dataset(coords=dict(
         lon=('lon', longitudes),
@@ -470,9 +529,13 @@ if __name__=="__main__":
             offline_lian_showman(dataset, model_params, mode='stevo')
             construct_sphum(dataset, model_params, p_transition=4000., t_name_sphum='teq_background')
 
+        elif planet=='small_jupiter':
+            offline_lian_showman(dataset, model_params, mode='stevo')
+            construct_sphum(dataset, model_params, p_transition=4000., t_name_sphum='teq_background')            
+
         virt_temp(dataset,model_params, t_name='teq')        
         brunt_vas_freq(dataset, model_params, temp_name='virt_temp', name_out='nsqd_virt', theta_name='theta_virt')        
-        # output_isca_input_files(dataset, list_of_vars_to_output=['teq', 'virt_temp'], planet=planet)
+        output_isca_input_files(dataset, list_of_vars_to_output=['teq', 'virt_temp'], planet=planet, resolution_name=f'_{resolution.lower()}{merged_level_str}')
 
         nsqd_diff = dataset['nsqd_virt'] - dataset['nsqd']
         theta_diff = dataset['theta_virt'] - dataset['theta']
@@ -480,64 +543,68 @@ if __name__=="__main__":
 
 
         plt.figure()
-        dataset['nsqd_virt'].sel(lat=0., method='nearest').plot.line(label='virt')
-        dataset['nsqd'].sel(lat=0., method='nearest').plot.line(label='normal')       
-        nsqd_diff.sel(lat=0., method='nearest').plot.line(label='diff')             
+        # dataset['nsqd_virt'].sel(lat=0., method='nearest').plot.line(label='virt')
+        # dataset['nsqd'].sel(lat=0., method='nearest').plot.line(label='normal')       
+        nsqd_diff.sel(lat=0., method='nearest').plot.line(label='diff', marker='x')             
+        # plt.legend()
+
+        plt.figure()    
+        plt.plot(zfull_array, nsqd_diff.sel(lat=0., method='nearest').values, label='diff', marker='x')             
         plt.legend()
 
 
-        plt.figure()
-        dataset['theta_virt'].sel(lat=0., method='nearest').plot.line(label='virt')
-        dataset['theta'].sel(lat=0., method='nearest').plot.line(label='normal')       
-        theta_diff.sel(lat=0., method='nearest').plot.line(label='diff')             
-        plt.legend()        
+        # plt.figure()
+        # dataset['theta_virt'].sel(lat=0., method='nearest').plot.line(label='virt')
+        # dataset['theta'].sel(lat=0., method='nearest').plot.line(label='normal')       
+        # theta_diff.sel(lat=0., method='nearest').plot.line(label='diff')             
+        # plt.legend()        
 
-        plt.figure()
-        dataset['virt_temp'].sel(lat=0., method='nearest').plot.line(label='virt')
-        dataset['teq'].sel(lat=0., method='nearest').plot.line(label='normal')       
-        temp_diff.sel(lat=0., method='nearest').plot.line(label='diff')             
-        plt.legend()             
+        # plt.figure()
+        # dataset['virt_temp'].sel(lat=0., method='nearest').plot.line(label='virt')
+        # dataset['teq'].sel(lat=0., method='nearest').plot.line(label='normal')       
+        # temp_diff.sel(lat=0., method='nearest').plot.line(label='diff')             
+        # plt.legend()             
 
-        plt.figure()
-        plt.contourf(lat_array, pfull_array, dataset['teq'], cmap='RdBu_r', levels=25)
-        plt.ylim([dataset.pfull.max(), 0.])    
-        plt.colorbar(extend='both')    
-        plt.title(f'{do_chai_vallis}')
+        # plt.figure()
+        # plt.contourf(lat_array, pfull_array, dataset['teq'], cmap='RdBu_r', levels=25)
+        # plt.ylim([dataset.pfull.max(), 0.])    
+        # plt.colorbar(extend='both')    
+        # plt.title(f'{do_chai_vallis}')
 
-        plt.figure()
-        plt.contourf(lat_array, pfull_array, dataset['virt_temp'], cmap='RdBu_r', levels=25)
-        plt.ylim([dataset.pfull.max(), 0.])    
-        plt.colorbar(extend='both')    
-        plt.title(f'{do_chai_vallis} with bump added')
+        # plt.figure()
+        # plt.contourf(lat_array, pfull_array, dataset['virt_temp'], cmap='RdBu_r', levels=25)
+        # plt.ylim([dataset.pfull.max(), 0.])    
+        # plt.colorbar(extend='both')    
+        # plt.title(f'{do_chai_vallis} with bump added')
 
-        plt.figure()
-        plt.contourf(lat_array, pfull_array, dataset['virt_temp'].values-dataset['teq'].values, cmap='RdBu_r', levels=30)
-        plt.ylim([dataset.pfull.max(), 0.])    
-        plt.colorbar(extend='both')    
-        plt.title(f'{do_chai_vallis} with bump added minus original')        
+        # plt.figure()
+        # plt.contourf(lat_array, pfull_array, dataset['virt_temp'].values-dataset['teq'].values, cmap='RdBu_r', levels=30)
+        # plt.ylim([dataset.pfull.max(), 0.])    
+        # plt.colorbar(extend='both')    
+        # plt.title(f'{do_chai_vallis} with bump added minus original')        
 
-        plt.figure()
-        plt.contourf(lat_array, pfull_array, dataset['nsqd_virt'].values-dataset['nsqd'].values, cmap='RdBu_r', levels=30)
-        plt.ylim([dataset.pfull.max(), 0.])    
-        plt.colorbar(extend='both')    
-        plt.title(f'nsqd {do_chai_vallis} with bump added minus original')    
+        # plt.figure()
+        # plt.contourf(lat_array, pfull_array, dataset['nsqd_virt'].values-dataset['nsqd'].values, cmap='RdBu_r', levels=30)
+        # plt.ylim([dataset.pfull.max(), 0.])    
+        # plt.colorbar(extend='both')    
+        # plt.title(f'nsqd {do_chai_vallis} with bump added minus original')    
 
-        plt.figure()
-        plt.contourf(lat_array, pfull_array, dataset['sat_sphum'], cmap='RdBu_r', levels=25)
-        plt.ylim([dataset.pfull.max(), 0.])    
-        plt.colorbar(extend='both')    
-        plt.title(f'{do_chai_vallis}')        
-
-
-        background_t_ref_trop_lian_showman_2008 = (600.)*(dataset['pfull']/(100.*1000.))**model_params['kappa']  
-        background_t_ref_trop_lian_sugiyama2014 = (490.)*(dataset['pfull']/(30.*1000.))**model_params['kappa']  
-        background_t_ref_trop_lian_sugiyama2014_alt = (160.)*(dataset['pfull']/(0.6*1000.))**model_params['kappa']  
+        # plt.figure()
+        # plt.contourf(lat_array, pfull_array, dataset['sat_sphum'], cmap='RdBu_r', levels=25)
+        # plt.ylim([dataset.pfull.max(), 0.])    
+        # plt.colorbar(extend='both')    
+        # plt.title(f'{do_chai_vallis}')        
 
 
-        plt.figure()
-        plt.plot(background_t_ref_trop_lian_showman_2008, dataset['pfull'], label='lian 2008')
-        plt.plot(background_t_ref_trop_lian_sugiyama2014, dataset['pfull'], label='sugiyama 2014')     
-        plt.plot(background_t_ref_trop_lian_sugiyama2014_alt, dataset['pfull'], label='sugiyama 2014 alt')        
+        # background_t_ref_trop_lian_showman_2008 = (600.)*(dataset['pfull']/(100.*1000.))**model_params['kappa']  
+        # background_t_ref_trop_lian_sugiyama2014 = (490.)*(dataset['pfull']/(30.*1000.))**model_params['kappa']  
+        # background_t_ref_trop_lian_sugiyama2014_alt = (160.)*(dataset['pfull']/(0.6*1000.))**model_params['kappa']  
 
-        plt.ylim([dataset.pfull.max(), 0.])    
-        plt.legend()
+
+        # plt.figure()
+        # plt.plot(background_t_ref_trop_lian_showman_2008, dataset['pfull'], label='lian 2008')
+        # plt.plot(background_t_ref_trop_lian_sugiyama2014, dataset['pfull'], label='sugiyama 2014')     
+        # plt.plot(background_t_ref_trop_lian_sugiyama2014_alt, dataset['pfull'], label='sugiyama 2014 alt')        
+
+        # plt.ylim([dataset.pfull.max(), 0.])    
+        # plt.legend()
