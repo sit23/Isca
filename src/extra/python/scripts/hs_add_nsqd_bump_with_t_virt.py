@@ -435,10 +435,10 @@ def virt_temp(dataset,model_params, t_name='temp', sphum_name='sphum'):
 
 if __name__=="__main__":
 
-    resolution='T213_small'
+    resolution='T85_small'
     npfull = 80
     planet='jupiter'
-    merged_levels=False
+    merged_levels=True
     nhigh_merged = 61
     nlow_merged=21
 
@@ -526,7 +526,7 @@ if __name__=="__main__":
             construct_sphum(dataset, model_params, p_transition=500.)
 
         elif planet=='jupiter':
-            offline_lian_showman(dataset, model_params, mode='stevo')
+            offline_lian_showman(dataset, model_params, mode='stevo', perturb_mode='A')
             construct_sphum(dataset, model_params, p_transition=4000., t_name_sphum='teq_background')
 
         elif planet=='small_jupiter':
@@ -535,7 +535,8 @@ if __name__=="__main__":
 
         virt_temp(dataset,model_params, t_name='teq')        
         brunt_vas_freq(dataset, model_params, temp_name='virt_temp', name_out='nsqd_virt', theta_name='theta_virt')        
-        output_isca_input_files(dataset, list_of_vars_to_output=['teq', 'virt_temp'], planet=planet, resolution_name=f'_{resolution.lower()}{merged_level_str}')
+        # output_isca_input_files(dataset, list_of_vars_to_output=['teq', 'virt_temp'], planet=planet, resolution_name=f'_{resolution.lower()}{merged_level_str}_A')
+        output_isca_input_files(dataset, list_of_vars_to_output=['teq', 'virt_temp'], planet=planet, resolution_name=f'_a')
 
         nsqd_diff = dataset['nsqd_virt'] - dataset['nsqd']
         theta_diff = dataset['theta_virt'] - dataset['theta']
@@ -565,23 +566,23 @@ if __name__=="__main__":
         # temp_diff.sel(lat=0., method='nearest').plot.line(label='diff')             
         # plt.legend()             
 
-        # plt.figure()
-        # plt.contourf(lat_array, pfull_array, dataset['teq'], cmap='RdBu_r', levels=25)
-        # plt.ylim([dataset.pfull.max(), 0.])    
-        # plt.colorbar(extend='both')    
-        # plt.title(f'{do_chai_vallis}')
+        plt.figure()
+        plt.contourf(lat_array, pfull_array, dataset['teq'], cmap='RdBu_r', levels=25)
+        plt.ylim([dataset.pfull.max(), 0.])    
+        plt.colorbar(extend='both')    
+        plt.title(f'{do_chai_vallis}')
 
-        # plt.figure()
-        # plt.contourf(lat_array, pfull_array, dataset['virt_temp'], cmap='RdBu_r', levels=25)
-        # plt.ylim([dataset.pfull.max(), 0.])    
-        # plt.colorbar(extend='both')    
-        # plt.title(f'{do_chai_vallis} with bump added')
+        plt.figure()
+        plt.contourf(lat_array, pfull_array, dataset['virt_temp'], cmap='RdBu_r', levels=25)
+        plt.ylim([dataset.pfull.max(), 0.])    
+        plt.colorbar(extend='both')    
+        plt.title(f'{do_chai_vallis} with bump added')
 
-        # plt.figure()
-        # plt.contourf(lat_array, pfull_array, dataset['virt_temp'].values-dataset['teq'].values, cmap='RdBu_r', levels=30)
-        # plt.ylim([dataset.pfull.max(), 0.])    
-        # plt.colorbar(extend='both')    
-        # plt.title(f'{do_chai_vallis} with bump added minus original')        
+        plt.figure()
+        plt.contourf(lat_array, pfull_array, dataset['virt_temp'].values-dataset['teq'].values, cmap='RdBu_r', levels=30)
+        plt.ylim([dataset.pfull.max(), 0.])    
+        plt.colorbar(extend='both')    
+        plt.title(f'{do_chai_vallis} with bump added minus original')        
 
         # plt.figure()
         # plt.contourf(lat_array, pfull_array, dataset['nsqd_virt'].values-dataset['nsqd'].values, cmap='RdBu_r', levels=30)
