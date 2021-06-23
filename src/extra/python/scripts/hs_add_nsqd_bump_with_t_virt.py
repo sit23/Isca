@@ -536,7 +536,7 @@ if __name__=="__main__":
         virt_temp(dataset,model_params, t_name='teq')        
         brunt_vas_freq(dataset, model_params, temp_name='virt_temp', name_out='nsqd_virt', theta_name='theta_virt')        
         # output_isca_input_files(dataset, list_of_vars_to_output=['teq', 'virt_temp'], planet=planet, resolution_name=f'_{resolution.lower()}{merged_level_str}_A')
-        output_isca_input_files(dataset, list_of_vars_to_output=['teq', 'virt_temp'], planet=planet, resolution_name=f'_a')
+        # output_isca_input_files(dataset, list_of_vars_to_output=['teq', 'virt_temp'], planet=planet, resolution_name=f'_a')
 
         nsqd_diff = dataset['nsqd_virt'] - dataset['nsqd']
         theta_diff = dataset['theta_virt'] - dataset['theta']
