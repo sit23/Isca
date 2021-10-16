@@ -156,7 +156,7 @@ write(stdlog_unit, socrates_rad_nml)
 
           if(dt_rad_avg .le. 0) dt_rad_avg = dt_rad
 
-        if ((tidally_locked.eq..true.) .and. (frierson_solar_rad .eq. .true.)) then
+        if ((tidally_locked) .and. (frierson_solar_rad)) then
             call error_mesg( 'socrates_init', &
             'tidally_locked and frierson_solar_rad cannot both be true',FATAL)
         endif
@@ -358,7 +358,7 @@ write(stdlog_unit, socrates_rad_nml)
     n_soc_bands_sw = spectrum_sw%dim%nd_band
     n_soc_bands_sw_hires = spectrum_sw_hires%dim%nd_band
 
-    if (socrates_hires_mode == .True.) then
+    if (socrates_hires_mode) then
         allocate(outputted_soc_spectral_olr(size(lonb,1)-1, size(latb,2)-1, n_soc_bands_lw_hires))
     else
         allocate(outputted_soc_spectral_olr(size(lonb,1)-1, size(latb,2)-1, n_soc_bands_lw ))
@@ -413,7 +413,7 @@ write(stdlog_unit, socrates_rad_nml)
 
         ! spectral output currently not available as required axis not present in diag file 
         if (id_soc_spectral_olr > 0) then 
-            if (socrates_hires_mode == .True.) then
+            if (socrates_hires_mode) then
                 allocate(spectral_olr_store(size(lonb,1)-1, size(latb,2)-1, n_soc_bands_lw_hires))
             else
                 allocate(spectral_olr_store(size(lonb,1)-1, size(latb,2)-1, n_soc_bands_lw ))
@@ -574,13 +574,13 @@ write(stdlog_unit, socrates_rad_nml)
           input_p = reshape(fms_p_full(:,:,:),(/si*sj,sk /))
           input_p_level = reshape(fms_p_half(:,:,:),(/si*sj,sk+1 /))
           
-          if (account_for_effect_of_water == .true.) then
+          if (account_for_effect_of_water) then
               input_mixing_ratio = reshape(fms_spec_hum(:,:,:) / (1. - fms_spec_hum(:,:,:)),(/si*sj,sk /)) !Mass mixing ratio = q / (1-q)
           else
               input_mixing_ratio = 0.0
           endif
           
-          if (account_for_effect_of_ozone == .true.) then
+          if (account_for_effect_of_ozone) then
             input_o3_mixing_ratio = reshape(fms_ozone(:,:,:),(/si*sj,sk /))
           else         
             input_o3_mixing_ratio = 0.0
@@ -637,10 +637,10 @@ write(stdlog_unit, socrates_rad_nml)
           soc_heating_rate = 0.0
 
           ! Test if LW or SW mode
-          if (soc_lw_mode == .TRUE.) then
+          if (soc_lw_mode) then
              control_lw%isolir = 2
              CALL read_control(control_lw, spectrum_lw)
-             if (socrates_hires_mode == .FALSE.) then
+             if (socrates_hires_mode .eqv. .FALSE.) then
                 control_calc = control_lw
                 spectrum_calc = spectrum_lw
              else
@@ -651,7 +651,7 @@ write(stdlog_unit, socrates_rad_nml)
           else
              control_sw%isolir = 1
              CALL read_control(control_sw, spectrum_sw)
-             if(socrates_hires_mode == .FALSE.) then
+             if(socrates_hires_mode .eqv. .FALSE.) then
                 control_calc = control_sw
                 spectrum_calc = spectrum_sw
              else
@@ -673,7 +673,7 @@ write(stdlog_unit, socrates_rad_nml)
             idx_chunk_start = (i_chunk-1)*chunk_size + 1
             idx_chunk_end   = (i_chunk)*chunk_size
 
-          if (soc_lw_mode==.TRUE.) then
+          if (soc_lw_mode) then
  
             CALL socrates_calc(Time_diag, control_calc, spectrum_calc,                      &
                n_profile_chunk, n_layer, input_n_cloud_layer, input_n_aer_mode,             &
@@ -738,7 +738,7 @@ write(stdlog_unit, socrates_rad_nml)
           
           output_heating_rate(:,:,:) = reshape(soc_heating_rate(:,:),(/si,sj,sk /))
 
-          if (soc_lw_mode == .TRUE.) then
+          if (soc_lw_mode) then
               output_soc_spectral_olr(:,:,:) = reshape(soc_spectral_olr(:,:),(/si,sj,int(n_soc_bands_lw,i_def) /))
           endif
 
@@ -967,12 +967,12 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
 
        !Set tide-locked flux if tidally-locked = .true. Else use diurnal-solar
        !to calculate insolation from orbit!
-       if (tidally_locked.eq..true.) then
+       if (tidally_locked) then
             coszen = COS(rad_lat(:,:))*COS(rad_lon(:,:))
             WHERE (coszen < 0.0) coszen = 0.0
             rrsun = 1 ! needs to be set, set to 1 so that stellar_radiation is unchanged in socrates_interface
 
-       elseif (frierson_solar_rad .eq. .true.) then
+       elseif (frierson_solar_rad) then
             p2     = (1. - 3.*sin(rad_lat(:,:))**2)/4.
             coszen = 0.25 * (1.0 + del_sol * p2 + del_sw * sin(rad_lat(:,:)))
             rrsun  = 1 ! needs to be set, set to 1 so that stellar_radiation is unchanged in socrates_interface
@@ -1019,14 +1019,14 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
       !get ozone 
        if(do_read_ozone)then
          call interpolator( o3_interp, Time_diag, p_half_in, ozone_in, trim(ozone_field_name))
-         if (input_o3_file_is_mmr==.false.) then
+         if (input_o3_file_is_mmr.eqv..false.) then
              ozone_in = ozone_in * wtmozone / (1000. * gas_constant / rdgas ) !Socrates expects all abundances to be mass mixing ratio. So if input file is volume mixing ratio, it must be converted to mass mixing ratio using the molar masses of dry air and ozone
              ! Molar mass of dry air calculated from gas_constant / rdgas, and converted into g/mol from kg/mol by multiplying by 1000. This conversion is necessary because wtmozone is in g/mol.
              
          endif 
        endif
 
-       if (input_co2_mmr==.false.) then
+       if (input_co2_mmr.eqv..false.) then
            co2_in = co2_ppmv * 1.e-6 * wtmco2 / (1000. * gas_constant / rdgas )!Convert co2_ppmv to a mass mixing ratio, as required by socrates
              ! Molar mass of dry air calculated from gas_constant / rdgas, and converted into g/mol from kg/mol by multiplying by 1000. This conversion is necessary because wtmco2 is in g/mol.           
        else
@@ -1036,7 +1036,7 @@ subroutine run_socrates(Time, Time_diag, rad_lat, rad_lon, temp_in, q_in, t_surf
        !get co2 
        if(do_read_co2)then
          call interpolator( co2_interp, Time_diag, p_half_in, co2_in, trim(co2_field_name))
-         if (input_co2_mmr==.false.) then
+         if (input_co2_mmr.eqv..false.) then
              co2_in = co2_in * 1.e-6 * wtmco2 / (1000. * gas_constant / rdgas )
              ! Molar mass of dry air calculated from gas_constant / rdgas, and converted into g/mol from kg/mol by multiplying by 1000. This conversion is necessary because wtmco2 is in g/mol.
              

@@ -8,9 +8,10 @@ import subprocess
 import numpy as np
 
 start_time=time.time()
+base_dir='/gpfs/ts0/projects/Research_Project-161613/sit204/data_isca_gfortran/'
 #base_dir=os.environ['GFDL_DATA']
 #base_dir = '/disca/share/sit204/data_from_isca_cpu/cssp_laura_exps/'
-base_dir = '/disca/share/sit204/data_from_isca_cpu/cssp_perturb_exps/control/soc_ga3_do_simple_false_cmip_o3_bucket/'
+#base_dir = '/disca/share/sit204/data_from_isca_cpu/cssp_perturb_exps/control/soc_ga3_do_simple_false_cmip_o3_bucket/'
 #base_dir='/scratch/sit204/mounts/gv4/sit204/data_isca/'
 #exp_name_list = ['soc_ga3_files_smooth_topo_fftw_mk1_fresh_compile_long', 'soc_ga3_files_smooth_topo_old_fft_mk2_long']
 #exp_name_list = [f'soc_ga3_do_simple_false_cmip_o3_bucket_perturbed_ens_{f}' for f in range(200,400)]
@@ -20,10 +21,11 @@ base_dir = '/disca/share/sit204/data_from_isca_cpu/cssp_perturb_exps/control/soc
 ##exp_name_list = ['soc_ga3_files_smooth_topo_mk1_fresh_compile_long_cmip5_ozone']
 #exp_name_list = ['soc_ga3_files_smooth_topo_mk1_fresh_compile_long_ice_albedo_not_land_mask_ie_sst_jra_55_8_sbm_do_simple_false_cmip5_o3_bucket']
 #exp_name_list = ['soc_ga3_files_smooth_topo_mk1_fresh_compile_long_ice_albedo_not_land_mask_ice_sst_jra_55_8_sbm_do_simple_false_cmip5_o3_bucket']
-exp_name_list = ['control_exp']
-avg_or_daily_list=['pentad']
-start_file=601
-end_file=3480
+#exp_name_list = ['control_exp']
+exp_name_list = ['soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_gfort'] + [f'soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_asia_ideal_{exp_num}_gfort' for exp_num in [22, 23, 24, 25]]
+avg_or_daily_list=['monthly']
+start_file=360
+end_file=840
 nfiles=(end_file-start_file)+1
 
 do_extra_averaging=False #If true, then 6hourly data is averaged into daily data using cdo
@@ -34,7 +36,7 @@ level_set='standard' #Default is the standard levels used previously. ssw_diagno
 mask_below_surface_set=' ' #Default is to mask values that lie below the surface pressure when interpolated. For some applications, e.g. Tom Clemo's / Mark Baldwin's stratosphere index, you want to have values interpolated below ground, i.e. as if the ground wasn't there. To use this option, this value should be set to '-x '. 
 all_vars=False
 #var_names_list = 'slp height precipitation vcomp ucomp temp_2m temp div flux_t flux_lhe bucket_depth'
-var_names_list = 'slp height temp_2m'
+var_names_list = '-a slp height'
 
 try:
     out_dir

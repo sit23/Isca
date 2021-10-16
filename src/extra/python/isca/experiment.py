@@ -240,7 +240,7 @@ class Experiment(Logger, EventEmitter):
                 mpirun_opts += f' -bootstrap pbsdsh -f {nodefile}'
             except:
                 nodefile = os.environ['GFDL_JOB_NODEFILE']
-                mpirun_opts += f' -f {nodefile}'
+                mpirun_opts += f' -bootstrap slurm -f {nodefile}'
            
             self.log.info(f'using nodefile {nodefile}, mpirun_opts = {mpirun_opts}')
             
