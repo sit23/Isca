@@ -31,10 +31,10 @@ nfiles=(end_file-start_file)+1
 do_extra_averaging=False #If true, then 6hourly data is averaged into daily data using cdo
 group_months_into_one_file=True # If true then monthly data files and daily data files are merged into one big netcdf file each.
 overwrite_previous_combined_files=True
-n_splits_of_combined_nc_file = 24
+n_splits_of_combined_nc_file = 20
 level_set='standard' #Default is the standard levels used previously. ssw_diagnostics are the ones blanca requested for MiMa validation
 mask_below_surface_set=' ' #Default is to mask values that lie below the surface pressure when interpolated. For some applications, e.g. Tom Clemo's / Mark Baldwin's stratosphere index, you want to have values interpolated below ground, i.e. as if the ground wasn't there. To use this option, this value should be set to '-x '. 
-all_vars=False
+all_vars=True
 #var_names_list = 'slp height precipitation vcomp ucomp temp_2m temp div flux_t flux_lhe bucket_depth'
 var_names_list = '-a slp height'
 
