@@ -18,7 +18,7 @@ template_debug={{ template_dir }}/mkmf.template.debug
 execdir={{ execdir }}        # where code is compiled and executable is created
 executable={{ executable_name }}
 
-#netcdf_flags=`nf-config --fflags --flibs`
+netcdf_flags=`nf-config --fflags --flibs`
 
 #ulimit -s unlimited # Set stack size to unlimited
 export MALLOC_CHECK_=0
