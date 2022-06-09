@@ -4,10 +4,9 @@
 # 0. Source the environment file to load appropriate variables
 source {{ env_source }}
 
-
 # 1. Configuration
 hostname=`hostname`
-compiler=${GFDL_COMPILER:-ia64}
+compiler=${GFDL_MKMF_TEMPLATE:-ia64}
 template={{ template_dir }}/mkmf.template.${compiler}
 mkmf={{ srcdir }}/../bin/mkmf                             # path to executable mkmf
 sourcedir={{ srcdir }}                             # path to directory containing model source code
@@ -48,9 +47,22 @@ cd $execdir
 
 echo $pathnames
 
+
+if [ $debug == True ]; then
+
+ echo "Compiling in debug mode"
+
+# execute mkmf to create makefile
+cppDefs="-Duse_libMPI -Duse_netCDF -Duse_LARGEFILE -DINTERNAL_FILE_NML -DOVERLOAD_C8 {{compile_flags}}"
+$mkmf  -a $sourcedir -t $template_debug -p $executable -c "$cppDefs" $pathnames $sourcedir/shared/include $sourcedir/shared/mpp/include
+
+else
+
 # execute mkmf to create makefile
 cppDefs="-Duse_libMPI -Duse_netCDF -Duse_LARGEFILE -DINTERNAL_FILE_NML -DOVERLOAD_C8 ${CDEFS} {{compile_flags}}"
 $mkmf  -a $sourcedir -t $template -p $executable -c "$cppDefs" $pathnames $sourcedir/shared/include $sourcedir/shared/mpp/include
+
+fi
 
 make
 

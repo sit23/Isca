@@ -47,6 +47,7 @@ class Experiment(Logger, EventEmitter):
             'num_fourier': 42,
             'num_spherical': 43,
         },
+
         'T21': {
             'lon_max': 64,
             'lat_max': 32,
@@ -143,6 +144,11 @@ class Experiment(Logger, EventEmitter):
     def write_namelist(self, outdir):
         namelist_file = P(outdir, 'input.nml')
         self.log.info('Writing namelist to %r' % namelist_file)
+        # A fixed column width is added to be a fixed number as most string namelist variables are
+        # width 256 in Isca, so that width plus some indentation and the namelist parameters own 
+        # name should not exceed 350 characters. Default f90nml value is 72, which is regularly 
+        # too short for some namelist variables where directories are pointed to.
+        self.namelist.column_width = 350
         self.namelist.write(namelist_file)
 
     def write_diag_table(self, outdir):
@@ -320,6 +326,13 @@ class Experiment(Logger, EventEmitter):
                 self.log.debug("Restart file %s combined" % restartfile)
 
             self.emit('run:combined', self, i)
+        else:
+            for file in self.diag_table.files:
+                netcdf_file = '%s.nc' % file
+                filebase = P(self.rundir, netcdf_file)
+                sh.cp(filebase, P(outdir, netcdf_file))
+                sh.rm(glob.glob(filebase+'*'))
+                self.log.debug('%s copied to data directory' % netcdf_file)
 
         # make the restart archive and delete the restart files
         self.make_restart_archive(self.get_restart_file(i), resdir)
