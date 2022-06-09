@@ -36,6 +36,7 @@ RUN groupadd -g 9004 isca_build
 RUN useradd -ms /bin/bash -u 9002 -g isca_build isca
 COPY . /isca
 RUN chown -R isca /isca
+RUN chown -R isca /tmp
 
 RUN pip3 install -r /isca/src/extra/python/requirements.txt
 RUN pip3 install -e /isca/src/extra/python
@@ -45,6 +46,11 @@ VOLUME /data
 VOLUME /isca
 
 WORKDIR /isca
+
+#Run pytest, which will then run the test compile on the grey, dry and isca codebases. This will mean that compilation is not required once build is complete.
+RUN python3 -m pytest
+
+RUN chmod -R a=rwx /tmp
 
 COPY docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
