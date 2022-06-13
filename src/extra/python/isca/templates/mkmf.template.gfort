@@ -1,8 +1,8 @@
 # template for the  gfortran compiler
 # typical use with mkmf
 # mkmf -t template.ifc -c"-Duse_libMPI -Duse_netCDF" path_names /usr/local/include
-CPPFLAGS = -I/usr/local/include
-NETCDF_LIBS = `nf-config --fflags  --flibs`
+CPPFLAGS = `nc-config --cflags`
+NETCDF_LIBS = `nc-config --flibs`
 
 # FFLAGS:
 #  -cpp: Use the fortran preprocessor
