@@ -3,7 +3,7 @@ FROM ubuntu:latest
 ENV GFDL_WORK /tmp
 ENV GFDL_BASE /isca
 ENV GFDL_DATA /data
-ENV GFDL_ENV docker_mac
+ENV GFDL_ENV docker
 
 # # ignore missing hardware needed lfor openMPI speedup
 # ENV ["OMPI_MCA_btl", "^openib"]

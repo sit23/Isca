@@ -25,4 +25,4 @@ FC = $(F90)
 LD = $(F90)
 
 LDFLAGS = -lnetcdff -lnetcdf -lmpi 
-CFLAGS = -D__IFC
+CFLAGS = -D__IFC -Wno-traditional
