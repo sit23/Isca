@@ -500,11 +500,14 @@ subroutine read_restart_or_do_coldstart(tracer_attributes, ocean_mask)
 type(tracer_type), intent(inout), dimension(:) :: tracer_attributes
 logical, optional, intent(in), dimension(:,:) :: ocean_mask
 
-integer :: m, n, k, nt, ntr
+integer :: m, n, k, nt, ntr, level_tick, time_level_tick, i, j
 integer, dimension(4) :: siz
 real, dimension(ms:me, ns:ne, num_levels) :: real_part, imag_part
 character(len=64) :: file, tr_name
 character(len=4) :: ch1,ch2,ch3,ch4,ch5,ch6
+real, dimension(is:ie  ) :: lon
+real, dimension(js:je  ) :: lat
+real, dimension(is:ie, js:je) :: rad_lon_2d, rad_lat_2d
 
 file = 'INPUT/spectral_dynamics.res.nc'
 if(file_exist(trim(file))) then
@@ -583,7 +586,22 @@ else
     else if(trim(tracer_attributes(ntr)%name) == 'mix_rat') then
       grid_tracers(:,:,:,:,ntr) = 0.
     else
-      grid_tracers(:,:,:,:,ntr) = 0.
+      call get_deg_lon(lon)
+      call get_deg_lat(lat)
+
+      do i=is,ie
+        rad_lon_2d(i,:) = lon(i)*pi/180.
+      enddo
+      
+      do j=js,je
+        rad_lat_2d(:,j) = lat(j)*pi/180.
+      enddo
+      ! num_levels, num_time_levels
+      do level_tick=1,num_levels
+        do time_level_tick=1,num_time_levels
+          grid_tracers(:,:,level_tick,time_level_tick,ntr) = 1.*cos(rad_lat_2d)!*(level_tick/num_levels)
+        enddo
+      enddo
     endif
   enddo
 
@@ -1130,6 +1148,8 @@ integer :: ntr, time_level
 dp = p_half(:,:,2:num_levels+1) - p_half(:,:,1:num_levels)
 
 do ntr = 1, num_tracers
+  write(6,*) trim(tracer_attributes(ntr)%numerical_representation)
+  write(6,*) 'ABOUT TO DO TRACERS'
   if(trim(tracer_attributes(ntr)%numerical_representation) == 'spectral') then
     call horizontal_advection(spec_tracers(:,:,:,current,ntr), ug(:,:,:,current), vg(:,:,:,current), dt_tr(:,:,:,ntr))
     if(tracer_vert_advect_scheme(ntr) == SECOND_CENTERED .or. &
@@ -1157,9 +1177,13 @@ do ntr = 1, num_tracers
     dt_tr(:,:,:,ntr) = 0.0
     call a_grid_horiz_advection (ug(:,:,:,current), vg(:,:,:,current), tr_future, delta_t, dt_tr(:,:,:,ntr))
     tr_future = tr_future + delta_t*dt_tr(:,:,:,ntr)
+
+    write(6,*) maxval(dt_tr(:,:,:,ntr)), minval(dt_tr(:,:,:,ntr)), ntr, num_tracers
+
     dp = p_half(:,:,2:num_levels+1) - p_half(:,:,1:num_levels)
     call vert_advection(delta_t, wg, dp, tr_future, dt_tmp, scheme=tracer_vert_advect_scheme(ntr), form=ADVECTIVE_FORM)
     tr_future = tr_future + delta_t*dt_tmp
+    write(6,*) maxval(dt_tmp), minval(dt_tmp), ntr, num_tracers, 'vert'
     if(step_number == num_steps) then
       part_filt_tr_out(:,:,:,ntr)=grid_tracers(:,:,:,previous,ntr) - 2.0*grid_tracers(:,:,:,current,ntr)
 

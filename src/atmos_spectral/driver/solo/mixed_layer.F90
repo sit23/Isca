@@ -733,6 +733,7 @@ endif !s end of if(do_sc_sst).
 Tri_surf%delta_t = fn_t + en_t * delta_t_surf
 if (evaporation) Tri_surf%delta_tr(:,:,nhum) = fn_q + en_q * delta_t_surf
 
+write(6,*) 'delta-tr max min from evap', maxval(Tri_surf%delta_tr(:,:,nhum)/720.), minval(Tri_surf%delta_tr(:,:,nhum)/720.)
 !
 ! Note:
 ! When using an implicit step there is not a clearly defined flux for a given timestep
