@@ -58,16 +58,16 @@ real :: realnumber
 ! <DATA NAME="GRAV" UNITS="m/s^2" TYPE="real" DEFAULT="9.80">
 !   acceleration due to gravity
 ! </DATA>
-! <DATA NAME="RDGAS" UNITS="J/kg/deg" TYPE="real" DEFAULT="287.04">
+! <DATA NAME="RDGAS" UNITS="J/kg/K" TYPE="real" DEFAULT="287.04">
 !   gas constant for dry air
 ! </DATA>
 ! <DATA NAME="KAPPA" TYPE="real" DEFAULT="2./7.">
 !   RDGAS / CP_AIR
 ! </DATA>
-! <DATA NAME="CP_AIR" UNITS="J/kg/deg" TYPE="real" DEFAULT="RDGAS/KAPPA">
+! <DATA NAME="CP_AIR" UNITS="J/kg/K" TYPE="real" DEFAULT="RDGAS/KAPPA">
 !   specific heat capacity of dry air at constant pressure
 ! </DATA>
-! <DATA NAME="CP_OCEAN" UNITS="J/kg/deg" TYPE="real" DEFAULT="3989.24495292815">
+! <DATA NAME="CP_OCEAN" UNITS="J/kg/K" TYPE="real" DEFAULT="3989.24495292815">
 !   specific heat capacity taken from McDougall (2002) "Potential Enthalpy ..."
 ! </DATA>
 ! <DATA NAME="RHO0" UNITS="kg/m^3" TYPE="real" DEFAULT="1.035e3">
@@ -76,8 +76,8 @@ real :: realnumber
 ! <DATA NAME="RHO0R" UNITS="m^3/kg" TYPE="real" DEFAULT="1.0/RHO0">
 !   reciprocal of average density of sea water
 ! </DATA>
-! <DATA NAME="RHO_CP" UNITS="J/m^3/deg" TYPE="real" DEFAULT="RHO0*CP_OCEAN">
-!   (kg/m^3)*(cal/kg/deg C)(joules/cal) = (joules/m^3/deg C)
+! <DATA NAME="RHO_CP" UNITS="J/m^3/K" TYPE="real" DEFAULT="RHO0*CP_OCEAN">
+!   (kg/m^3)*(J/kg/K) = (J/m^3/K)
 ! </DATA>
 
 real, public, parameter :: EARTH_GRAV = 9.80
@@ -90,7 +90,7 @@ real, public, parameter :: RHO0R   = 1.0/RHO0
 real, public, parameter :: RHO_CP  = RHO0*CP_OCEAN
 
 !------------ water vapor constants ---------------
-! <DATA NAME="ES0" TYPE="real" DEFAULT="1.0">
+! <DATA NAME="DEF_ES0" TYPE="real" DEFAULT="1.0">
 !   Humidity factor. Controls the humidity content of the atmosphere through
 !   the Saturation Vapour Pressure expression when using DO_SIMPLE.
 ! </DATA>
@@ -116,7 +116,7 @@ real, public, parameter :: RHO_CP  = RHO0*CP_OCEAN
 !   temp where fresh water freezes
 ! </DATA>
 
-real, public, parameter :: ES0 = 1.0
+real, public, parameter :: DEF_ES0 = 1.0
 real, public, parameter :: RVGAS = 461.50
 real, public, parameter :: CP_VAPOR = 4.0*RVGAS
 real, public, parameter :: DENS_H2O = 1000.
@@ -265,9 +265,10 @@ real, public :: PSTD_MKS    = PSTD_MKS_EARTH
 real, public :: RDGAS  = EARTH_RDGAS
 real, public :: KAPPA = EARTH_KAPPA
 real, public :: CP_AIR = EARTH_CP_AIR
+real, public :: es0 = DEF_ES0
 logical :: earthday_multiple = .false.
 
-namelist/constants_nml/ radius, grav, omega, orbital_period, pstd, pstd_mks, rdgas, kappa, solar_const, earthday_multiple, rotation_period
+namelist/constants_nml/ radius, grav, omega, orbital_period, pstd, pstd_mks, rdgas, kappa, solar_const, earthday_multiple, es0, rotation_period
 
 !-----------------------------------------------------------------------
 ! version and tagname published
@@ -320,7 +321,7 @@ subroutine constants_init
 	else
 	    seconds_per_sol = abs(2*pi / (orbital_rate - omega))
 	endif
-	
+
     CP_AIR = RDGAS/KAPPA
 
     constants_initialised = .true.
@@ -361,4 +362,3 @@ end module constants_mod
 !   </NOTE>
 
 ! </INFO>
-
