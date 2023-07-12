@@ -615,7 +615,7 @@ real, intent(in)    , dimension(:,:)   :: h, rad_lat
 real, intent(inout) , dimension(:,:,:) :: k_m, k_t
 
 real, dimension(size(t,1),size(t,2))   :: dz, b, speed2, rich, fri, &
-                                          alpz, fri2
+                                          alpz, fri2, rich_raw
 integer                                :: k
 
 do k = 2, size(t,3)
@@ -627,8 +627,8 @@ do k = 2, size(t,3)
   dz     = z(:,:,k-1) - z(:,:,k)
   b      = grav*(t(:,:,k-1)-t(:,:,k))/t(:,:,k)
   speed2 = (u(:,:,k-1) - u(:,:,k))**2 + (v(:,:,k-1) - v(:,:,k))**2
-  rich= b*dz/(speed2+small)
-  rich = max(rich, 0.0)
+  rich_raw= b*dz/(speed2+small)
+  rich = max(rich_raw, 0.0)
 
   if (free_atm_skyhi_diff) then
 !---------------------------------------------------------------------
@@ -659,6 +659,9 @@ do k = 2, size(t,3)
 !---------------------------------------------------------------------
   if (young_read_jupiter_diffusivity) then
     fri(:,:)   = (1.0 - rich/rich_crit_diff)**3
+    where (rich_raw .le. 0)
+      fri(:, :) = 1.0
+    endwhere
   else
     fri(:,:)   = (1.0 - rich/rich_crit_diff)**2  
   endif
