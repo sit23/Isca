@@ -1340,7 +1340,7 @@ if(gp_surface) then
     dtemp_gp_surface_flux = -dt_tg(:,:,num_levels)
     dsphum_gp_surface_flux = -dt_tracers(:,:,num_levels,nsphum)
 
-	call gp_surface_flux (dt_tg(:,:,:), dt_tracers(:,:,:,nsphum), grid_tracers(:,:,:,previous,nsphum), p_half(:,:,:,current), num_levels)
+	call gp_surface_flux (dt_tg(:,:,:), dt_tracers(:,:,:,nsphum), grid_tracers(:,:,:,previous,nsphum), p_half(:,:,:,current), num_levels, rad_lat(:,:))
 	
 	dtemp_gp_surface_flux  = dtemp_gp_surface_flux  + dt_tg(:,:,num_levels)
 	dsphum_gp_surface_flux = dsphum_gp_surface_flux + dt_tracers(:,:,num_levels,nsphum)

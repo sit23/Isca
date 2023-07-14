@@ -266,6 +266,7 @@ real    :: land_humidity_prefactor  =  1.0    !s Default is that land makes no d
 real    :: land_evap_prefactor  =  1.0    !s Default is that land makes no difference to evaporative fluxes
 
 real    :: flux_heat_gp  =  5.7    !s Default value for Jupiter of 5.7 Wm^-2
+real    :: delta_int_flux = 0.0    ! Default value for Jupiter is 0 Wm^-2. This gives an internal heat flux that's constant in space.
 real    :: diabatic_acce =  1.0    !s Diabatic acceleration??
 
 real    :: q_deep_sphum  =  1.74e-3 !s Solar abundance. Taken from O/H ratio quoted in doi:10.1029/98JE01049    
@@ -288,7 +289,8 @@ namelist /surface_flux_nml/ no_neg_q,             &
                             diabatic_acce,        &
                             gp_deep_water_source, &
                             q_deep_sphum,         &
-                            tau_sphum
+                            tau_sphum,            &
+                            delta_int_flux
 
 contains
 
@@ -1081,18 +1083,23 @@ real   , intent(inout), dimension(:) :: cd, ch, ce, ustar, bstar
 
 end subroutine ncar_ocean_fluxes
 
-subroutine gp_surface_flux (dt_tg, dt_sphum, sphum, p_half, num_levels)
+subroutine gp_surface_flux (dt_tg, dt_sphum, sphum, p_half, num_levels, rad_lat)
 
 real   , intent(inout), dimension(:,:,:) :: dt_tg, dt_sphum
 real   , intent(in), dimension(:,:,:) :: sphum
 real   , intent(in), dimension(:,:,:) :: p_half
+real   , intent(in), dimension(:,:) :: rad_lat
 integer   , intent(in) :: num_levels
+real, dimension(size(dt_tg,1), size(dt_tg,2)) :: int_flux_profile
 
   if (do_init) call surface_flux_init
 
+
+int_flux_profile = flux_heat_gp + (delta_int_flux/3.)*(1.-3.*(sin(rad_lat))**2.)
+  
 ! add the internal heat flux
 dt_tg(:,:,num_levels) = dt_tg(:,:,num_levels)                          &
-  + diabatic_acce*grav*flux_heat_gp/(cp_air*(p_half(:,:,num_levels+1)    &
+  + diabatic_acce*grav*int_flux_profile/(cp_air*(p_half(:,:,num_levels+1)    &
   - p_half(:,:,num_levels)))
 
 if (gp_deep_water_source) then
