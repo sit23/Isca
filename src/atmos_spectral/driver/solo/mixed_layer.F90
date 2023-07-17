@@ -123,6 +123,17 @@ character(len=256) :: ice_file_name  = 'siconc_clim_amip'
 real    :: ice_albedo_value = 0.7
 real    :: ice_concentration_threshold = 0.5
 logical :: update_albedo_from_ice = .false.
+logical :: update_land_mask_from_ice = .false.
+logical :: binary_ice_albedo = .true.
+logical :: allow_qflux_over_land = .false.
+
+logical :: specify_sst_over_sea_ice = .false. !Problem with specifying SSTs when Isca has no ice model is poles are too warm. This adds the option to have a separate SST specification over SEA ice only.
+logical :: linearly_interpolate_sea_ice_temp_and_sst = .true. !Mix SST input and ice sst linearly based on ice concentration
+character(len=256) :: ice_sst_file  = 'temp_2m_input'
+
+logical :: specify_sst_over_land_from_separate_file_to_ocean_sst = .false. !Isca's lack of land model introduces temperature biases. Try forcibly correcting them by specifying ssts there.
+character(len=256) :: land_sst_file  = 'temp_2m_input'
+
 
 logical :: add_latent_heat_flux_anom = .false.
 character(len=256) :: flux_lhe_anom_file_name  = 'INPUT/flux_lhe_anom.nc'
@@ -142,10 +153,17 @@ namelist/mixed_layer_nml/ evaporation, depth, qflux_amp, qflux_width, tconst,&
                               land_albedo_prefactor,                         &  !s
                               load_qflux,qflux_file_name,time_varying_qflux, &
                               update_albedo_from_ice, ice_file_name,         &
+                              binary_ice_albedo, update_land_mask_from_ice,  &
                               ice_albedo_value, specify_sst_over_ocean_only, &
                               ice_concentration_threshold,                   &
                               add_latent_heat_flux_anom,flux_lhe_anom_file_name,&
-                              flux_lhe_anom_field_name, do_ape_sst, qflux_field_name
+                              flux_lhe_anom_field_name,                      &
+                              specify_sst_over_sea_ice,                      &
+                              linearly_interpolate_sea_ice_temp_and_sst,     &
+                              specify_sst_over_sea_ice, ice_sst_file,        &
+                              specify_sst_over_land_from_separate_file_to_ocean_sst, &
+                              land_sst_file, allow_qflux_over_land,          &
+                              do_ape_sst, qflux_field_name
 
 !=================================================================================================================================
 
@@ -193,6 +211,9 @@ real, allocatable, dimension(:,:)   ::                                        &
      zsurf,                 &   ! mj know about topography
      land_sea_heat_capacity,&
      sst_new,               &   ! mj input SST
+     sst_input,             &   ! mj input SST     
+     ice_sst_new,           &
+     land_sst_new,           &
      albedo_initial
 
 logical, allocatable, dimension(:,:) ::      land_mask
@@ -201,6 +222,8 @@ logical, allocatable, dimension(:,:) ::      land_mask
   type(interpolate_type),save :: sst_interp
   type(interpolate_type),save :: qflux_interp
   type(interpolate_type),save :: ice_interp
+  type(interpolate_type),save :: ice_sst_interp
+  type(interpolate_type),save :: land_sst_interp  
   type(interpolate_type),save :: flux_lhe_anom_interp  
 
 real inv_cp_air
@@ -281,7 +304,10 @@ allocate (albedo_initial         (is:ie, js:je))
 allocate(land_sea_heat_capacity  (is:ie, js:je))
 allocate(zsurf                   (is:ie, js:je))
 allocate(sst_new                 (is:ie, js:je))
-allocate(land_mask                 (is:ie, js:je)); land_mask=land
+allocate(sst_input               (is:ie, js:je))
+allocate(ice_sst_new             (is:ie, js:je))
+allocate(land_sst_new             (is:ie, js:je))
+allocate(land_mask               (is:ie, js:je)); land_mask=land
 !
 !see if restart file exists for the surface temperature
 !
@@ -310,8 +336,17 @@ call get_deg_lon(deg_lon)
         call interpolator_init( sst_interp, trim(sst_file)//'.nc', rad_lonb_2d, rad_latb_2d, data_out_of_bounds=(/CONSTANT/) )
     endif
 
+    if (specify_sst_over_sea_ice) then 
+        call interpolator_init( ice_sst_interp, trim(ice_sst_file)//'.nc', rad_lonb_2d, rad_latb_2d, data_out_of_bounds=(/CONSTANT/) )
+    endif
 
+    if (specify_sst_over_land_from_separate_file_to_ocean_sst) then 
+        call interpolator_init( land_sst_interp, trim(land_sst_file)//'.nc', rad_lonb_2d, rad_latb_2d, data_out_of_bounds=(/CONSTANT/) )
+    endif
 
+    if (update_albedo_from_ice) then 
+        call interpolator_init( ice_interp, trim(ice_file_name)//'.nc', rad_lonb_2d, rad_latb_2d, data_out_of_bounds=(/CONSTANT/) )
+    endif
 
 if (file_exist('INPUT/mixed_layer.res.nc')) then
 
@@ -333,9 +368,25 @@ else if( do_read_sst ) then !s Added so that if we are reading sst values then w
 
    call interpolator( sst_interp, Time, t_surf, trim(sst_file) )
 
+   if(specify_sst_over_sea_ice) then 
+        call interpolator( ice_sst_interp, Time, ice_sst_new, trim(ice_sst_file) )
+
+        if(linearly_interpolate_sea_ice_temp_and_sst) then
+            call read_ice_conc(Time)                
+            where(.not. land_mask) t_surf = t_surf + (ice_concentration) *(ice_sst_new - t_surf) !Only do this where sea ice.
+        endif
+    endif   
+
+    if(specify_sst_over_land_from_separate_file_to_ocean_sst) then 
+        call interpolator( land_sst_interp, Time, land_sst_new, trim(land_sst_file) )
+        where (land_mask) t_surf = land_sst_new
+    endif
+
+
+
+
 elseif (prescribe_initial_dist) then
 !  call error_mesg('mixed_layer','mixed_layer restart file not found - initializing from prescribed distribution', WARNING)
-
     t_surf(:,:) = tconst - delta_T*((3.*sin(rad_lat_2d)**2.)-1.)/3.
 
 else
@@ -471,9 +522,8 @@ end select
 albedo_initial=albedo
 
 if (update_albedo_from_ice) then
-    call interpolator_init( ice_interp, trim(ice_file_name)//'.nc', rad_lonb_2d, rad_latb_2d, data_out_of_bounds=(/CONSTANT/) )
     call read_ice_conc(Time)
-    call albedo_calc(albedo,Time)
+	call albedo_calc(albedo,Time)
 else
     if ( id_albedo > 0 ) used = send_data ( id_albedo, albedo )
 endif
@@ -594,12 +644,12 @@ if(.not.module_is_initialized) then
   call error_mesg('mixed_layer','mixed_layer module is not initialized',FATAL)
 endif
 
-if(update_albedo_from_ice) then
-    call read_ice_conc(Time_next)
-    land_ice_mask=.false.
-    where(land_mask.or.(ice_concentration.gt.ice_concentration_threshold))
-        land_ice_mask=.true.
-    end where
+if(update_land_mask_from_ice) then
+	call read_ice_conc(Time_next)
+	land_ice_mask=.false.
+	where(land_mask.or.(ice_concentration.gt.ice_concentration_threshold))
+		land_ice_mask=.true.
+	end where
 else
     land_ice_mask=land_mask
 endif
@@ -647,9 +697,12 @@ beta_lw = drdt_surf
 if(load_qflux.and.time_varying_qflux) then
          call interpolator( qflux_interp, Time, ocean_qflux, trim(qflux_file_name) )
 
-     if(update_albedo_from_ice) then
-          where (land_ice_mask) ocean_qflux=0.
-     endif
+         if(.not.allow_qflux_over_land) then
+             if(update_albedo_from_ice) then
+                  where (land_ice_mask) ocean_qflux=0.
+             endif
+         endif
+
 
 endif
 
@@ -667,16 +720,35 @@ endif
 !s Surface heat_capacity calculation based on that in MiMA by mj
 
 if(do_sc_sst) then !mj sst read from input file
-     ! read at the new time, as that is what we are stepping to
-     call interpolator( sst_interp, Time_next, sst_new, trim(sst_file) )
+         ! read at the new time, as that is what we are stepping to
+         call interpolator( sst_interp, Time_next, sst_input, trim(sst_file) )
 
-     if(specify_sst_over_ocean_only) then
-         where (.not.land_ice_mask) delta_t_surf = sst_new - t_surf
-         where (.not.land_ice_mask) t_surf = t_surf + delta_t_surf             
-     else
-         delta_t_surf = sst_new - t_surf
-         t_surf = t_surf + delta_t_surf
-     endif
+         sst_new = sst_input
+
+        if(specify_sst_over_sea_ice) then 
+            call interpolator( ice_sst_interp, Time_next, ice_sst_new, trim(ice_sst_file) )
+
+            if(linearly_interpolate_sea_ice_temp_and_sst) then
+                call read_ice_conc(Time_next)                
+                where (.not.land_mask) sst_new = sst_input + (ice_concentration) *(ice_sst_new - sst_input) !Only do this where sea ice.
+                where (land_mask) sst_new = sst_input
+            endif
+        endif
+
+        if(specify_sst_over_land_from_separate_file_to_ocean_sst) then 
+            call interpolator( land_sst_interp, Time_next, land_sst_new, trim(land_sst_file) )
+            where (land_mask) sst_new = land_sst_new
+        endif
+
+
+        if(specify_sst_over_ocean_only) then
+            where (.not.land_ice_mask) delta_t_surf = sst_new - t_surf
+            where (.not.land_ice_mask) t_surf = t_surf + delta_t_surf			 
+        else
+            delta_t_surf = sst_new - t_surf
+            t_surf = t_surf + delta_t_surf
+        endif
+	     
 end if
 
 if (do_ape_sst) then 
@@ -757,9 +829,13 @@ albedo_inout=albedo_initial
 
 if(update_albedo_from_ice) then
 
-    where(ice_concentration.gt.ice_concentration_threshold) 
-        albedo_inout=ice_albedo_value
-    end where
+    if(binary_ice_albedo) then
+        where(ice_concentration.gt.ice_concentration_threshold) 
+            albedo_inout=ice_albedo_value
+        end where
+    else
+        albedo_inout=ice_concentration *(ice_albedo_value - albedo_inout) + albedo_inout
+    endif
 
     if ( id_ice_conc > 0 ) used = send_data ( id_ice_conc, ice_concentration, Time )
     if ( id_albedo > 0 ) used = send_data ( id_albedo, albedo_inout, Time )
