@@ -809,7 +809,7 @@ real, dimension(:,:,:),     intent(inout) :: dt_ug, dt_vg, dt_tg
 real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 
 real :: delta_t
-real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv
+real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv, tstd, qstd, pert_t, pert_q
 
 ! Simple cloud scheme variabilies to pass to radiation
 real, dimension(size(ug,1), size(ug,2), size(ug,3))    :: cf_rad, reff_rad, qcl_rad, cca_rad  
@@ -831,14 +831,22 @@ if (bucket) then
   filt      = 0.0                ! RG Add bucket
 endif
 
+if (perturb_conv_with_ml) then
+  call read_ml_generated_file(p_half, num_levels, tstd, qstd)
+
+  pert_t = tg(:,:,:,previous) + tstd
+  pert_q = grid_tracers(:,:,:,previous,nsphum) + qstd
+
+endif
+
 rain = 0.0; snow = 0.0; precip = 0.0
 
 select case(r_conv_scheme)
 
 case(SIMPLE_BETTS_CONV)
 
-   call qe_moist_convection ( delta_t,              tg(:,:,:,previous),      &
-    grid_tracers(:,:,:,previous,nsphum),        p_full(:,:,:,previous),      &
+   call qe_moist_convection ( delta_t,              pert_t,      &
+   pert_q,        p_full(:,:,:,previous),      &
                           p_half(:,:,:,previous),                coldT,      &
                                  rain,                            snow,      &
                            conv_dt_tg,                      conv_dt_qg,      &

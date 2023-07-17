@@ -71,18 +71,25 @@ subroutine ml_interface_init(is, ie, js, je, rad_lonb_2d, rad_latb_2d)
 end subroutine ml_interface_init
 
 
-subroutine read_ml_generated_file(Time, p_half, tstd, qstd)
+subroutine read_ml_generated_file(p_half, num_levels, tstd, qstd)
 
-    type(time_type), intent(in)         :: Time
     real, dimension(:,:,:), intent(in)  :: p_half
+    integer, intent(in):: num_levels    
     real, dimension(size(p_half,1),size(p_half,2),size(p_half,3)), intent(out)                   :: tstd, qstd
+    real, dimension(size(p_half,1),size(p_half,2),size(p_half,3)) :: sigma_half    
 
     if(.not.module_is_initialized) then
         call error_mesg('ml_interface','ml_interface module is not initialized',FATAL)
       endif
 
-    call interpolator( conv_input_file_interp, p_half, tstd, tstd_field_name)
-    call interpolator( conv_input_file_interp, p_half, qstd, qstd_field_name)
+    do i in range(size(p_half,1))
+      do j in range(size(p_half,2))
+        sigma_half(i,j,:) = p_half(i,j,:) /p_half(i,j,num_levels+1) 
+      enddo
+    enddo
+
+    call interpolator( conv_input_file_interp, sigma_half, tstd, tstd_field_name)
+    call interpolator( conv_input_file_interp, sigma_half, qstd, qstd_field_name)
 
 end subroutine read_ml_generated_file
 

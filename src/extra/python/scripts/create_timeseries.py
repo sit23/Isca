@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-s
 import numpy as np
-from calendar_calc import day_number_to_date
+# from calendar_calc import day_number_to_date
 from netCDF4 import Dataset, date2num
 import sys
 import pdb
@@ -73,53 +73,52 @@ def create_pressures():
     return p_full,p_half,npfull,nphalf
 
 
-def create_time_arr(num_years,is_climatology,time_spacing):
+# def create_time_arr(num_years,is_climatology,time_spacing):
 
-    if(is_climatology):
-        if(num_years!=1.):
-            print('note that for climatology file only one year is required, so setting num_years=1.')
-        num_days=360.
-        num_years=1.
-#        time_spacing=num_days//10
-        day_number = np.linspace(0,num_days,time_spacing+1)[1:]-(num_days/(2.*time_spacing))
+#     if(is_climatology):
+#         if(num_years!=1.):
+#             print('note that for climatology file only one year is required, so setting num_years=1.')
+#         num_days=360.
+#         num_years=1.
+# #        time_spacing=num_days//10
+#         day_number = np.linspace(0,num_days,time_spacing+1)[1:]-(num_days/(2.*time_spacing))
         
 
 
-        time_units='days since 0000-01-01 00:00:00.0'
-        print('when creating a climatology file, the year of the time units must be zero. This is how the model knows it is a climatology.')
-    else:
-        num_days=num_years*360.
-#        time_spacing=num_years
-        day_number = np.linspace(0,num_days,time_spacing+1)
-        time_units='days since 0001-01-01 00:00:00.0'
+#         time_units='days since 0000-01-01 00:00:00.0'
+#         print('when creating a climatology file, the year of the time units must be zero. This is how the model knows it is a climatology.')
+#     else:
+#         num_days=num_years*360.
+# #        time_spacing=num_years
+#         day_number = np.linspace(0,num_days,time_spacing+1)
+#         time_units='days since 0001-01-01 00:00:00.0'
 
-    half_spacing = (day_number[1]-day_number[0])/2.
-    lower_time_bounds = day_number - half_spacing
-    upper_time_bounds = day_number + half_spacing
+#     half_spacing = (day_number[1]-day_number[0])/2.
+#     lower_time_bounds = day_number - half_spacing
+#     upper_time_bounds = day_number + half_spacing
 
-    time_bounds=np.zeros((len(lower_time_bounds),2))
-    time_bounds[:,0]=lower_time_bounds
-    time_bounds[:,1]=upper_time_bounds
+#     time_bounds=np.zeros((len(lower_time_bounds),2))
+#     time_bounds[:,0]=lower_time_bounds
+#     time_bounds[:,1]=upper_time_bounds
 
-    time_arr = day_number_to_date(day_number)
-    ntime=len(time_arr)
+#     time_arr = day_number_to_date(day_number)
+#     ntime=len(time_arr)
 
-    return time_arr,day_number,ntime,time_units,time_bounds
+#     return time_arr,day_number,ntime,time_units,time_bounds
 
 
 def output_to_file(data,lats,lons,latbs,lonbs,p_full,p_half,time_arr,time_units,file_name,variable_name,number_dict, time_bounds=None, on_half_levels=False):
 
     output_file = Dataset(file_name, 'w', format='NETCDF3_CLASSIC')
 
+    
+
     if p_full is None:
         is_thd=False
     else:
         is_thd=True
 
-    if dims is not None and is_thd:
-        p_half_variable = 'phalf' in dims or 'p_half' in dims
-    else:
-        p_half_variable=False
+    p_half_variable=False
 
     lat = output_file.createDimension('lat', number_dict['nlat'])
     lon = output_file.createDimension('lon', number_dict['nlon'])
@@ -217,7 +216,12 @@ def output_to_file(data,lats,lons,latbs,lonbs,p_full,p_half,time_arr,time_units,
         dims_list.remove('time')
 
     # pdb.set_trace()
-    output_array_netcdf = output_file.createVariable(variable_name,'f4', tuple(dims_list))
+    if type(variable_name) == list:
+        output_netcdf_dict = {}
+        for var_name in variable_name:
+            output_netcdf_dict[var_name] = output_file.createVariable(var_name,'f4', tuple(dims_list))
+    else:
+        output_array_netcdf = output_file.createVariable(variable_name,'f4', tuple(dims_list))
 
 
     latitudes[:] = lats
@@ -238,6 +242,10 @@ def output_to_file(data,lats,lons,latbs,lonbs,p_full,p_half,time_arr,time_units,
         else:
             times[:]     = time_arr
 
-    output_array_netcdf[:] = data
+    if type(variable_name) == list:
+        for var_name in variable_name:
+            output_netcdf_dict[var_name][:] = data[var_name]
+    else:
+        output_array_netcdf[:] = data
 
     output_file.close()
