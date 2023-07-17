@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pdb
 from isca import IscaCodeBase, GreyCodeBase, ColumnCodeBase, DiagTable, Experiment, Namelist, GFDL_BASE
-from ntfy import notify
+# from ntfy import notify
 import datetime
 
 # notify('Job running __'+str(os.path.basename(__file__))+'__ on Isca started at '+str(datetime.datetime.now().time()), 'Isca cpu update')
@@ -294,4 +294,4 @@ exp.namelist = namelist = Namelist({
 #exp.run(1441, multi_node=False, use_restart=True, restart_file = base_dir+'/input/moist_no_drag_sbm_res1440.tar.gz', num_cores=NCORES)
 exp.run(1, multi_node=False, use_restart=False, num_cores=NCORES)
 for i in range(2,5001):
-   exp.run(i, num_cores=NCORES, multi_node=False, mpirun_opts='--bind-to-socket')
+   exp.run(i, num_cores=NCORES, multi_node=False, mpirun_opts='--bind-to socket')
