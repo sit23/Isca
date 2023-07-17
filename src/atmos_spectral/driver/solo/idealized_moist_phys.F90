@@ -784,6 +784,13 @@ endif
    id_rh = register_diag_field ( mod_name, 'rh',                           &
         axes(1:3), Time, 'relative humidity', 'percent')
 
+
+if (read_conv_perturb_input_file) then
+
+    call ml_interface_init(is, ie, js, je, rad_lonb_2d, rad_latb_2d)
+
+endif
+
 end subroutine idealized_moist_phys_init
 !=================================================================================================================================
 subroutine idealized_moist_phys(Time, p_half, p_full, z_half, z_full, ug, vg, tg, grid_tracers, &
