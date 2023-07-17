@@ -1,4 +1,4 @@
-module ml_interface
+module ml_interface_mod
 
 #ifdef INTERNAL_FILE_NML
     use mpp_mod, only: input_nml_file
@@ -6,7 +6,9 @@ module ml_interface
     use fms_mod, only: open_namelist_file, close_file
 #endif
 
-use fms_mod, only: write_version_number, file_exist, close_file, stdlog, error_mesg, NOTE, FATAL, read_data, field_size, uppercase, mpp_pe, check_nml_error
+use fms_mod, only: write_version_number, file_exist, close_file, stdlog, error_mesg, NOTE, FATAL, read_data, field_size, uppercase, mpp_pe, check_nml_error, mpp_root_pe
+
+use time_manager_mod, only: time_type
 
 use interpolator_mod, only: interpolate_type,interpolator_init&
      &,CONSTANT,interpolator
@@ -24,7 +26,7 @@ character(len=10), parameter :: mod_name='ml_interface'
 
 !=================================================================================================================================
 
-public :: ml_generated_file_init, read_ml_generated_file
+public :: ml_interface_init, read_ml_generated_file
 
 character(len=256) :: conv_input_file  = 'ml_input'
 character(len=256) :: tstd_field_name = 'tstd' 
@@ -44,20 +46,23 @@ subroutine ml_interface_init(is, ie, js, je, rad_lonb_2d, rad_latb_2d)
     
     real, intent(in), dimension(:,:) :: rad_lonb_2d, rad_latb_2d
     integer, intent(in) :: is, ie, js, je
+    integer :: nml_unit, ierr, io
 
     if(module_is_initialized) return
 
-    call write_version_number(version, tagname)
+#ifdef INTERNAL_FILE_NML
+        read (input_nml_file, nml=ml_interface_nml, iostat=io)
+        ierr = check_nml_error (io,'ml_interface_nml')
+#else
+        if ( file_exist('input.nml') ) then
+            nml_unit = open_namelist_file()
+            read (nml_unit, ml_interface_nml, iostat=io)
+            ierr = check_nml_error (io,'ml_interface_nml')
+            call close_file(nml_unit)
+        endif
+#endif
 
-    unit = open_namelist_file ()
-    ierr=1
-    do while (ierr /= 0)
-    read  (unit, nml=ml_interface_nml, iostat=io, end=10)
-    ierr = check_nml_error (io, 'ml_interface_nml')
-    enddo
-    10 call close_file (unit)
-
-    if ( mpp_pe() == mpp_root_pe() ) write (stdlog(), nml=mixed_layer_nml)
+    if ( mpp_pe() == mpp_root_pe() ) write (stdlog(), nml=ml_interface_nml)
 
 
     call interpolator_init( conv_input_file_interp, trim(conv_input_file)//'.nc', rad_lonb_2d, rad_latb_2d, data_out_of_bounds=(/CONSTANT/) )
@@ -79,5 +84,6 @@ subroutine read_ml_generated_file(Time, p_half, tstd, qstd)
     call interpolator( conv_input_file_interp, p_half, tstd, tstd_field_name)
     call interpolator( conv_input_file_interp, p_half, qstd, qstd_field_name)
 
+end subroutine read_ml_generated_file
 
-end subroutine mixed_layer
+end module ml_interface_mod
