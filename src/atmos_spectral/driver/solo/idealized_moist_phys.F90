@@ -1291,6 +1291,7 @@ if(two_stream_gray) then
                      p_half(:,:,:,current),  &
                      t_surf(:,:),            &
                      tg(:,:,:,previous),     &
+                     rad_lat,                &
                      dt_tg(:,:,:), albedo)
 end if
 

@@ -111,6 +111,8 @@ real    :: sw_tau_0_gp        = 3.0
 real    :: lw_tau_exponent_gp = 2.0
 real    :: sw_tau_exponent_gp = 1.0
 real    :: diabatic_acce = 1.0
+real    :: int_flux_gp_lw = 0.0
+real    :: delta_int_flux = 0.0
 real,save :: gp_albedo, Ga_asym, g_asym
 
 logical :: do_normal_integration_method=.true. !When .false. uses an alternative numerical integration for long-wave up and down. Deals better with large optical depths, and so is useful in the giant-planet context.
@@ -151,7 +153,8 @@ namelist/two_stream_gray_rad_nml/ solar_constant, del_sol, &
            do_read_co2, co2_file, co2_variable_name, solday, equinox_day, bog_a, bog_b, bog_mu, &
            use_time_average_coszen, dt_rad_avg,&
            diabatic_acce, lw_tau_0_gp, sw_tau_0_gp, lw_tau_exponent_gp, sw_tau_exponent_gp, & !Schneider Liu values 
-           do_normal_integration_method
+           do_normal_integration_method, &
+           int_flux_gp_lw, delta_int_flux
 
 !==================================================================================
 !-------------------- diagnostics fields -------------------------------
@@ -667,14 +670,14 @@ end subroutine two_stream_gray_rad_down
 
 ! ==================================================================================
 
-subroutine two_stream_gray_rad_up (is, js, Time_diag, lat, p_half, t_surf, t, tdt, albedo)
+subroutine two_stream_gray_rad_up (is, js, Time_diag, lat, p_half, t_surf, t, rad_lat, tdt, albedo)
 
 ! Now complete the radiation calculation by computing the upward and net fluxes.
 
 integer, intent(in)                 :: is, js
 type(time_type), intent(in)         :: Time_diag
 real, intent(in) , dimension(:,:)   :: lat, albedo
-real, intent(in) , dimension(:,:)   :: t_surf
+real, intent(in) , dimension(:,:)   :: t_surf, rad_lat
 real, intent(in) , dimension(:,:,:) :: t, p_half
 real, intent(inout), dimension(:,:,:) :: tdt
 
@@ -708,7 +711,7 @@ case(B_FRIERSON, B_BYRNE)
 case(B_SCHNEIDER_LIU)
   ! compute upward longwave flux by integrating upward
 
-  lw_up(:,:,n+1)    = b_surf_gp
+  lw_up(:,:,n+1)    = b_surf_gp + int_flux_gp_lw + (delta_int_flux/3.)*(1.-3.*(sin(rad_lat))**2.)
   
   if (do_normal_integration_method) then
       do k = n, 1, -1
