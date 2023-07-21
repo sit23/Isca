@@ -87,6 +87,8 @@ use       polvani_2004_mod, only: polvani_2004
 use       polvani_2007_mod, only: polvani_2007, polvani_2007_tracer_init, get_polvani_2007_tracers
 use   jablonowski_2006_mod, only: jablonowski_2006
 
+use spherical_fourier_mod, only: get_wts_lat
+
 !===============================================================================================
 implicit none
 private
@@ -108,6 +110,7 @@ integer :: id_ps, id_u, id_v, id_t, id_vor, id_div, id_omega, id_wspd, id_slp
 
 integer :: id_pres_full, id_pres_half, id_zfull, id_zhalf, id_vort_norm, id_EKE, id_EKE_three
 integer :: id_uu, id_vv, id_tt, id_omega_omega, id_uv, id_omega_t, id_vw, id_uw, id_ut, id_vt, id_v_vor, id_uz, id_vz, id_omega_z
+integer :: id_cfl_u, id_cfl_v
 
 integer, allocatable, dimension(:) :: id_tr, id_utr, id_vtr, id_wtr !extra advection diags added by RG
 real :: gamma, expf, expf_inverse
@@ -135,6 +138,11 @@ real, allocatable, dimension(:,:,:,:  ) :: ug, vg, tg        ! last dimension is
 real, allocatable, dimension(:,:,:,:,:) :: grid_tracers      ! 4'th dimension is for time level, last dimension is for tracer number
 real, allocatable, dimension(:,:      ) :: surf_geopotential
 real, allocatable, dimension(:,:,:    ) :: vorg, divg        ! no time levels needed
+
+real, allocatable :: wts_lat(:)
+
+real, allocatable, dimension(:,:,:    ) :: delta_x, delta_y       ! no time levels needed
+
 
 integer, allocatable, dimension(:) :: tracer_vert_advect_scheme
 
@@ -1564,7 +1572,7 @@ real, dimension(num_levels)   :: p_full, ln_p_full
 real, dimension(num_levels+1) :: p_half, ln_p_half
 integer, dimension(3) :: axes_3d_half, axes_3d_full
 integer :: id_lonb, id_latb, id_phalf, id_lon, id_lat, id_pfull
-integer :: id_pk, id_bk, id_zsurf, ntr
+integer :: id_pk, id_bk, id_zsurf, ntr, i_idx, z_idx
 real :: rad_to_deg
 logical :: used
 real,dimension(2) :: vrange
@@ -1611,6 +1619,12 @@ id_u   = register_diag_field(mod_name, &
 
 id_v   = register_diag_field(mod_name, &
       'vcomp',   axes_3d_full,       Time, 'meridional wind component',    'm/sec',      range=vrange)
+
+id_cfl_u   = register_diag_field(mod_name, &
+      'cfl_u',   axes_3d_full,       Time, 'cfl for ucomp',         'none')
+
+id_cfl_v   = register_diag_field(mod_name, &
+      'cfl_v',   axes_3d_full,       Time, 'cfl for vcomp',         'none')      
 
 id_uu  = register_diag_field(mod_name, &
       'ucomp_sq',axes_3d_full,       Time, 'zonal wind squared',           '(m/sec)**2', range=(/0.,vrange(2)**2/))
@@ -1706,17 +1720,31 @@ id_vort_norm = register_diag_field(mod_name, 'vort_norm', Time, 'vorticity norm'
 id_EKE       = register_diag_field(mod_name, 'EKE', Time, 'eddy kinetic energy', 'J/m^2')
 id_EKE_three       = register_diag_field(mod_name, 'EKE_threed', axes_3d_full, Time, '3d eddy kinetic energy','J/m^2')
 
+if (id_cfl_u > 0 .or. id_cfl_v>0) then
+  allocate( wts_lat(lat_max) )  
+  allocate(delta_x(lon_max, lat_max, num_levels))
+  allocate(delta_y(lon_max, lat_max, num_levels))
+  call get_wts_lat(wts_lat)
+  do i_idx=is,ie
+    do z_idx = 1,num_levels
+      delta_x(i_idx,:,z_idx) = radius * cos(lat(:)*pi/180.) * (lonb(i_idx+1)-lonb(i_idx))
+      delta_y(i_idx,:,z_idx) = radius * wts_lat
+    enddo
+  enddo
+endif
+
 
 return
 end subroutine spectral_diagnostics_init
 !===================================================================================
-subroutine spectral_diagnostics(Time, p_surf, u_grid, v_grid, t_grid, wg_full, tr_grid, time_level)
+subroutine spectral_diagnostics(Time, p_surf, u_grid, v_grid, t_grid, wg_full, tr_grid, time_level, delta_t)
 
 type(time_type), intent(in) :: Time
 real, intent(in), dimension(is:, js:)          :: p_surf
 real, intent(in), dimension(is:, js:, :)       :: u_grid, v_grid, t_grid, wg_full
 real, intent(in), dimension(is:, js:, :, :, :) :: tr_grid
 integer, intent(in) :: time_level
+real, intent(in)    :: delta_t
 
 real, dimension(is:ie, js:je, num_levels)    :: ln_p_full, p_full, z_full, worka3d, workb3d, eke_threed
 real, dimension(is:ie, js:je, num_levels+1)  :: ln_p_half, p_half, z_half
@@ -1808,6 +1836,17 @@ if(id_omega_z > 0) then
   worka3d = wg_full*z_full
   used = send_data(id_omega_z, worka3d, Time)
 endif
+
+if (id_cfl_u > 0) then
+  worka3d = u_grid*delta_t/(delta_x+1.e-5)
+  used = send_data(id_cfl_u, worka3d, Time)  
+endif
+
+if (id_cfl_v > 0) then
+  worka3d = v_grid*delta_t/(delta_y+1.e-5)
+  used = send_data(id_cfl_v, worka3d, Time)  
+endif
+
 
 if(size(tr_grid,5) /= num_tracers) then
   write(err_msg_1,'(i8)') size(tr_grid,5)
@@ -1941,6 +1980,9 @@ subroutine spectral_diagnostics_end
 if(.not.module_is_initialized) return
 
 deallocate(id_tr)
+deallocate(delta_x)
+deallocate(delta_y)
+deallocate(wts_lat)
 
 return
 end subroutine spectral_diagnostics_end

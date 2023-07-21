@@ -342,7 +342,7 @@ call column_diagnostics(Time_next, psg(:,:,future), ug(:,:,:,future), vg(:,:,:,f
 tg(:,:,:,future), wg_full, grid_tracers(:,:,:,:,:), future)
 #else
 call spectral_diagnostics(Time_next, psg(:,:,future), ug(:,:,:,future), vg(:,:,:,future), &
-                          tg(:,:,:,future), wg_full, grid_tracers(:,:,:,:,:), future)
+                          tg(:,:,:,future), wg_full, grid_tracers(:,:,:,:,:), future, delta_t)
 #endif
 
 previous = current

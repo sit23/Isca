@@ -25,9 +25,18 @@ _TEMPLATE = Template("""
 
 {% for file in outputfiles %}
 {% for field in file.fields -%}
+{% if field.time_avg is boolean -%}
 "{{ field.module}}", "{{ field.name }}", "{{ field.name }}", "{{ file.name }}", "all", {{ fortrantrue(field.time_avg) }}, "none", 2,
+{% endif -%}
 {% endfor %}
 {% endfor %}
+{% for file in outputfiles %}
+{% for field in file.fields -%}
+{% if field.time_avg is string -%}
+"{{ field.module}}", "{{ field.name }}", "{{ field.name }}", "{{ file.name }}", "all", "{{  field.time_avg  }}", "none", 2,
+{% endif -%}
+{% endfor %}
+{% endfor %}                     
 """)
 
 def numorstr(x):
