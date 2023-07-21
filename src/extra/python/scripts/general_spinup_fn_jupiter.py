@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
-from cell_area import cell_area
+from cell_area import cell_area, cell_area_from_xar
 import pdb
 import os
 
@@ -24,7 +24,7 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
     elif data_dir_type=='GFDL_DATA':
         data_dir = os.environ['GFDL_DATA']
     else:
-        data_dir = '/scratch/sit204/Data_2013/'    
+        data_dir = data_dir_type
     #file name
     file_name='atmos_'+file_frequency+'.nc'
     #time-resolution of plotting
@@ -38,9 +38,8 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
 
     #get cell areas and pressure thicknesses
 
-    possible_format_strs = [[data_dir+'/'+run_fol+'/run%03d/' % m for m in range(start_month, end_month+1)],
-                            [data_dir+'/'+run_fol+'/run%04d/' % m for m in range(start_month, end_month+1)],
-                            [data_dir+'/'+run_fol+'/run%d/' % m for m in range(start_month, end_month+1)]]
+    possible_format_strs = [
+                            [data_dir+'/'+run_fol+'/run%04d/' % m for m in range(start_month, end_month+1)],]
 
     for format_str_files in possible_format_strs:
         files_temp = format_str_files
@@ -77,20 +76,20 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
 
         print('data does not already exist - calculating')
 
-        rundata = xr.open_dataset(names[0],
-                    decode_times=False)  # no calendar so tell netcdf lib
-
-
-        area = cell_area(t_resolution, model_dir)
-        area_xr = xr.DataArray(area, [('lat', rundata.lat ), ('lon', rundata.lon)])
-        dp = xr.DataArray( np.diff(rundata.phalf), [('pfull',rundata.pfull) ])
-
             #read data into xarray 
         print('opening dataset')
         rundata = xr.open_mfdataset( names,
                     decode_times=False,  # no calendar so tell netcdf lib
                 # choose how data will be broken down into manageable chunks.
-                chunks={'time': 30, 'lon': nlon//4, 'lat': nlat//2})
+                )
+
+        # area = cell_area(t_resolution, model_dir)
+        area, xsize, ysize = cell_area_from_xar(rundata)   
+        rundata['area'] = (('lat', 'lon'), area)
+        rundata['dp'] = (('pfull'), rundata['phalf'].diff('phalf').values)
+        area_xr = rundata['area']
+        dp = rundata['dp']
+
 
         time_arr = rundata.time
 
@@ -139,23 +138,26 @@ def q_spinup(run_fol, var_to_integrate, start_month, end_month, plt_dir, t_resol
 
 if __name__ == "__main__":
 
-    start_month_offset=[0, 0, 0, 0, 0, 0]
+
     
-    exp_list = ['jupiter_spec_teq_teq_t85']
+    exp_list = ['small_giant_planet_t85_40_levels_3_bar_4.5_sh_lw_int_flux_del_int_flux_-8.0', 'small_giant_planet_t85_40_levels_3_bar_4.5_sh_lw_int_flux_del_int_flux_0.0']
 
-    label_arr = ['jupiter_spec_teq_teq_t85']
+    nexps = len(exp_list)
+    start_month_offset=[0]*nexps
 
-    res_arr = [85, ]
+    label_arr = ['-8.0', '0.0',]
 
-    data_type_arr = ['GFDL_DATA']
+    res_arr = [85] *nexps
+
+    data_type_arr = ['/home/links/sit204/isca_data_intel/' ]*nexps
 
     exp_name=exp_list
 
     #number of years to read
-    start_month_arr= [1,]
-    end_month_arr  = [240,]
+    start_month_arr= [1,]*nexps
+    end_month_arr  = [33,11]
     
-    frequency_arr = ['monthly']
+    frequency_arr = ['3monthly']*nexps
 
     len_list=[len(start_month_offset), len(exp_list), len(label_arr), len(start_month_arr), len(end_month_arr), len(res_arr), len(data_type_arr), len(frequency_arr)]
 
@@ -171,9 +173,9 @@ if __name__ == "__main__":
     for exp_number in exp_list:
         #set run name
         run_fol = str(exp_number)
-        plt_dir = '/scratch/sit204/plots/exps/'+run_fol
-        # if not os.path.exists(plt_dir):
-        #     os.makedirs(plt_dir)
+        plt_dir = '/home/links/sit204/project_specific_codes/jupiter_heat_flux/outputs/dynamic_t85_lw_int_flux/'+run_fol
+        if not os.path.exists(plt_dir):
+            os.makedirs(plt_dir)
         idx=exp_list.index(exp_number)
         print('running '+ exp_number)
         #return integral of area mean q over stratosphere and whole atmosphere
@@ -185,4 +187,4 @@ if __name__ == "__main__":
     plt.xlabel('time (months)')
     plt.ylabel('Global average '+variable_to_integrate+'**'+str(power_to_scale_variable_by))
     plt.legend(loc='upper left')
-    plt.show()
+    plt.savefig(f'{plt_dir}/{variable_to_integrate}**{power_to_scale_variable_by}_spinup.pdf')
