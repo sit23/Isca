@@ -6,6 +6,7 @@ import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 from cell_area import cell_area, cell_area_from_xar
+from tqdm import tqdm
 import pdb
 import os
 
@@ -140,7 +141,7 @@ if __name__ == "__main__":
 
 
     
-    exp_list = ['small_giant_planet_t85_40_levels_3_bar_4.5_sh_lw_int_flux_del_int_flux_-8.0', 'small_giant_planet_t85_40_levels_3_bar_4.5_sh_lw_int_flux_del_int_flux_0.0']
+    exp_list = ['small_giant_planet_t85_del_flux_-8.0', 'small_giant_planet_t85_del_flux_0.0', ]
 
     nexps = len(exp_list)
     start_month_offset=[0]*nexps
@@ -155,7 +156,7 @@ if __name__ == "__main__":
 
     #number of years to read
     start_month_arr= [1,]*nexps
-    end_month_arr  = [33,11]
+    end_month_arr  = [150,39]
     
     frequency_arr = ['3monthly']*nexps
 
@@ -165,26 +166,32 @@ if __name__ == "__main__":
         raise IndexError("Input arrays to routine are not all the same length")
 
 
-    variable_to_integrate='ucomp'
-    power_to_scale_variable_by=2.
+    variable_to_integrate='temp'
+    
+    power_dict = {'temp':1, 'ucomp':2, 'vcomp':2}
 
-    plt.figure()
 
-    for exp_number in exp_list:
-        #set run name
-        run_fol = str(exp_number)
-        plt_dir = '/home/links/sit204/project_specific_codes/jupiter_heat_flux/outputs/dynamic_t85_lw_int_flux/'+run_fol
-        if not os.path.exists(plt_dir):
-            os.makedirs(plt_dir)
-        idx=exp_list.index(exp_number)
-        print('running '+ exp_number)
-        #return integral of area mean q over stratosphere and whole atmosphere
-        q_vint, time = q_spinup(run_fol, variable_to_integrate, start_month_arr[idx]+start_month_offset[idx], end_month_arr[idx]+start_month_offset[idx], plt_dir, res_arr[idx], data_type_arr[idx], power_to_scale_variable_by, frequency_arr[idx])
-        plt.plot(time,q_vint,label=label_arr[idx])
-#         plt.plot(time,q_strat,label='strat '+label_arr[idx])
-        
+    for variable_to_integrate in tqdm(['temp', 'ucomp', 'vcomp']):
 
-    plt.xlabel('time (months)')
-    plt.ylabel('Global average '+variable_to_integrate+'**'+str(power_to_scale_variable_by))
-    plt.legend(loc='upper left')
-    plt.savefig(f'{plt_dir}/{variable_to_integrate}**{power_to_scale_variable_by}_spinup.pdf')
+        power_to_scale_variable_by = power_dict[variable_to_integrate]
+
+        plt.figure()
+
+        for exp_number in exp_list:
+            #set run name
+            run_fol = str(exp_number)
+            plt_dir = '/home/links/sit204/project_specific_codes/jupiter_heat_flux/outputs/sp_dynamic_t85_lw_int_flux/'+run_fol
+            if not os.path.exists(plt_dir):
+                os.makedirs(plt_dir)
+            idx=exp_list.index(exp_number)
+            print('running '+ exp_number)
+            #return integral of area mean q over stratosphere and whole atmosphere
+            q_vint, time = q_spinup(run_fol, variable_to_integrate, start_month_arr[idx]+start_month_offset[idx], end_month_arr[idx]+start_month_offset[idx], plt_dir, res_arr[idx], data_type_arr[idx], power_to_scale_variable_by, frequency_arr[idx])
+            plt.plot(time,q_vint,label=label_arr[idx])
+    #         plt.plot(time,q_strat,label='strat '+label_arr[idx])
+            
+
+        plt.xlabel('time (months)')
+        plt.ylabel('Global average '+variable_to_integrate+'**'+str(power_to_scale_variable_by))
+        plt.legend(loc='upper left')
+        plt.savefig(f'{plt_dir}/{variable_to_integrate}**{power_to_scale_variable_by}_spinup.pdf')
