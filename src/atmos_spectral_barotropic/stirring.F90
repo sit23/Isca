@@ -44,7 +44,7 @@ implicit none
 private
 
 integer :: ms,me,ns,ne,is,ie,js,je
-integer :: id_str_amp, id_g_stir_sqr, id_stir
+integer :: id_str_amp, id_g_stir_sqr, id_stir, id_stir_sq
 logical :: used
 logical, allocatable, dimension(:,:) :: wave_mask   ! wave_mask(m,n) = .true. if spherical wave (m,n) is to be excited
 complex, allocatable, dimension(:,:) :: s_stir      ! stirring. Saved from one time step to the next
@@ -71,7 +71,10 @@ integer :: n_total_forcing_max = 15 !total wavenumbers LESS THAN this number wil
 integer :: n_total_forcing_min = 9 !total wavenumbers GREATER THAN this number will be forced
 integer :: zonal_forcing_min = 3 !Zonal wavenumbers GREATER THAN this number will be forced, subject to total wavenumber constraints
 
-namelist / stirring_nml / decay_time, amplitude, lat0, lon0, widthy, widthx, B, do_localize, n_total_forcing_max, n_total_forcing_min, zonal_forcing_min
+real :: delta_stirring_lat=0. !A measure of latitudinal contrast in the stirring
+logical :: do_ampy_localize = .false.
+
+namelist / stirring_nml / decay_time, amplitude, lat0, lon0, widthy, widthx, B, do_localize, n_total_forcing_max, n_total_forcing_min, zonal_forcing_min, delta_stirring_lat, do_ampy_localize
 
 contains
 
@@ -140,16 +143,25 @@ enddo
 astir = sqrt(1.0 - exp(-2*dt/decay_time))
 bstir = exp(-dt/decay_time)
 
-do i=is,ie
-  xx = lon(i)-lon0
-  ! Make sure xx falls in the range -180. to +180.
-  kk = nint(xx/360.)
-  xx = xx - 360.*kk
-  ampx(i) = (1 + B*exp(-.5*(xx/widthx)**2))
-enddo
-do j=js,je
-  ampy(j) = exp(-.5*((lat(j)-lat0)/widthy)**2)
-enddo
+if (do_ampy_localize) then
+  ampx = 1.
+  ampy = (1.+(delta_stirring_lat/3.)*(1.-3.*(sin(lat*pi/180.))**2.))
+  if (minval(ampy)<0.) then
+    call error_mesg('stirring', 'ampy is less than 0.', FATAL)
+  endif
+else
+  do i=is,ie
+    xx = lon(i)-lon0
+    ! Make sure xx falls in the range -180. to +180.
+    kk = nint(xx/360.)
+    xx = xx - 360.*kk
+    ampx(i) = (1 + B*exp(-.5*(xx/widthx)**2))
+  enddo
+  do j=js,je
+    ampy(j) = exp(-.5*((lat(j)-lat0)/widthy)**2)
+  enddo
+endif
+
 if (do_localize) then
     do j=js,je
         do i=is,ie
@@ -166,6 +178,7 @@ num_steps = 0
 id_g_stir_sqr = register_static_field('stirring_mod', 'stirring_sqr', (/id_lon,id_lat/), 'stirring sqrared', '1/sec^4')
 id_str_amp    = register_static_field('stirring_mod', 'stirring_amp', (/id_lon,id_lat/), 'amplitude of stirring', 'none')
 id_stir       = register_diag_field  ('stirring_mod', 'stirring',     (/id_lon,id_lat/), Time, 'stirring', '1/sec^2')
+id_stir_sq       = register_diag_field  ('stirring_mod', 'stirring_sq',     (/id_lon,id_lat/), Time, 'stirring', '1/sec^4')
 used = send_data(id_str_amp, amplitude*localize)
 
 call random_seed(size=nseed)
@@ -226,6 +239,8 @@ call trans_spherical_to_grid(s_stir,g_stir)
 g_stir_sqr = g_stir_sqr + g_stir*g_stir
 num_steps = num_steps + 1
 used = send_data(id_stir, g_stir, Time)
+used = send_data(id_stir_sq, g_stir*g_stir, Time)
+
 
 end subroutine stirring
 !================================================================================================================================
