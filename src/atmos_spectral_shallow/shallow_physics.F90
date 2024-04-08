@@ -41,7 +41,7 @@ use         transforms_mod, only: get_sin_lat, get_cos_lat,  &
                                   get_grid_domain, get_spec_domain, &
                                   grid_domain
 
-use       time_manager_mod, only: time_type
+use       time_manager_mod, only: time_type, get_time
 
 !========================================================================
 implicit none
@@ -195,6 +195,20 @@ integer, intent(in)  :: previous, current
 
 type(time_type), intent(in)    :: Time
 type(phys_type), intent(inout) :: Phys
+
+integer :: seconds,days
+integer :: i, j, unit, ierr, io, ii, jj
+    real :: xx, yy, dd, deg_lon0, deg_lat0, rad_lon0, rad_lat0, mm, tt
+    real :: storm_length
+    real :: storm_interval
+    real :: storm_strength
+    real :: h_width =  2.0
+    real :: model_time, gs, te, ke, pe
+    real, dimension(0:30), save :: storm_time = 0
+    integer, save :: storm_count = 0
+    integer :: storm_count_i = 0
+    real, dimension(0:30), save :: storm_lat, storm_lon
+
 
 call get_time(Time,seconds,days)
 
