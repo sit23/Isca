@@ -198,6 +198,7 @@ if(file_exist('INPUT/shallow_physics.res')) then
  call read_data(trim(file), 'storm_time', storm_time)
  call read_data(trim(file), 'storm_lat', storm_lat)
  call read_data(trim(file), 'storm_lon', storm_lon) 
+ call read_data(trim(file), 'storm_count', storm_count) 
  call read_data(trim(file), 'ran_nmbr_seed_ph_forcing', seed, no_domain=.true.)
  call random_seed(put=seed) 
 endif
@@ -249,7 +250,6 @@ storm_interval = 100000.0!0.5*(10**therm_damp_time) / 100.0
 storm_length = 100000.0!0.5*(10**therm_damp_time) / 100.0
 
 
-!call random_seed()
 if (model_time == 0.0) then
         storm_count = 0
         storm_strength = 0.0
@@ -328,6 +328,7 @@ file='RESTART/shallow_physics.res'
 call write_data(trim(file), 'storm_time', storm_time)
 call write_data(trim(file), 'storm_lat', storm_lat)
 call write_data(trim(file), 'storm_lon', storm_lon)
+call write_data(trim(file), 'storm_count', storm_count)
 call random_seed(get=seed)
 call write_data(trim(file), 'ran_nmbr_seed_ph_forcing', seed, no_domain=.true.)
 module_is_initialized = .false.
