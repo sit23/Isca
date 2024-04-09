@@ -240,6 +240,7 @@ logical :: used
 real, dimension(is:ie, js:je) :: dt_hg_physical_forcing, dt_hg_rad_forcing
 
 dt_hg_physical_forcing = 0.
+dt_hg_rad_forcing      = 0.
 
 call get_time(Time,seconds,days)
 
@@ -248,6 +249,10 @@ model_time = days*86400+seconds
 
 storm_interval = 100000.0!0.5*(10**therm_damp_time) / 100.0
 storm_length = 100000.0!0.5*(10**therm_damp_time) / 100.0
+
+! storm_time is the central time for each storm. So we want the integration to happen for storm_length/2 before the peak, and for storm_length/2 after
+! To achieve this it seems Mark's first storm time is 1.5 times storm interval (enough in the future to mean the simulation picks up the first storm storm_length/2 before the storm starts. So if storm_interval = 100,000 seconds, the first storm time is 150,000 seconds. So that means on the first go through the first time the below else if statement is true (i.e. when time reaches 100,000) we're exactly ready to start injecting the storm (i.e. storm_length/2 before the storm peaks). So then we have storm count increased to 1 at t=100,000, and the tt variable in the second loop will start to be finite, giving rise to this injected storm. 
+
 
 
 if (model_time == 0.0) then
@@ -274,27 +279,27 @@ else if (mod(model_time, storm_interval) == 0) then
 end if
 
 do storm_count_i = 0,30
-tt = ((model_time - storm_time(storm_count_i))**2)/storm_length**2
-storm_strength =   1.0 * (h_eq(is,js)) / storm_length
-call get_wts_lat(wts_lat)
-call get_deg_lat(deg_lat)
-call get_deg_lon(deg_lon)
-rad_lat = deg_lat*atan(1.)/45.
-sin_lat = sin(rad_lat)
-cos_lat = cos(rad_lat)
-      do mm = 0, 1
-      do j = js, je
-         do i = is, ie
-            xx = (deg_lon(i) - (storm_lon(storm_count_i)+mm*360.))/(h_width/cos_lat(j))
-            yy = (deg_lat(j) - storm_lat(storm_count_i))/h_width
-            dd =  xx*xx + yy*yy
-            if (dd < 4 * h_width) then
-               dt_hg_physical_forcing(i,j) = storm_strength * exp(-dd) * exp(-tt)
-               dt_hg(i,j) = dt_hg(i,j) + dt_hg_physical_forcing(i,j)
-            end if
-         end do
-      end do
-      end do
+  tt = ((model_time - storm_time(storm_count_i))**2)/storm_length**2
+  storm_strength =   1.0 * (h_eq(is,js)) / storm_length
+  call get_wts_lat(wts_lat)
+  call get_deg_lat(deg_lat)
+  call get_deg_lon(deg_lon)
+  rad_lat = deg_lat*atan(1.)/45.
+  sin_lat = sin(rad_lat)
+  cos_lat = cos(rad_lat)
+        do mm = 0, 1
+        do j = js, je
+          do i = is, ie
+              xx = (deg_lon(i) - (storm_lon(storm_count_i)+mm*360.))/(h_width/cos_lat(j))
+              yy = (deg_lat(j) - storm_lat(storm_count_i))/h_width
+              dd =  xx*xx + yy*yy
+              if (dd < 4 * h_width) then
+                dt_hg_physical_forcing(i,j) = dt_hg_physical_forcing(i,j) + storm_strength * exp(-dd) * exp(-tt)
+                dt_hg(i,j) = dt_hg(i,j) + dt_hg_physical_forcing(i,j)
+              end if
+          end do
+        end do
+        end do
 end do
 
 
