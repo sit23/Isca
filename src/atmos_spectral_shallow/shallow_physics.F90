@@ -230,6 +230,8 @@ integer :: i, j, unit, ierr, io, ii, jj
     real :: storm_strength
     real :: h_width =  2.0
     real :: model_time, gs, te, ke, pe
+    real :: time_delta
+    logical :: storm_active
     ! real, dimension(0:30), save :: storm_time = 0
     ! integer, save :: storm_count = 0
     integer :: storm_count_i = 0
@@ -260,46 +262,57 @@ if (model_time == 0.0) then
         storm_strength = 0.0
         storm_time(0) = storm_interval * 1.5
 else if (mod(model_time, storm_interval) == 0) then
-            if (storm_count == 30) then
-                    storm_count = 0
-            else
-                storm_count = storm_count + 1
-            endif    
 
-            if (storm_count == 0) then
-                storm_time(storm_count) = storm_time(30) + storm_interval
-            else
-                storm_time(storm_count) = storm_time(storm_count-1) + storm_interval
-            endif 
+        ! set up the location of the storm we're already committed to that will peak at storm_time(storm_count)
+        call random_number(storm_lon(storm_count))
+        call random_number(storm_lat(storm_count))
+        storm_lon(storm_count) = storm_lon(storm_count)* 360.
+        storm_lat(storm_count) = - (90. - 45.*acos(2*storm_lat(storm_count)-1)/atan(1.))
+        write(6,*) storm_lon(storm_count), storm_lat(storm_count), storm_count
 
-            call random_number(storm_lon(storm_count))
-            call random_number(storm_lat(storm_count))
-            storm_lon(storm_count) = storm_lon(storm_count)* 360.
-            storm_lat(storm_count) = - (90. - 45.*acos(2*storm_lat(storm_count)-1)/atan(1.))
+        ! Now set up the next storm by firstly incrementing storm_count
+        if (storm_count == 30) then
+                storm_count = 0
+        else
+            storm_count = storm_count + 1
+        endif    
+
+        ! Now we set up the future time when the next storm will happen
+        if (storm_count == 0) then
+            storm_time(storm_count) = storm_time(30) + storm_interval
+        else
+            storm_time(storm_count) = storm_time(storm_count-1) + storm_interval
+        endif 
+
+
 end if
 
 do storm_count_i = 0,30
-  tt = ((model_time - storm_time(storm_count_i))**2)/storm_length**2
-  storm_strength =   1.0 * (h_eq(is,js)) / storm_length
-  call get_wts_lat(wts_lat)
-  call get_deg_lat(deg_lat)
-  call get_deg_lon(deg_lon)
-  rad_lat = deg_lat*atan(1.)/45.
-  sin_lat = sin(rad_lat)
-  cos_lat = cos(rad_lat)
-        do mm = 0, 1
-        do j = js, je
-          do i = is, ie
-              xx = (deg_lon(i) - (storm_lon(storm_count_i)+mm*360.))/(h_width/cos_lat(j))
-              yy = (deg_lat(j) - storm_lat(storm_count_i))/h_width
-              dd =  xx*xx + yy*yy
-              if (dd < 4 * h_width) then
-                dt_hg_physical_forcing(i,j) = dt_hg_physical_forcing(i,j) + storm_strength * exp(-dd) * exp(-tt)
-                dt_hg(i,j) = dt_hg(i,j) + dt_hg_physical_forcing(i,j)
-              end if
+  time_delta = (model_time - storm_time(storm_count_i))
+  storm_active = (time_delta .ge. -storm_length/2.).and.(time_delta .le. storm_length/2.)
+  if (storm_active .and. (storm_time(storm_count_i).ne.0.)) then
+    tt = (time_delta**2)/storm_length**2
+    storm_strength =   1.0 * (h_eq(is,js)) / storm_length
+    call get_wts_lat(wts_lat)
+    call get_deg_lat(deg_lat)
+    call get_deg_lon(deg_lon)
+    rad_lat = deg_lat*atan(1.)/45.
+    sin_lat = sin(rad_lat)
+    cos_lat = cos(rad_lat)
+          do mm = 0, 1
+          do j = js, je
+            do i = is, ie
+                xx = (deg_lon(i) - (storm_lon(storm_count_i)+mm*360.))/(h_width/cos_lat(j))
+                yy = (deg_lat(j) - storm_lat(storm_count_i))/h_width
+                dd =  xx*xx + yy*yy
+                if (dd < 4 * h_width) then
+                  dt_hg_physical_forcing(i,j) = dt_hg_physical_forcing(i,j) + storm_strength * exp(-dd) * exp(-tt)
+                  dt_hg(i,j) = dt_hg(i,j) + dt_hg_physical_forcing(i,j)
+                end if
+            end do
           end do
-        end do
-        end do
+          end do
+  endif
 end do
 
 
