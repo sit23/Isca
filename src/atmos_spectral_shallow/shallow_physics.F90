@@ -43,6 +43,8 @@ use         transforms_mod, only: get_sin_lat, get_cos_lat,  &
 
 use       time_manager_mod, only: time_type, get_time
 
+use diag_manager_mod, only: diag_axis_init, register_static_field, register_diag_field, send_data
+
 !========================================================================
 implicit none
 private
@@ -78,6 +80,14 @@ real, allocatable, dimension(:,:) :: h_eq
 
 real    :: kappa_m, kappa_t
 
+real, allocatable, dimension(:) :: storm_time
+integer :: storm_count = 0
+real, allocatable, dimension(:) :: storm_lat, storm_lon
+
+integer :: id_dt_hg_physical_forcing, id_dt_hg_rad_forcing
+
+integer, allocatable, dimension(:)   :: seed        ! random number seed
+integer :: nseed
 
 
 ! namelist 
@@ -103,13 +113,17 @@ contains
 
 !========================================================================
 
-subroutine shallow_physics_init(Phys) 
+subroutine shallow_physics_init(Phys, Time, id_lon, id_lat) 
 
 type(phys_type), intent(inout) :: Phys
+type(time_type), intent(in)    :: Time
+integer, intent(in) :: id_lon, id_lat
 
 integer :: i, j, unit, ierr, io
 
 real :: xx, yy, dd
+
+character(len=64) :: file
 
 call write_version_number(version, tagname)
 
@@ -169,13 +183,24 @@ do j = js, je
   h_eq(:,j) = h_eq(:,j) + h_itcz*exp(-dd)
 end do 
 
-!if(file_exist('INPUT/shallow_physics.res')) then
-!  unit = open_restart_file(file='INPUT/shallow_physics.res',action='read')
-!  call set_domain(grid_domain)
-!  call close_file(unit)
-!else
+id_dt_hg_physical_forcing       = register_diag_field  ('physics_mod', 'dt_hg_physical_forcing',     (/id_lon,id_lat/), Time, 'dt_hg_physical_forcing', 'm/sec')
+id_dt_hg_rad_forcing       = register_diag_field  ('physics_mod', 'dt_hg_rad_forcing',     (/id_lon,id_lat/), Time, 'dt_hg_rad_forcing', 'm/sec')
 
-!endif
+call random_seed(size=nseed)
+allocate(seed(nseed))
+
+allocate ( storm_time  (0:30)) ; storm_time = 0.
+allocate ( storm_lat   (0:30)) ; storm_lat  = 0.
+allocate ( storm_lon   (0:30)) ; storm_lon  = 0.
+
+if(file_exist('INPUT/shallow_physics.res')) then
+ file = 'INPUT/shallow_physics.res'
+ call read_data(trim(file), 'storm_time', storm_time)
+ call read_data(trim(file), 'storm_lat', storm_lat)
+ call read_data(trim(file), 'storm_lon', storm_lon) 
+ call read_data(trim(file), 'ran_nmbr_seed_ph_forcing', seed, no_domain=.true.)
+ call random_seed(put=seed) 
+endif
 
 module_is_initialized = .true.
 
@@ -204,11 +229,16 @@ integer :: i, j, unit, ierr, io, ii, jj
     real :: storm_strength
     real :: h_width =  2.0
     real :: model_time, gs, te, ke, pe
-    real, dimension(0:30), save :: storm_time = 0
-    integer, save :: storm_count = 0
+    ! real, dimension(0:30), save :: storm_time = 0
+    ! integer, save :: storm_count = 0
     integer :: storm_count_i = 0
-    real, dimension(0:30), save :: storm_lat, storm_lon
+    ! real, dimension(0:30), save :: storm_lat, storm_lon
 
+logical :: used
+
+real, dimension(is:ie, js:je) :: dt_hg_physical_forcing, dt_hg_rad_forcing
+
+dt_hg_physical_forcing = 0.
 
 call get_time(Time,seconds,days)
 
@@ -259,7 +289,8 @@ cos_lat = cos(rad_lat)
             yy = (deg_lat(j) - storm_lat(storm_count_i))/h_width
             dd =  xx*xx + yy*yy
             if (dd < 4 * h_width) then
-               dt_hg(i,j) = dt_hg(i,j) + storm_strength * exp(-dd) * exp(-tt)
+               dt_hg_physical_forcing(i,j) = storm_strength * exp(-dd) * exp(-tt)
+               dt_hg(i,j) = dt_hg(i,j) + dt_hg_physical_forcing(i,j)
             end if
          end do
       end do
@@ -269,8 +300,12 @@ end do
 
 dt_ug = dt_ug - kappa_m*ug(:,:,previous)
 dt_vg = dt_vg - kappa_m*vg(:,:,previous)
-dt_hg = dt_hg - kappa_t*(hg(:,:,previous) - h_eq)
 
+dt_hg_rad_forcing = - kappa_t*(hg(:,:,previous) - h_eq)
+dt_hg = dt_hg + dt_hg_rad_forcing
+
+used = send_data(id_dt_hg_physical_forcing, dt_hg_physical_forcing, Time)
+used = send_data(id_dt_hg_rad_forcing, dt_hg_rad_forcing, Time)
 
 return
 end subroutine shallow_physics
@@ -283,16 +318,18 @@ type(phys_type), intent(in) :: Phys
 
 integer :: unit
 
+character(len=64) :: file
+
 if(.not.module_is_initialized) then
   call error_mesg('shallow_physics_end','physics has not been initialized ', FATAL)
 endif
 
-!unit = open_restart_file(file='RESTART/shallow_physics.res', action='write')
-
-!call set_domain(grid_domain)
-
-!call close_file(unit)
-
+file='RESTART/shallow_physics.res'
+call write_data(trim(file), 'storm_time', storm_time)
+call write_data(trim(file), 'storm_lat', storm_lat)
+call write_data(trim(file), 'storm_lon', storm_lon)
+call random_seed(get=seed)
+call write_data(trim(file), 'ran_nmbr_seed_ph_forcing', seed, no_domain=.true.)
 module_is_initialized = .false.
 
 return

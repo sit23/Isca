@@ -163,8 +163,8 @@ num_lat = Dyn%num_lat
 nlon = ie+1-is  ! size of grid on each processor
 nlat = je+1-js
 
-call shallow_physics_init(Phys)
 call shallow_diagnostics_init(Time, num_lon, num_lat, id_lon, id_lat, id_lonb, id_latb)
+call shallow_physics_init(Phys, Time, id_lon, id_lat)
 call stirring_init(dt_real, Time, id_lon, id_lat, id_lonb, id_latb)
 
 if(Time == Time_init) then
