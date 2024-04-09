@@ -268,7 +268,6 @@ else if (mod(model_time, storm_interval) == 0) then
         call random_number(storm_lat(storm_count))
         storm_lon(storm_count) = storm_lon(storm_count)* 360.
         storm_lat(storm_count) = - (90. - 45.*acos(2*storm_lat(storm_count)-1)/atan(1.))
-        write(6,*) storm_lon(storm_count), storm_lat(storm_count), storm_count
 
         ! Now set up the next storm by firstly incrementing storm_count
         if (storm_count == 30) then
