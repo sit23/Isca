@@ -39,7 +39,7 @@ use         transforms_mod, only: get_sin_lat, get_cos_lat,  &
                                   get_deg_lon, get_deg_lat,  &
                                   get_wts_lat, &
                                   get_grid_domain, get_spec_domain, &
-                                  grid_domain
+                                  grid_domain, area_weighted_global_mean
 
 use       time_manager_mod, only: time_type, get_time
 
@@ -306,7 +306,6 @@ do storm_count_i = 0,30
                 dd =  xx*xx + yy*yy
                 if (dd < 4 * h_width) then
                   dt_hg_physical_forcing(i,j) = dt_hg_physical_forcing(i,j) + storm_strength * exp(-dd) * exp(-tt)
-                  dt_hg(i,j) = dt_hg(i,j) + dt_hg_physical_forcing(i,j)
                 end if
             end do
           end do
@@ -314,6 +313,11 @@ do storm_count_i = 0,30
   endif
 end do
 
+!remove the global mean of the injections so that no net mass is added to the layer or leaves the layer
+dt_hg_physical_forcing = dt_hg_physical_forcing - area_weighted_global_mean(dt_hg_physical_forcing(:,:))
+
+!apply storm forcing all at once (rather than gridpoint by gridpoint)
+dt_hg = dt_hg + dt_hg_physical_forcing
 
 dt_ug = dt_ug - kappa_m*ug(:,:,previous)
 dt_vg = dt_vg - kappa_m*vg(:,:,previous)
