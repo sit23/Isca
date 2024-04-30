@@ -299,6 +299,8 @@ subroutine constants_init
 
     if (mpp_pe() == mpp_root_pe()) write (stdlog(),nml=constants_nml)
 
+    write(6,*) 'I have read everything and the omega and radius are', omega, radius
+
     !> SECONDS_PER_SOL is the exoplanet equivalent of seconds_per_day.
     !! It is the number of seconds between sucessive solar zeniths at longitude 0.
     !! (The concept of seconds_per_day is kept as seconds per earth day

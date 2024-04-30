@@ -101,12 +101,17 @@ real    :: h_amp           = 2.e04
 real    :: h_lon           =  90.0
 real    :: h_lat           =  25.0
 real    :: h_width         =  15.0
+real    :: h_width_storm   =  2.0
 real    :: h_itcz          = 1.e05
 real    :: itcz_width      =  4.0
+real    :: storm_strength_param = 0.
+real    :: storm_interval = 100000.0!0.5*(10**therm_damp_time) / 100.0
+real    :: storm_length = 100000.0!0.5*(10**therm_damp_time) / 100.0
 
 namelist /shallow_physics_nml/ fric_damp_time, therm_damp_time, del_h, h_0, &
-                               h_amp, h_lon, h_lat, h_width, &
-                               itcz_width, h_itcz
+                               h_amp, h_lon, h_lat, h_width, h_width_storm, &
+                               itcz_width, h_itcz, storm_strength_param, &
+                               storm_interval, storm_length
 !========================================================================
 
 contains
@@ -225,10 +230,10 @@ type(phys_type), intent(inout) :: Phys
 integer :: seconds,days
 integer :: i, j, unit, ierr, io, ii, jj
     real :: xx, yy, dd, deg_lon0, deg_lat0, rad_lon0, rad_lat0, mm, tt
-    real :: storm_length
-    real :: storm_interval
+    ! real :: storm_length
+    ! real :: storm_interval
     real :: storm_strength
-    real :: h_width =  2.0
+    ! real :: h_width =  2.0
     real :: model_time, gs, te, ke, pe
     real :: time_delta
     logical :: storm_active
@@ -248,9 +253,6 @@ call get_time(Time,seconds,days)
 
 storm_strength=1.0
 model_time = days*86400+seconds
-
-storm_interval = 100000.0!0.5*(10**therm_damp_time) / 100.0
-storm_length = 100000.0!0.5*(10**therm_damp_time) / 100.0
 
 ! storm_time is the central time for each storm. So we want the integration to happen for storm_length/2 before the peak, and for storm_length/2 after
 ! To achieve this it seems Mark's first storm time is 1.5 times storm interval (enough in the future to mean the simulation picks up the first storm storm_length/2 before the storm starts. So if storm_interval = 100,000 seconds, the first storm time is 150,000 seconds. So that means on the first go through the first time the below else if statement is true (i.e. when time reaches 100,000) we're exactly ready to start injecting the storm (i.e. storm_length/2 before the storm peaks). So then we have storm count increased to 1 at t=100,000, and the tt variable in the second loop will start to be finite, giving rise to this injected storm. 
@@ -289,9 +291,14 @@ end if
 do storm_count_i = 0,30
   time_delta = (model_time - storm_time(storm_count_i))
   storm_active = (time_delta .ge. -storm_length/2.).and.(time_delta .le. storm_length/2.)
-  if (storm_active .and. (storm_time(storm_count_i).ne.0.)) then
+  ! if (storm_active .and. (storm_time(storm_count_i).ne.0.)) then
     tt = (time_delta**2)/storm_length**2
-    storm_strength =   1.0 * (h_eq(is,js)) / storm_length
+    if (storm_strength_param .eq. 0.) then
+      storm_strength =   0.1 * (h_eq(is,js)) / storm_length
+    else
+      storm_strength = storm_strength_param
+    endif  
+
     call get_wts_lat(wts_lat)
     call get_deg_lat(deg_lat)
     call get_deg_lon(deg_lon)
@@ -301,16 +308,16 @@ do storm_count_i = 0,30
           do mm = 0, 1
           do j = js, je
             do i = is, ie
-                xx = (deg_lon(i) - (storm_lon(storm_count_i)+mm*360.))/(h_width/cos_lat(j))
-                yy = (deg_lat(j) - storm_lat(storm_count_i))/h_width
+                xx = (deg_lon(i) - (storm_lon(storm_count_i)+mm*360.))/(h_width_storm/cos_lat(j))
+                yy = (deg_lat(j) - storm_lat(storm_count_i))/h_width_storm
                 dd =  xx*xx + yy*yy
-                if (dd < 4 * h_width) then
+                if (dd < 4 * h_width_storm) then
                   dt_hg_physical_forcing(i,j) = dt_hg_physical_forcing(i,j) + storm_strength * exp(-dd) * exp(-tt)
                 end if
             end do
           end do
           end do
-  endif
+  ! endif
 end do
 
 !remove the global mean of the injections so that no net mass is added to the layer or leaves the layer
