@@ -22,7 +22,9 @@ base_dir='/gpfs/ts0/projects/Research_Project-161613/sit204/data_isca_gfortran/'
 #exp_name_list = ['soc_ga3_files_smooth_topo_mk1_fresh_compile_long_ice_albedo_not_land_mask_ie_sst_jra_55_8_sbm_do_simple_false_cmip5_o3_bucket']
 #exp_name_list = ['soc_ga3_files_smooth_topo_mk1_fresh_compile_long_ice_albedo_not_land_mask_ice_sst_jra_55_8_sbm_do_simple_false_cmip5_o3_bucket']
 #exp_name_list = ['control_exp']
-exp_name_list = ['soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_gfort'] + [f'soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_asia_ideal_{exp_num}_gfort' for exp_num in [22, 23, 24, 25]]
+exp_name_list = [f'soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_asia_ideal_{exp_num}_gfort' for exp_num in [26, 27, 28]]
+# ['soc_ga3_do_simple_false_cmip_o3_bucket_qflux_co2_400_mid_alb_gfort'] + 
+
 avg_or_daily_list=['monthly']
 start_file=360
 end_file=840
