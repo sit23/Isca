@@ -7,7 +7,7 @@ import sh
 
 from isca import GFDL_WORK, GFDL_BASE, GFDL_SOC, _module_directory, get_env_file
 from .loghandler import Logger
-from .helpers import url_to_folder, destructive, useworkdir, mkdir, cd, git, P, git_run_in_directory, check_for_sh_stdout
+from .helpers import url_to_folder, destructive, useworkdir, mkdir, git, P, git_run_in_directory, check_for_sh_stdout
 
 import pdb
 
@@ -120,6 +120,8 @@ class CodeBase(Logger):
         # read path names from the default file
         self.path_names = []
         self.compile_flags = []  # users can append to this to add additional compiler options
+        self.precision_compile_flags = ['-DOVERLOAD_C8'] #Default is to use double precision. User can change to single precision using cb.use_single_precision() before compile step 
+        self.env_suffix = ''
 
     @property
     def code_is_available(self):
@@ -162,7 +164,8 @@ class CodeBase(Logger):
 
             # write out the git commit id of GFDL_BASE
             file.write("\n\n*---commit hash used for code in GFDL_BASE, including this python module---*:\n")
-            check_for_sh_stdout(file.write(gfdl_git.log('-1', '--format="%H"')))
+            gfdl_git_out = check_for_sh_stdout(gfdl_git.log('-1', '--format="%H"'))
+            file.write(gfdl_git_out)
 
             # if there are any uncommited changes in the working directory,
             # add those to the file too
@@ -254,6 +257,7 @@ class CodeBase(Logger):
         #     compile_flags.append('-O%d' % optimisation)
 
         compile_flags.extend(self.compile_flags)
+        compile_flags.extend(self.precision_compile_flags)        
         compile_flags_str = ' '.join(compile_flags)
 
         # get path_names from the directory
@@ -268,7 +272,7 @@ class CodeBase(Logger):
             'srcdir': self.srcdir,
             'workdir': self.workdir,
             'compile_flags': compile_flags_str,
-            'env_source': env,
+            'env_source': env+self.env_suffix,
             'path_names': path_names_str,
             'executable_name': self.executable_name,
             'run_idb': debug,
@@ -280,6 +284,13 @@ class CodeBase(Logger):
             self._log_line(line)
 
         self.log.info('Compilation complete.')
+
+    def use_single_precision(self):
+            self.log.info('Going to use single_precision')
+            self.precision_compile_flags = ['-DOVERLOAD_C4', '-DOVERLOAD_R4']
+            self.executable_name = self.executable_name.strip('.x')+'_single.x'
+            self.builddir = P(self.workdir, 'build', self.executable_name.split('.')[0])
+            self.env_suffix = '_single' #needs a seperate env file as flags are different
 
 
 
@@ -347,6 +358,59 @@ class SocratesCodeBase(CodeBase):
         self.disable_rrtm()
         self.simlink_to_soc_code()
 
+class SocColumnCodeBase(CodeBase):
+    """Isca without RRTM but with the Met Office radiation scheme, Socrates. THIS VERSION FOR SINGLE COLUMN USE. 
+    """
+    #path_names_file = P(_module_directory, 'templates', 'moist_path_names')
+    name = 'socrates_column'
+    executable_name = 'soc_column_isca.x'
+
+    def column_model(self):
+        self.compile_flags.append('-DCOLUMN_MODEL')
+        self.log.info('USING SINGLE COLUMN MODEL')
+
+    def disable_rrtm(self):
+        # add no compile flag
+        self.compile_flags.append('-DRRTM_NO_COMPILE')
+        self.log.info('RRTM compilation disabled.')
+
+    def simlink_to_soc_code(self):
+        #Make symlink to socrates source code if one doesn't already exist.
+        socrates_desired_location = self.codedir+'/src/atmos_param/socrates/src/trunk'
+
+        #First check if socrates is in correct place already
+        if os.path.exists(socrates_desired_location):
+            link_correct = os.path.exists(socrates_desired_location+'/src/')
+            if link_correct:
+                socrates_code_in_desired_location=True
+            else:
+                socrates_code_in_desired_location=False                
+                if os.path.islink(socrates_desired_location):
+                    self.log.info('Socrates source code symlink is in correct place, but is to incorrect location. Trying to correct.')
+                    os.unlink(socrates_desired_location)
+                else:
+                    self.log.info('Socrates source code is in correct place, but folder structure is wrong. Contents of the folder '+socrates_desired_location+' should include a src folder.')
+        else:
+            socrates_code_in_desired_location=False
+            self.log.info('Socrates source code symlink does not exist. Creating.')
+
+        # If socrates is not in the right place already, then attempt to make symlink to location of code provided by GFDL_SOC
+        if socrates_code_in_desired_location:
+            self.log.info('Socrates source code already in correct place. Continuing.')
+        else:
+            if GFDL_SOC is not None:
+                sh.ln('-s', GFDL_SOC, socrates_desired_location)
+            elif GFDL_SOC is None:
+                error_mesg = 'Socrates code is required for SocratesCodebase, but source code is not provided in location GFDL_SOC='+ str(GFDL_SOC)
+                self.log.error(error_mesg)
+                raise OSError(error_mesg)
+
+    def __init__(self, *args, **kwargs):
+        super(SocColumnCodeBase, self).__init__(*args, **kwargs)
+        self.column_model()
+        self.disable_rrtm()
+        self.simlink_to_soc_code()
+
 class GreyCodeBase(CodeBase):
     """The Frierson model.
     This is the closest to the Frierson model, with moist dynamics and a
@@ -373,6 +437,27 @@ class GreyCodeBase(CodeBase):
     def __init__(self, *args, **kwargs):
         super(GreyCodeBase, self).__init__(*args, **kwargs)
         self.disable_rrtm()
+        self.disable_soc()
+
+class ColumnCodeBase(CodeBase):
+    """This contains code that will allow one to use all model physics in a single column configuration (i.e. without calling the dynamical core)
+    """
+    #path_names_file = P(_module_directory, 'templates', 'moist_path_names')
+    name = 'column'
+    executable_name = 'column_isca.x'
+
+    def column_model(self):
+        self.compile_flags.append('-DCOLUMN_MODEL')
+        self.log.info('USING SINGLE COLUMN MODEL')
+
+    def disable_soc(self):
+        # add no compile flag
+        self.compile_flags.append('-DSOC_NO_COMPILE')
+        self.log.info('SOCRATES compilations diabled.') 
+
+    def __init__(self, *args, **kwargs):
+        super(ColumnCodeBase, self).__init__(*args, **kwargs)
+        self.column_model()
         self.disable_soc()
 
 class DryCodeBase(GreyCodeBase):
