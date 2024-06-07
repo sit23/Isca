@@ -614,27 +614,27 @@ if(file_exist('INPUT/shallow_dynamics.res.nc')) then
       call read_data('INPUT/shallow_dynamics.res.nc', 'tr', Dyn%Grid%tr(:,:,nt), grid_domain, timelevel=nt)
     endif
   end do
-else if(file_exist('INPUT/shallow_dynamics.res')) then
-  unit = open_restart_file(file='INPUT/shallow_dynamics.res',action='read')
+! else if(file_exist('INPUT/shallow_dynamics.res')) then
+!   unit = open_restart_file(file='INPUT/shallow_dynamics.res',action='read')
 
-  do nt = 1, 2
-    call set_domain(spectral_domain)
-    call read_data(unit,Dyn%Spec%vor(:,:, nt))
-    call read_data(unit,Dyn%Spec%div(:,:, nt))
-    call read_data(unit,Dyn%Spec%h  (:,:, nt))
-    if(Dyn%spec_tracer) call read_data(unit,Dyn%Spec%trs(:,:, nt))
+!   do nt = 1, 2
+!     call set_domain(spectral_domain)
+!     call read_data(unit,Dyn%Spec%vor(:,:, nt))
+!     call read_data(unit,Dyn%Spec%div(:,:, nt))
+!     call read_data(unit,Dyn%Spec%h  (:,:, nt))
+!     if(Dyn%spec_tracer) call read_data(unit,Dyn%Spec%trs(:,:, nt))
 
-    call set_domain(grid_domain)
-    call read_data(unit,Dyn%Grid%u   (:,:, nt))
-    call read_data(unit,Dyn%Grid%v   (:,:, nt))
-    call read_data(unit,Dyn%Grid%vor (:,:, nt))
-    call read_data(unit,Dyn%Grid%div (:,:, nt))
-    call read_data(unit,Dyn%Grid%h   (:,:, nt))
-    if(Dyn%spec_tracer) call read_data(unit,Dyn%Grid%trs(:,:, nt))
-    if(Dyn%grid_tracer) call read_data(unit,Dyn%Grid%tr (:,:, nt))
+!     call set_domain(grid_domain)
+!     call read_data(unit,Dyn%Grid%u   (:,:, nt))
+!     call read_data(unit,Dyn%Grid%v   (:,:, nt))
+!     call read_data(unit,Dyn%Grid%vor (:,:, nt))
+!     call read_data(unit,Dyn%Grid%div (:,:, nt))
+!     call read_data(unit,Dyn%Grid%h   (:,:, nt))
+!     if(Dyn%spec_tracer) call read_data(unit,Dyn%Grid%trs(:,:, nt))
+!     if(Dyn%grid_tracer) call read_data(unit,Dyn%Grid%tr (:,:, nt))
     
-  end do
-  call close_file(unit)
+!   end do
+!   call close_file(unit)
   
 else
     call error_mesg('read_restart', 'restart does not exist', FATAL)
