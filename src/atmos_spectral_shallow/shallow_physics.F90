@@ -107,11 +107,12 @@ real    :: itcz_width      =  4.0
 real    :: storm_strength_param = 0.
 real    :: storm_interval = 100000.0!0.5*(10**therm_damp_time) / 100.0
 real    :: storm_length = 100000.0!0.5*(10**therm_damp_time) / 100.0
+integer :: num_sim_storms = 30
 
 namelist /shallow_physics_nml/ fric_damp_time, therm_damp_time, del_h, h_0, &
                                h_amp, h_lon, h_lat, h_width, h_width_storm, &
                                itcz_width, h_itcz, storm_strength_param, &
-                               storm_interval, storm_length
+                               storm_interval, storm_length, num_sim_storms
 !========================================================================
 
 contains
@@ -194,9 +195,9 @@ id_dt_hg_rad_forcing       = register_diag_field  ('physics_mod', 'dt_hg_rad_for
 call random_seed(size=nseed)
 allocate(seed(nseed))
 
-allocate ( storm_time  (0:30)) ; storm_time = 0.
-allocate ( storm_lat   (0:30)) ; storm_lat  = 0.
-allocate ( storm_lon   (0:30)) ; storm_lon  = 0.
+allocate ( storm_time  (0:num_sim_storms)) ; storm_time = 0.
+allocate ( storm_lat   (0:num_sim_storms)) ; storm_lat  = 0.
+allocate ( storm_lon   (0:num_sim_storms)) ; storm_lon  = 0.
 
 if(file_exist('INPUT/shallow_physics.res')) then
  file = 'INPUT/shallow_physics.res'
@@ -237,10 +238,10 @@ integer :: i, j, unit, ierr, io, ii, jj
     real :: model_time, gs, te, ke, pe
     real :: time_delta
     logical :: storm_active
-    ! real, dimension(0:30), save :: storm_time = 0
+    ! real, dimension(0:num_sim_storms), save :: storm_time = 0
     ! integer, save :: storm_count = 0
     integer :: storm_count_i = 0
-    ! real, dimension(0:30), save :: storm_lat, storm_lon
+    ! real, dimension(0:num_sim_storms), save :: storm_lat, storm_lon
 
 logical :: used
 
@@ -272,7 +273,7 @@ else if (mod(model_time, storm_interval) == 0) then
         storm_lat(storm_count) = - (90. - 45.*acos(2*storm_lat(storm_count)-1)/atan(1.))
 
         ! Now set up the next storm by firstly incrementing storm_count
-        if (storm_count == 30) then
+        if (storm_count == num_sim_storms) then
                 storm_count = 0
         else
             storm_count = storm_count + 1
@@ -280,7 +281,7 @@ else if (mod(model_time, storm_interval) == 0) then
 
         ! Now we set up the future time when the next storm will happen
         if (storm_count == 0) then
-            storm_time(storm_count) = storm_time(30) + storm_interval
+            storm_time(storm_count) = storm_time(num_sim_storms) + storm_interval
         else
             storm_time(storm_count) = storm_time(storm_count-1) + storm_interval
         endif 
@@ -288,7 +289,7 @@ else if (mod(model_time, storm_interval) == 0) then
 
 end if
 
-do storm_count_i = 0,30
+do storm_count_i = 0,num_sim_storms
   time_delta = (model_time - storm_time(storm_count_i))
   storm_active = (time_delta .ge. -storm_length/2.).and.(time_delta .le. storm_length/2.)
   ! if (storm_active .and. (storm_time(storm_count_i).ne.0.)) then
