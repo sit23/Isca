@@ -232,7 +232,14 @@ class Experiment(Logger, EventEmitter):
             sh.cp([filename, P(indir, os.path.split(filename)[1])])
 
         if multi_node:
-            mpirun_opts += ' -bootstrap pbsdsh -f $PBS_NODEFILE'
+            try:
+                nodefile = os.environ['PBS_NODEFILE']
+                mpirun_opts += f' -bootstrap pbsdsh -f {nodefile}'
+            except:
+                nodefile = os.environ['GFDL_JOB_NODEFILE']
+                mpirun_opts += f' -bootstrap slurm -f {nodefile}'
+           
+            self.log.info(f'using nodefile {nodefile}, mpirun_opts = {mpirun_opts}')
 
         if use_restart and not restart_file and i == 1:
             # no restart file specified, but we are at first run number
