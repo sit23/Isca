@@ -45,6 +45,8 @@ use       time_manager_mod, only: time_type, get_time
 
 use diag_manager_mod, only: diag_axis_init, register_static_field, register_diag_field, send_data
 
+use    constants_mod, only: pi
+
 !========================================================================
 implicit none
 private
@@ -108,11 +110,13 @@ real    :: storm_strength_param = 0.
 real    :: storm_interval = 100000.0!0.5*(10**therm_damp_time) / 100.0
 real    :: storm_length = 100000.0!0.5*(10**therm_damp_time) / 100.0
 integer :: num_sim_storms = 30
+real    :: delta_stirring_lat = 0.
 
 namelist /shallow_physics_nml/ fric_damp_time, therm_damp_time, del_h, h_0, &
                                h_amp, h_lon, h_lat, h_width, h_width_storm, &
                                itcz_width, h_itcz, storm_strength_param, &
-                               storm_interval, storm_length, num_sim_storms
+                               storm_interval, storm_length, num_sim_storms,&
+                               delta_stirring_lat
 !========================================================================
 
 contains
@@ -297,7 +301,7 @@ do storm_count_i = 0,num_sim_storms
     if (storm_strength_param .eq. 0.) then
       storm_strength =   0.1 * (h_eq(is,js)) / storm_length
     else
-      storm_strength = storm_strength_param
+      storm_strength = storm_strength_param * (1.+(delta_stirring_lat/3.)*(1.-3.*(sin(storm_lat(storm_count_i)*pi/180.))**2.))
     endif  
 
     call get_wts_lat(wts_lat)
