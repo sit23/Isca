@@ -4,6 +4,5 @@ export F90=mpiifort
 export CC=mpiicc
 
 module purge
-module load intel/2016b
-module load HDF5/1.8.16-intel-2016b
-module load netCDF-Fortran/4.4.2-intel-2016b
+module load intel/2021b
+module load netCDF-Fortran/4.5.3-iimpi-2021b
