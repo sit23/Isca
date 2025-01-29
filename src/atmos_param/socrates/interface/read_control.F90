@@ -96,7 +96,7 @@ control%l_mixing_ratio         = .TRUE.
 ! Gaseous absorption
 control%l_gas          = .TRUE.
 control%l_continuum    = .TRUE.
-!control%l_cont_gen     = .FALSE.
+control%l_cont_gen     = .FALSE.
 control%i_gas_overlap  = ip_overlap_k_eqv_scl
 
 ! Properties of clouds
@@ -169,8 +169,8 @@ ELSE
   control%i_cloud        = ip_cloud_clear
   IF ( (control%i_scatter_method == ip_no_scatter_abs) .OR.            &
        (control%i_scatter_method == ip_no_scatter_ext) ) THEN
-    control%i_solver       = ip_solver_no_scat
-    control%i_solver_clear = ip_solver_no_scat
+    control%i_solver       = ip_solver_homogen_direct
+    control%i_solver_clear = ip_solver_homogen_direct
   ELSE
     control%i_solver       = ip_solver_homogen_direct
     control%i_solver_clear = ip_solver_homogen_direct

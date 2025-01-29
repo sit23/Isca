@@ -1284,7 +1284,7 @@ if (do_socrates_radiation) then
     endif
   
     call run_socrates(Time, Time+Time_step, rad_lat, rad_lon,                  &
-                      tg(:,:,:,previous), grid_tracers(:,:,:,previous,nsphum), &
+                      tg(:,:,:,current), grid_tracers(:,:,:,current,nsphum), &
                       t_surf(:,:), p_full(:,:,:,current),                      &
                       p_half(:,:,:,current), z_full(:,:,:,current),            &
                       z_half(:,:,:,current), albedo, dt_tg(:,:,:),             &
@@ -1454,7 +1454,7 @@ if(bucket) then
    !change in bucket depth in one leapfrog timestep [m]
 
    !diffuse_surf_water transforms dt_bucket to spherical, diffuses water, and transforms back
-   call diffuse_surf_water(dt_bucket,bucket_depth(:,:,previous),delta_t,damping_coeff_bucket,bucket_diffusion)
+  !  call diffuse_surf_water(dt_bucket,bucket_depth(:,:,previous),delta_t,damping_coeff_bucket,bucket_diffusion)
 
    ! use the raw filter in leapfrog time stepping
 
