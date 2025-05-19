@@ -154,6 +154,8 @@ real :: robert_bucket = 0.04   ! default robert coefficient for bucket depth LJJ
 real :: raw_bucket = 0.53       ! default raw coefficient for bucket depth LJJ
 ! end Add bucket
 
+logical :: do_lscale_cond = .true.
+
 namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roughness_heat,  &
                                       do_cloud_simple, do_cloud_spookie,             &
                                       two_stream_gray, do_rrtm_radiation, do_damping,&
@@ -164,7 +166,8 @@ namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roug
                                       gp_surface, convection_scheme,                 &
                                       bucket, init_bucket_depth, init_bucket_depth_land, &
                                       max_bucket_depth_land, robert_bucket, raw_bucket, &
-                                      do_socrates_radiation, do_lcl_diffusivity_depth
+                                      do_socrates_radiation, do_lcl_diffusivity_depth, &
+                                      do_lscale_cond
 
 
 integer, parameter :: num_time_levels = 2 ! Add bucket - number of time levels added to allow timestepping in this module
@@ -978,27 +981,28 @@ if (r_conv_scheme .ne. DRY_CONV) then
   ! Large scale convection is a function of humidity only.  This is
   ! inconsistent with the dry convection scheme, don't run it!
   rain = 0.0; snow = 0.0
-  call lscale_cond (         tg_tmp,                          qg_tmp,        &
-             p_full(:,:,:,previous),          p_half(:,:,:,previous),        &
-                              coldT,                            rain,        &
-                               snow,                      cond_dt_tg,        &
-                         cond_dt_qg )
+  if (do_lscale_cond) then
+    call lscale_cond (         tg_tmp,                          qg_tmp,        &
+              p_full(:,:,:,previous),          p_half(:,:,:,previous),        &
+                                coldT,                            rain,        &
+                                snow,                      cond_dt_tg,        &
+                          cond_dt_qg )
 
-  cond_dt_tg = cond_dt_tg/delta_t
-  cond_dt_qg = cond_dt_qg/delta_t
-  depth_change_cond = rain/dens_h2o
-  rain       = rain/delta_t
-  snow       = snow/delta_t
-  precip     = precip + rain + snow
+    cond_dt_tg = cond_dt_tg/delta_t
+    cond_dt_qg = cond_dt_qg/delta_t
+    depth_change_cond = rain/dens_h2o
+    rain       = rain/delta_t
+    snow       = snow/delta_t
+    precip     = precip + rain + snow
 
-  dt_tg = dt_tg + cond_dt_tg
-  dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + cond_dt_qg
+    dt_tg = dt_tg + cond_dt_tg
+    dt_tracers(:,:,:,nsphum) = dt_tracers(:,:,:,nsphum) + cond_dt_qg
 
-  if(id_cond_dt_qg > 0) used = send_data(id_cond_dt_qg, cond_dt_qg, Time)
-  if(id_cond_dt_tg > 0) used = send_data(id_cond_dt_tg, cond_dt_tg, Time)
-  if(id_cond_rain  > 0) used = send_data(id_cond_rain, rain, Time)
-  if(id_precip     > 0) used = send_data(id_precip, precip, Time)
-
+    if(id_cond_dt_qg > 0) used = send_data(id_cond_dt_qg, cond_dt_qg, Time)
+    if(id_cond_dt_tg > 0) used = send_data(id_cond_dt_tg, cond_dt_tg, Time)
+    if(id_cond_rain  > 0) used = send_data(id_cond_rain, rain, Time)
+    if(id_precip     > 0) used = send_data(id_precip, precip, Time)
+  endif
 endif
 
 ! Call the simple cloud scheme in line with SPOOKIE-2 requirements

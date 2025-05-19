@@ -16,7 +16,8 @@ USE def_control,  ONLY: StrCtrl, allocate_control
 USE def_spectrum, ONLY: StrSpecData
 USE socrates_config_mod, ONLY: l_planet_grey_surface, inc_h2o, inc_co2, inc_co,      & 
                                inc_o3, inc_n2o, inc_ch4, inc_o2, inc_so2, inc_cfc11, &
-                               inc_cfc12, inc_cfc113, inc_hcfc22, inc_hfc134a
+                               inc_cfc12, inc_cfc113, inc_hcfc22, inc_hfc134a, inc_n2, &
+                               inc_cia
 
 IMPLICIT NONE
 
@@ -54,6 +55,7 @@ case(ip_solar)
   control%l_co             = inc_co
   control%l_o3             = inc_o3
   control%l_n2o            = inc_n2o
+  control%l_n2            = inc_n2  
   control%l_ch4            = inc_ch4
   control%l_o2             = inc_o2
   control%l_so2            = inc_so2
@@ -70,6 +72,7 @@ case(ip_infra_red)
   control%l_co             = inc_co
   control%l_o3             = inc_o3
   control%l_n2o            = inc_n2o
+  control%l_n2            = inc_n2
   control%l_ch4            = inc_ch4
   control%l_so2            = inc_so2
   control%l_cfc11          = inc_cfc11
@@ -93,7 +96,7 @@ control%l_mixing_ratio         = .TRUE.
 ! Gaseous absorption
 control%l_gas          = .TRUE.
 control%l_continuum    = .TRUE.
-!control%l_cont_gen     = .FALSE.
+control%l_cont_gen     = inc_cia
 control%i_gas_overlap  = ip_overlap_k_eqv_scl
 
 ! Properties of clouds

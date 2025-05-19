@@ -59,7 +59,7 @@ cb = SocColumnCodeBase.from_directory(GFDL_BASE)
 cb.compile() 
 
 # create an Experiment object to handle the configuration of model parameters
-exp = Experiment('column_test_socrates_ozone', codebase=cb)
+exp = Experiment('column_test_socrates_ozone_4', codebase=cb)
 
 
 #Tell model how to write diagnostics
@@ -93,6 +93,10 @@ diag.add_field('socrates', 'soc_toa_sw', time_avg=True)
 diag.add_field('socrates', 'soc_toa_sw_down', time_avg=True)
 diag.add_field('atmosphere', 'dt_ug_diffusion', time_avg=True)
 diag.add_field('atmosphere', 'dt_vg_diffusion', time_avg=True)
+diag.add_field('atmosphere',   'dt_tg_condensation',                        time_avg=True)
+diag.add_field('atmosphere',   'dt_tg_convection',                        time_avg=True)
+diag.add_field('atmosphere',   'dt_qg_condensation',                        time_avg=True)
+diag.add_field('atmosphere',   'dt_qg_convection',                        time_avg=True)
 exp.diag_table = diag
 
 #Empty the run directory ready to run
@@ -119,8 +123,11 @@ exp.namelist = namelist = Namelist({
         'lat_max': 1, # number of columns in latitude, precise 
                       # latitude can be set in column_grid_nml if only 1 lat used. 
         'num_levels': 50,  # number of levels 
+        'vert_coord_option':'uneven_sigma',
+        'surf_res':0.2, #Parameter that sets the vertical distribution of sigma levels
+        'scale_heights' : 11.0,
+        'exponent':7.0,        
         'initial_sphum': 1e-3, 
-        'vert_coord_option': 'even_sigma',
         'q_decrease_only':True, # constrain q in stratosphere
     },
 
@@ -163,6 +170,8 @@ exp.namelist = namelist = Namelist({
         'tidally_locked':False,                                                                                                
         'do_rad_time_avg':True,
         'dt_rad_avg':86400,
+        'inc_o3':True,
+        # 'do_read_ozone':False,
         #'solday': 90
     }, 
 

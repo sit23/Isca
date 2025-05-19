@@ -163,7 +163,7 @@ SUBROUTINE socrates_init(is, ie, js, je, num_levels, axes, Time, lat, lonb, latb
             'tidally_locked and frierson_solar_rad cannot both be true', FATAL)
     endif
 
-
+    write(6,*) lw_spectral_filename, sw_spectral_filename, solday, dt_rad, n2_mix_ratio
     if (js == 1) then
         if (lw_spectral_filename .eq. 'unset') then
             call error_mesg( 'socrates_init', &
