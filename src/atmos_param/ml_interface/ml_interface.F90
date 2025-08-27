@@ -50,10 +50,13 @@ real    :: gust_const            =  1.0
 real    :: gust_min              =  0.0
 logical :: no_neg_q              = .false.  ! for backwards compatibility
 logical :: use_mixing_ratio      = .false.
+real    :: pert_t_amp            = 1.0
+real    :: pert_q_amp            = 1.0
 
 namelist / ml_interface_nml / conv_input_file, tstd_field_name, qstd_field_name, &
                               alt_gustiness, bucket, do_simple, gust_const, gust_min, &
-                              no_neg_q, raoult_sat_vap, use_mixing_ratio
+                              no_neg_q, raoult_sat_vap, use_mixing_ratio, pert_t_amp, &
+                              pert_q_amp
 
 
 logical :: module_is_initialized =.false.
@@ -378,7 +381,6 @@ subroutine ENNUF_2d_T_RH_prediction(temp_in, q_in, u_in, v_in, t_surf_in, q_surf
 
 
 
-
   pert_t(:,:,:) = temp_in(:,:,:)
   pert_q(:,:,:) = q_in(:,:,:)
 
@@ -387,8 +389,16 @@ subroutine ENNUF_2d_T_RH_prediction(temp_in, q_in, u_in, v_in, t_surf_in, q_surf
   !   pert_q(:,:,z_tick) = q_in(:,:,z_tick)    + random_num_rh*    qstd*(p_full(:,:,z_tick)/p_half(:,:,num_levels+1))
   ! enddo
 
-    pert_t(:,:,num_levels) = pert_t(:,:,num_levels) + 0.001*real(random_num_theta* Tstd,8)
-    pert_q(:,:,num_levels) = pert_q(:,:,num_levels) + 0.001*real(random_num_rh* qstd,8)
+    pert_t(:,:,num_levels) = pert_t(:,:,num_levels) + pert_t_amp*real(random_num_theta* Tstd,8)
+    pert_q(:,:,num_levels) = pert_q(:,:,num_levels) + pert_q_amp*real(random_num_rh* qstd,8)
+
+    where (pert_q(:,:,num_levels) .gt. q_sat)
+      pert_q(:,:,num_levels)=q_sat
+    endwhere
+
+    where (pert_q(:,:,num_levels) .lt. 0.)
+      pert_q(:,:,num_levels)=0.0
+    endwhere
 
     !Need to clip T and q perturbations so that they're not crazy big
 
