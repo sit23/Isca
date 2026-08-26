@@ -1331,6 +1331,15 @@ endif
 
 if(turb) then
 
+   ! rough is never otherwise assigned in this module. It is only read by
+   ! vert_turb_driver's Mellor-Yamada branch (do_mellor_yamada=.true.), where
+   ! it is used as a genuine surface roughness length in the mixing-length
+   ! formula (see my25_turb.F90's z0 argument) -- so leaving it uninitialized
+   ! silently corrupts that calculation whenever Mellor-Yamada is enabled.
+   ! rough_mom is the momentum roughness length used elsewhere in this same
+   ! timestep's surface flux calculation, so use that here too.
+   rough(:,:) = rough_mom(:,:)
+
    call vert_turb_driver(            1,                              1, &
                                   Time,                 Time+Time_step, &
                                delta_t, tdtlw(:,:,:),    fracland(:,:), &
