@@ -10,6 +10,8 @@ on:
   push:
     branches: [ ci_trip_test_poc ]
   workflow_dispatch: {}
+  # trivial nudge commit to check whether the previous push's failure to
+  # trigger a run was a one-off blip
 
 env:
   GFDL_BASE: ${{ github.workspace }}
