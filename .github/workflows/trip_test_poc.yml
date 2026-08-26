@@ -1,0 +1,54 @@
+name: trip_test_poc
+
+# Proof-of-concept only: runs Isca's existing trip_test comparison mechanism,
+# completely unmodified (no reduced resolution/run-length, no build caching),
+# on a small subset of test cases, purely to measure real CI wall-clock time.
+# Not intended as a long-term CI job -- see the discussion this is meant to
+# inform before deciding on a real approach.
+
+on:
+  push:
+    branches: [ ci_trip_test_poc ]
+  workflow_dispatch: {}
+
+env:
+  GFDL_BASE: ${{ github.workspace }}
+  GFDL_ENV: "ubuntu_conda"
+  GFDL_WORK: "${{ github.workspace }}/../gfdl_work"
+  GFDL_DATA: "${{ github.workspace }}/../gfdl_data"
+  GFDL_PYDIR: "${{ github.workspace }}/src/extra/python"
+
+jobs:
+  trip_test_poc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.12'
+          environment-file: ci/environment-py3.12_frozen.yml
+          miniforge-version: "latest"
+          use-mamba: true
+          activate-environment: isca_env
+          auto-activate-base: false
+
+      - name: Install Isca python package
+        shell: bash -l {0}
+        run: |
+          cd $GFDL_PYDIR
+          python -m pip install -e .
+
+      - name: Run trip_test (master vs this commit) on a small subset
+        shell: bash -l {0}
+        run: |
+          echo "trip_test started: $(date -u)"
+          cd $GFDL_BASE/exp/test_cases/trip_test
+          python3 trip_test_command_line master ${{ github.sha }} \
+            -e held_suarez frierson bucket_model \
+            -n 2 \
+            -r https://github.com/${{ github.repository }}
+          echo "trip_test finished: $(date -u)"
