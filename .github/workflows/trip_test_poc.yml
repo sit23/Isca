@@ -10,8 +10,6 @@ on:
   push:
     branches: [ ci_trip_test_poc ]
   workflow_dispatch: {}
-  # trivial nudge commit to check whether the previous push's failure to
-  # trigger a run was a one-off blip
 
 env:
   GFDL_BASE: ${{ github.workspace }}
@@ -49,7 +47,14 @@ jobs:
         run: |
           echo "trip_test started: $(date -u)"
           cd $GFDL_BASE/exp/test_cases/trip_test
-          python3 trip_test_command_line master ${{ github.sha }} \
+          # codebase.py's cached-checkout identity check compares the raw
+          # commit string against the resolved SHA of what's on disk, and
+          # doesn't understand symbolic refs -- so a branch name like
+          # "master" breaks once the cached checkout is reused for a second
+          # test case. Resolve it to a SHA first to sidestep that.
+          MASTER_SHA=$(git ls-remote https://github.com/${{ github.repository }} refs/heads/master | cut -f1)
+          echo "master resolved to $MASTER_SHA"
+          python3 trip_test_command_line "$MASTER_SHA" ${{ github.sha }} \
             -e held_suarez frierson bucket_model \
             -n 2 \
             -r https://github.com/${{ github.repository }}
