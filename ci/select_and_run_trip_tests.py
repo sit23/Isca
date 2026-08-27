@@ -140,6 +140,27 @@ def select_test_cases(base_sha, head_ref):
     return sorted(selected), files, None
 
 
+def drop_unavailable_codebases(test_cases, excluded_codebases):
+    """Remove test cases built with a codebase this environment can't
+    actually build. Currently used for 'socrates': SocratesCodeBase needs
+    externally-licensed source at GFDL_SOC that public CI doesn't have, and
+    trip_test_functions.py doesn't catch that failure per-test-case -- it's
+    an uncaught OSError that kills the whole comparison run, so anything
+    still queued behind a Socrates test case never gets a chance to run.
+    See the socrates_opensource_auto branch (auto-fetches Socrates instead
+    of requiring a pre-supplied GFDL_SOC) -- once that lands, CI may be able
+    to build Socrates itself and this exclusion can likely be dropped."""
+    if not excluded_codebases:
+        return test_cases, []
+    table = parse_test_case_table()
+    excluded = set(excluded_codebases)
+    kept, dropped = [], []
+    for name in test_cases:
+        codebase_name = table.get(name, (None, None))[1]
+        (dropped if codebase_name in excluded else kept).append(name)
+    return kept, dropped
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('base_ref', help="e.g. 'origin/master' -- resolved to a SHA before use")
@@ -148,6 +169,9 @@ def main():
                          help='escape hatch: skip selection, run every test case trip_test knows about')
     parser.add_argument('-n', '--num-cores', type=int, default=2)
     parser.add_argument('-r', '--repo', required=True, help='repo URL for trip_test_command_line -r')
+    parser.add_argument('--exclude-codebases', nargs='*', default=[],
+                         help="codebase name(s) (e.g. 'socrates') this environment cannot build, "
+                              'so any test case using them is dropped regardless of selection')
     parser.add_argument('--dry-run', action='store_true',
                          help='print the selection and exit without invoking trip_test')
     args = parser.parse_args()
@@ -162,12 +186,17 @@ def main():
     else:
         selected, files, reason = select_test_cases(base_sha, args.head_ref)
 
+    selected, dropped = drop_unavailable_codebases(selected, args.exclude_codebases)
+
     print('=' * 70)
     print(f'trip_test selection: base={args.base_ref} ({base_sha}) head={args.head_ref}')
     if reason:
         print(f'running the FULL suite: {reason}')
     else:
         print(f'{len(files)} changed file(s) under consideration')
+    if dropped:
+        print(f'excluding {len(dropped)} test case(s) needing unavailable codebase(s) '
+              f'{args.exclude_codebases}: {dropped}')
     print(f'selected {len(selected)} test case(s): {selected}')
     print('=' * 70)
 

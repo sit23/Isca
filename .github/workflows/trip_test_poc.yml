@@ -62,8 +62,17 @@ jobs:
           if [ "${{ inputs.force_full_suite }}" == "true" ]; then
             FORCE_FLAG="--force-full"
           fi
+          # socrates is excluded here because SocratesCodeBase needs
+          # externally-licensed source at GFDL_SOC, which this runner
+          # doesn't have -- and trip_test_functions.py's error handling
+          # doesn't catch that per test case, so a single Socrates test case
+          # kills the entire comparison run rather than just failing itself.
+          # Revisit once the socrates_opensource_auto branch (auto-fetches
+          # Socrates instead of requiring a pre-supplied GFDL_SOC) lands --
+          # CI may be able to build Socrates itself at that point.
           python3 ci/select_and_run_trip_tests.py origin/master ${{ github.sha }} \
             $FORCE_FLAG \
             -n 2 \
-            -r https://github.com/${{ github.repository }}
+            -r https://github.com/${{ github.repository }} \
+            --exclude-codebases socrates
           echo "trip_test finished: $(date -u)"
