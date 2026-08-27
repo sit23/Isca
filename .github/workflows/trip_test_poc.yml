@@ -1,15 +1,20 @@
 name: trip_test_poc
 
-# Proof-of-concept only: runs Isca's existing trip_test comparison mechanism,
-# completely unmodified (no reduced resolution/run-length, no build caching),
-# on a small subset of test cases, purely to measure real CI wall-clock time.
-# Not intended as a long-term CI job -- see the discussion this is meant to
-# inform before deciding on a real approach.
+# Proof-of-concept: runs Isca's existing trip_test comparison mechanism,
+# but only on the test cases relevant to what actually changed (see
+# ci/select_and_run_trip_tests.py), instead of the whole suite. No build
+# caching or reduced resolution -- this is purely about test *selection*.
+# Not intended as a long-term CI job on its own.
 
 on:
   push:
     branches: [ ci_trip_test_poc ]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force_full_suite:
+        description: 'Escape hatch: ignore selection, run every trip_test case'
+        type: boolean
+        default: false
 
 env:
   GFDL_BASE: ${{ github.workspace }}
@@ -25,6 +30,13 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          # select_and_run_trip_tests.py needs real history to diff against
+          # master's merge-base, not just the tip of this branch.
+          fetch-depth: 0
+
+      - name: Fetch master
+        run: git fetch origin master:refs/remotes/origin/master
 
       - name: Setup Conda
         uses: conda-incubator/setup-miniconda@v3
@@ -42,20 +54,16 @@ jobs:
           cd $GFDL_PYDIR
           python -m pip install -e .
 
-      - name: Run trip_test (master vs this commit) on a small subset
+      - name: Select and run relevant trip_test cases
         shell: bash -l {0}
         run: |
           echo "trip_test started: $(date -u)"
-          cd $GFDL_BASE/exp/test_cases/trip_test
-          # codebase.py's cached-checkout identity check compares the raw
-          # commit string against the resolved SHA of what's on disk, and
-          # doesn't understand symbolic refs -- so a branch name like
-          # "master" breaks once the cached checkout is reused for a second
-          # test case. Resolve it to a SHA first to sidestep that.
-          MASTER_SHA=$(git ls-remote https://github.com/${{ github.repository }} refs/heads/master | cut -f1)
-          echo "master resolved to $MASTER_SHA"
-          python3 trip_test_command_line "$MASTER_SHA" ${{ github.sha }} \
-            -e held_suarez frierson bucket_model \
+          FORCE_FLAG=""
+          if [ "${{ inputs.force_full_suite }}" == "true" ]; then
+            FORCE_FLAG="--force-full"
+          fi
+          python3 ci/select_and_run_trip_tests.py origin/master ${{ github.sha }} \
+            $FORCE_FLAG \
             -n 2 \
             -r https://github.com/${{ github.repository }}
           echo "trip_test finished: $(date -u)"
