@@ -840,12 +840,15 @@ if (coupled) then
         net_surf_sw_down + lwnet_out - sens_out - HLV*evap_out, Time)
   if (id_cpl_evap > 0) used = send_data(id_cpl_evap, evap_out, Time)
   if (id_cpl_precip > 0) used = send_data(id_cpl_precip, precip, Time)
-  ! Points neither the ocean nor a land bucket holds water for: their P-E becomes runoff.
-  where (coupled_mask)
-    uncoupled_pme = 0.
-  elsewhere
-    uncoupled_pme = precip - evap_out
-  end where
+  ! Water the ocean does not get directly becomes runoff. The precip/evap fields reach
+  ! the ocean, through conservative remapping, from the ocean-covered fraction of each
+  ! cell only, so the rest of the cell's P-E is routed (cells under the ice lid send
+  ! nothing directly, so all of theirs). Land points are overridden by the bucket.
+  uncoupled_pme = (precip - evap_out) * (1. - min(max(ocean_frac_coupled, 0.), 1.))
+  if (update_albedo_from_ice) then
+    where (ice_concentration > ice_concentration_threshold .and. .not. land_mask) &
+      uncoupled_pme = precip - evap_out
+  endif
 endif
 
 !
