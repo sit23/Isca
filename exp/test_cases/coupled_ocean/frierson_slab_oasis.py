@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(GFDL_BASE, 'exp', 'test_cases', 'frierson'))
 NCORES = 8
 DT_ATMOS = 720
 NMONTHS = int(os.environ.get('NMONTHS', 1))
-DEPTH = 2.5
+DEPTH = float(os.environ.get('DEPTH', 2.5))
 
 cb = IscaCodeBase.from_directory(GFDL_BASE)
 
@@ -42,6 +42,9 @@ def make_diag():
     diag.add_field('dynamics', 'ucomp', time_avg=True)
     diag.add_field('dynamics', 'vcomp', time_avg=True)
     diag.add_field('dynamics', 'temp', time_avg=True)
+    # for atmospheric heat transport (radiative and surface fluxes)
+    for f in ('olr', 'swdn_toa', 'swdn_sfc', 'lwdn_sfc', 'lwup_sfc'):
+        diag.add_field('two_stream', f, time_avg=True)
     return diag
 
 
@@ -67,7 +70,7 @@ if __name__ == '__main__':
     which = sys.argv[1:] or ['reference', 'coupled']
 
     if 'reference' in which:
-        ref = Experiment('coupled_ocean_phase1_reference', codebase=cb)
+        ref = Experiment(os.environ.get('REF_NAME', 'coupled_ocean_phase1_reference'), codebase=cb)
         ref.diag_table = make_diag()
         ref.namelist = make_namelist(30)
         run(ref, NMONTHS)

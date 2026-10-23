@@ -79,7 +79,7 @@ character(len=128), parameter :: mod_name='mixed_layer'
 
 !=================================================================================================================================
 
-public :: mixed_layer_init, mixed_layer, mixed_layer_end, albedo_calc
+public :: mixed_layer_init, mixed_layer, mixed_layer_end, albedo_calc, mixed_layer_uncoupled_pme
 
 !=================================================================================================================================
 
@@ -222,8 +222,9 @@ logical, allocatable, dimension(:,:) ::      land_mask
 
 logical :: coupled = .false.
 real, allocatable, dimension(:,:) :: sst_coupled, ocean_frac_coupled
+real, allocatable, dimension(:,:) :: uncoupled_pme   ! P-E [kg/m2/s] at uncoupled points (see mixed_layer_uncoupled_pme)
 logical, allocatable, dimension(:,:) :: coupled_mask
-integer :: id_ocean_frac
+integer :: id_ocean_frac, id_cpl_heat, id_cpl_evap, id_cpl_precip
 
 !mj read sst from input file
   type(interpolate_type),save :: sst_interp
@@ -581,6 +582,7 @@ if ( id_heat_cap > 0 ) used = send_data ( id_heat_cap, land_sea_heat_capacity )
 if (trim(ocean_coupling) == 'oasis') then
   coupled = .true.
   allocate(sst_coupled(is:ie, js:je), ocean_frac_coupled(is:ie, js:je), coupled_mask(is:ie, js:je))
+  allocate(uncoupled_pme(is:ie, js:je)); uncoupled_pme = 0.
   sst_coupled = t_surf
   ocean_frac_coupled = 0.
   coupled_mask = .false.
@@ -589,6 +591,13 @@ if (trim(ocean_coupling) == 'oasis') then
                           rad_lonb_2d, rad_latb_2d, land)
   id_ocean_frac = register_diag_field(mod_name, 'coupled_ocean_frac', axes(1:2), Time, &
                                       'fraction of cell covered by the coupled ocean', 'none')
+  ! exactly what is sent to the ocean (all points; the ocean uses the coupled ones)
+  id_cpl_heat = register_diag_field(mod_name, 'cpl_net_heat', axes(1:2), Time, &
+                  'net surface heat flux sent to the ocean (SW+LW-SH-L*E), positive down', 'W/m2')
+  id_cpl_evap = register_diag_field(mod_name, 'cpl_evap', axes(1:2), Time, &
+                  'evaporation sent to the ocean', 'kg/m2/s')
+  id_cpl_precip = register_diag_field(mod_name, 'cpl_precip', axes(1:2), Time, &
+                  'precipitation sent to the ocean', 'kg/m2/s')
 else if (trim(ocean_coupling) /= 'none') then
   call error_mesg('mixed_layer','"'//trim(ocean_coupling)//'" is not a valid ocean_coupling. '// &
                   'Choices are: none or oasis.', FATAL)
@@ -824,6 +833,16 @@ if (coupled) then
   ! flux_u/v from surface_flux are the stress on the atmosphere; the ocean feels minus that.
   call ocean_coupler_put(Time, -flux_u, -flux_v, net_surf_sw_down, lwnet_out, sens_out, &
                          evap_out, precip, psurf)
+  if (id_cpl_heat > 0) used = send_data(id_cpl_heat, &
+        net_surf_sw_down + lwnet_out - sens_out - HLV*evap_out, Time)
+  if (id_cpl_evap > 0) used = send_data(id_cpl_evap, evap_out, Time)
+  if (id_cpl_precip > 0) used = send_data(id_cpl_precip, precip, Time)
+  ! Points neither the ocean nor a land bucket holds water for: their P-E becomes runoff.
+  where (coupled_mask)
+    uncoupled_pme = 0.
+  elsewhere
+    uncoupled_pme = precip - evap_out
+  end where
 endif
 
 !
@@ -838,6 +857,20 @@ if(id_flux_oceanq > 0)   used = send_data(id_flux_oceanq, ocean_qflux, Time_next
 if(id_delta_t_surf > 0)   used = send_data(id_delta_t_surf, delta_t_surf, Time_next)
 
 end subroutine mixed_layer
+
+!=================================================================================================================================
+
+subroutine mixed_layer_uncoupled_pme(pme)
+! P-E [kg/m2/s] over every point not covered by the coupled ocean, from the
+! last mixed_layer call (zero when not coupled). The caller routes it to the
+! ocean, except where a land bucket stores the water instead.
+real, intent(out), dimension(:,:) :: pme
+if (allocated(uncoupled_pme)) then
+  pme = uncoupled_pme
+else
+  pme = 0.
+endif
+end subroutine mixed_layer_uncoupled_pme
 
 !=================================================================================================================================
 

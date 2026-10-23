@@ -24,7 +24,9 @@ use        cloud_simple_mod, only: cloud_simple_init, cloud_simple_end, cloud_si
 
 use       cloud_spookie_mod, only: cloud_spookie_init, cloud_spookie
 
-use         mixed_layer_mod, only: mixed_layer_init, mixed_layer, mixed_layer_end, albedo_calc
+use         mixed_layer_mod, only: mixed_layer_init, mixed_layer, mixed_layer_end, albedo_calc, &
+                                     mixed_layer_uncoupled_pme
+use       ocean_coupler_mod, only: ocean_coupler_active, ocean_coupler_put_runoff
 
 use         lscale_cond_mod, only: lscale_cond_init, lscale_cond, lscale_cond_end
 
@@ -181,6 +183,7 @@ namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roug
 integer, parameter :: num_time_levels = 2 ! Add bucket - number of time levels added to allow timestepping in this module
 real, allocatable, dimension(:,:,:)   :: bucket_depth
 real, allocatable, dimension(:,:    ) :: dt_bucket, filt, bucket_diffusion
+real, allocatable, dimension(:,:    ) :: bucket_overflow   ! water above the land bucket capacity [kg/m2/s]
 
 real, allocatable, dimension(:,:)   ::                                        &
      z_surf,               &   ! surface height
@@ -297,6 +300,7 @@ integer ::           &
      id_bucket_depth_conv, &   ! bucket depth variation induced by convection
      id_bucket_depth_cond, &   ! bucket depth variation induced by condensation
      id_bucket_depth_lh,   &   ! bucket depth variation induced by LH
+     id_cpl_runoff,        &   ! runoff arriving at coupled ocean cells
      id_bucket_diffusion,  &   ! diffused surface water depth 
      id_rh,           & ! Relative humidity
      id_diss_heat_ray,&  ! Heat dissipated by rayleigh bottom drag if gp_surface=.True.
@@ -491,6 +495,7 @@ allocate(rad_lat     (is:ie, js:je)); rad_lat = rad_lat_2d
 allocate(rad_lon     (is:ie, js:je)); rad_lon = rad_lon_2d
 allocate(dt_bucket   (is:ie, js:je)); dt_bucket = 0.0
 allocate(filt        (is:ie, js:je)); filt = 0.0
+allocate(bucket_overflow(is:ie, js:je)); bucket_overflow = 0.0
 allocate(bucket_depth (is:ie, js:je, num_time_levels)); bucket_depth = init_bucket_depth 
 allocate(depth_change_lh(is:ie, js:je))
 allocate(depth_change_cond(is:ie, js:je))
@@ -729,6 +734,8 @@ id_flux_t_atm_part = register_diag_field(mod_name, 'flux_t_atm_part', axes(1:2),
 
 id_e_sat = register_diag_field(mod_name, 'e_sat', axes(1:2), Time, 'e_sat', '.')  
 
+id_cpl_runoff = register_diag_field(mod_name, 'cpl_runoff', axes(1:2), Time, &
+       'river runoff routed to the coupled ocean (arriving cells)', 'kg/m2/s')
 if(bucket) then
   id_bucket_depth = register_diag_field(mod_name, 'bucket_depth',            &
        axes(1:2), Time, 'Depth of surface reservoir', 'm')
@@ -888,6 +895,7 @@ real, dimension(:,:,:),     intent(inout) :: dt_ug, dt_vg, dt_tg
 real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 
 real :: delta_t
+real, dimension(size(ug,1), size(ug,2)) :: runoff, routed   ! runoff produced / arriving at ocean cells [kg/m2/s]
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv, tdt_local_heating
 real, dimension(size(ug,1), size(ug,2)) :: flux_q_surf_part, flux_q_atm_part, flux_t_surf_part, flux_t_atm_part, e_sat_out
 
@@ -1493,8 +1501,13 @@ if(bucket) then
 
    ! truncate surface reservoir over land points
    if (finite_bucket_depth_over_land) then
+       ! with a coupled ocean the overflow is river runoff rather than lost:
+       ! the excess removed from the new leapfrog level is the input over delta_t
        where(land .and. (bucket_depth(:,:,future) > max_bucket_depth_land))
+            bucket_overflow = (bucket_depth(:,:,future) - max_bucket_depth_land) * 1000. / delta_t
             bucket_depth(:,:,future) = max_bucket_depth_land
+       elsewhere
+            bucket_overflow = 0.
        end where
    endif
 
@@ -1509,6 +1522,21 @@ if(bucket) then
 
 endif
 ! end Add bucket section
+
+! With a coupled ocean, water leaving the surface where neither the ocean nor a
+! land bucket keeps it is routed to the ocean as runoff instead of being lost.
+if (mixed_layer_bc .and. ocean_coupler_active()) then
+   call mixed_layer_uncoupled_pme(runoff)
+   if (bucket) then
+      if (finite_bucket_depth_over_land) then
+         where (land) runoff = bucket_overflow
+      else
+         where (land) runoff = 0.
+      endif
+   endif
+   call ocean_coupler_put_runoff(Time, runoff, routed)
+   if (id_cpl_runoff > 0) used = send_data(id_cpl_runoff, routed, Time)
+endif
 
 end subroutine idealized_moist_phys
 !=================================================================================================================================

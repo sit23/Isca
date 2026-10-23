@@ -30,6 +30,10 @@ module ocean_coupler_mod
 !   ISCA_EVAP            : evaporation [kg/m2/s], positive UPWARD (out of ocean)
 !   ISCA_PRECIP          : liquid precipitation [kg/m2/s], positive down
 !   ISCA_PSURF           : surface pressure [Pa]
+!   ISCA_RUNOFF          : river runoff [kg/m2/s], positive into the ocean. Water that
+!                          leaves the surface anywhere the ocean is not (bucket overflow
+!                          on land, P-E over uncoupled slab points) is moved to an ocean
+!                          cell given by INPUT/runoff_routing.nc, so no water is lost.
 ! Fields received from the ocean:
 !   OCN_SST              : sea-surface temperature [K]
 !   OCN_FRAC             : fraction of the Isca cell covered by coupled ocean [0-1]
@@ -49,14 +53,15 @@ private
 
 public :: ocean_coupler_init_comp, ocean_coupler_init, ocean_coupler_put, &
           ocean_coupler_get, ocean_coupler_end, ocean_coupler_terminate,  &
-          ocean_coupler_active
+          ocean_coupler_active, ocean_coupler_put_runoff
 
 character(len=128), parameter :: version = '$Id: ocean_coupler.F90 2026-10-23 $'
 character(len=128), parameter :: tagname = '$Name: coupled_ocean_oasis $'
 
-integer, parameter :: n_out = 8, n_in = 2
+integer, parameter :: n_out = 9, n_in = 2
 character(len=11), parameter :: out_names(n_out) = (/ 'ISCA_TAUX  ', 'ISCA_TAUY  ', &
-     'ISCA_SWNET ', 'ISCA_LWNET ', 'ISCA_SENS  ', 'ISCA_EVAP  ', 'ISCA_PRECIP', 'ISCA_PSURF ' /)
+     'ISCA_SWNET ', 'ISCA_LWNET ', 'ISCA_SENS  ', 'ISCA_EVAP  ', 'ISCA_PRECIP', 'ISCA_PSURF ', &
+     'ISCA_RUNOFF' /)
 character(len=8),  parameter :: in_names(n_in) = (/ 'OCN_SST ', 'OCN_FRAC' /)
 character(len=4),  parameter :: grid_name = 'isca'
 
@@ -64,8 +69,10 @@ logical :: oasis_active = .false.   ! OASIS was initialised (a namcouple exists)
 logical :: module_is_initialized = .false.
 integer :: comp_id = -1, part_id = -1
 integer :: out_ids(n_out) = -1, in_ids(n_in) = -1
-integer :: is, ie, js, je
+integer :: is, ie, js, je, nlon_g, nlat_g
 type(time_type) :: Time_run_start
+real, allocatable :: cell_area(:,:)          ! local cell areas [m2]
+integer, allocatable :: runoff_dest(:,:)     ! global index (i + (j-1)*nlon) a cell's runoff goes to; 0 = none
 
 contains
 
@@ -127,6 +134,7 @@ if (.not. oasis_active) call error_mesg('ocean_coupler_init', &
 call write_version_number(version, tagname)
 
 is = is_in; ie = ie_in; js = js_in; je = je_in
+nlon_g = num_lon; nlat_g = num_lat
 Time_run_start = Time
 
 ! Assemble the global cell boundaries from the local ones. Boundaries shared
@@ -138,6 +146,14 @@ call mpp_sum(lonb_g, num_lon+1); call mpp_sum(cnt_lon, num_lon+1)
 call mpp_sum(latb_g, num_lat+1); call mpp_sum(cnt_lat, num_lat+1)
 lonb_g = lonb_g / cnt_lon
 latb_g = latb_g / cnt_lat
+
+allocate(cell_area(is:ie, js:je))
+do j = js, je
+  do i = is, ie
+    cell_area(i,j) = RADIUS**2 * (lonb_g(i+1) - lonb_g(i)) * (sin(latb_g(j+1)) - sin(latb_g(j)))
+  enddo
+enddo
+call read_runoff_routing()
 
 land_g = 0.
 where (land) land_g(is:ie, js:je) = 1.
@@ -229,6 +245,44 @@ end subroutine ocean_coupler_put
 
 !#######################################################################
 
+subroutine ocean_coupler_put_runoff(Time, runoff, routed)
+! Route runoff [kg/m2/s] from the cells where it is produced to their
+! destination ocean cells and send it. Called every atmospheric timestep.
+! Routing is a global operation (rivers cross PE boundaries), done with one
+! mpp_sum of a global array: cheap at the resolutions Isca is used at.
+type(time_type), intent(in) :: Time
+real, intent(in), dimension(:,:) :: runoff
+real, intent(out), dimension(:,:), optional :: routed   ! runoff arriving in each cell [kg/m2/s]
+#ifdef ISCA_OASIS
+real :: routed_g(nlon_g*nlat_g)
+real(kind=8) :: buf(is:ie, js:je)
+integer :: i, j, k, date, info
+
+if (present(routed)) routed = 0.
+if (out_ids(9) < 0) return
+routed_g = 0.
+do j = js, je
+  do i = is, ie
+    k = runoff_dest(i,j)
+    if (k > 0) routed_g(k) = routed_g(k) + runoff(i-is+1, j-js+1) * cell_area(i,j)   ! [kg/s]
+  enddo
+enddo
+call mpp_sum(routed_g, nlon_g*nlat_g)
+do j = js, je
+  do i = is, ie
+    buf(i,j) = routed_g(i + (j-1)*nlon_g) / cell_area(i,j)
+  enddo
+enddo
+if (present(routed)) routed = buf
+date = seconds_since_start(Time)
+call oasis_put(out_ids(9), date, buf, info)
+#else
+if (present(routed)) routed = 0.
+#endif
+end subroutine ocean_coupler_put_runoff
+
+!#######################################################################
+
 subroutine ocean_coupler_get(Time, sst, ocean_frac, received)
 ! Called every atmospheric timestep. sst and ocean_frac are only changed
 ! when a coupling field actually arrives (received = .true.).
@@ -277,6 +331,33 @@ end subroutine ocean_coupler_terminate
 !#######################################################################
 
 #ifdef ISCA_OASIS
+subroutine read_runoff_routing()
+! INPUT/runoff_routing.nc: integer variable 'dest' (lon, lat), the global
+! index i + (j-1)*nlon of the ocean cell each cell's runoff is sent to
+! (0: produces no runoff, e.g. coupled ocean cells). Written by
+! isca.coupling. Without it, runoff is not routed (and not sent).
+use netcdf
+integer :: ncid, vid, status
+integer, allocatable :: dest_g(:,:)
+
+allocate(runoff_dest(is:ie, js:je))
+runoff_dest = 0
+if (.not. file_exist('INPUT/runoff_routing.nc')) then
+  call error_mesg('ocean_coupler', 'no INPUT/runoff_routing.nc: runoff will not be routed '// &
+                  'to the ocean (water over land/uncoupled points is lost)', WARNING)
+  return
+endif
+allocate(dest_g(nlon_g, nlat_g))
+status = nf90_open('INPUT/runoff_routing.nc', NF90_NOWRITE, ncid)
+if (status == NF90_NOERR) status = nf90_inq_varid(ncid, 'dest', vid)
+if (status == NF90_NOERR) status = nf90_get_var(ncid, vid, dest_g)
+if (status /= NF90_NOERR) call error_mesg('ocean_coupler', 'reading INPUT/runoff_routing.nc: '// &
+                                          trim(nf90_strerror(status)), FATAL)
+status = nf90_close(ncid)
+runoff_dest = dest_g(is:ie, js:je)
+deallocate(dest_g)
+end subroutine read_runoff_routing
+
 integer function seconds_since_start(Time)
 type(time_type), intent(in) :: Time
 integer :: days, seconds

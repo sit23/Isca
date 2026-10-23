@@ -26,7 +26,8 @@ from isca.experiment import Experiment
 ISCA_TO_OCEAN = [('ISCA_TAUX', 'OCN_TAUX'), ('ISCA_TAUY', 'OCN_TAUY'),
                  ('ISCA_SWNET', 'OCN_SWNET'), ('ISCA_LWNET', 'OCN_LWNET'),
                  ('ISCA_SENS', 'OCN_SENS'), ('ISCA_EVAP', 'OCN_EVAP'),
-                 ('ISCA_PRECIP', 'OCN_PRECIP'), ('ISCA_PSURF', 'OCN_PSURF')]
+                 ('ISCA_PRECIP', 'OCN_PRECIP'), ('ISCA_PSURF', 'OCN_PSURF'),
+                 ('ISCA_RUNOFF', 'OCN_RUNOFF')]
 OCEAN_TO_ISCA = [('SST_OCN', 'OCN_SST'), ('FRAC_OCN', 'OCN_FRAC')]
 
 ISCA_GRID = 'isca'
@@ -42,6 +43,10 @@ class OceanComponent(object):
     def ocean_grid_shape(self, nlon, nlat):
         """(nx, ny) of the ocean grid, given the Isca grid size."""
         return nlon, nlat
+
+    def isca_ocean_mask(self, nlon, nlat):
+        """Boolean (nlat, nlon) array: Isca cells the ocean model covers (before land is removed)."""
+        return np.ones((nlat, nlon), dtype=bool)
 
     def command(self, exp, runtime):
         """Program and arguments to launch (a list of strings)."""
@@ -63,6 +68,10 @@ class OceanComponent(object):
         """Bring the ocean's restart files out of the extracted restart archive."""
         pass
 
+    def save_output(self, exp, outdir):
+        """Copy the ocean's diagnostic output into the run's output directory."""
+        pass
+
 
 class SlabOcean(OceanComponent):
     """The Python slab ocean in slab_ocean.py, on the Isca grid. For testing the coupling."""
@@ -73,6 +82,10 @@ class SlabOcean(OceanComponent):
         self.delta_t = delta_t
         self.max_lat = max_lat
 
+    def isca_ocean_mask(self, nlon, nlat):
+        lat = gaussian_latitudes(nlat)
+        return np.broadcast_to((np.abs(lat) <= self.max_lat)[:, None], (nlat, nlon)).copy()
+
     def command(self, exp, runtime):
         nlon, nlat = exp.isca_grid_shape()
         script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'slab_ocean.py')
@@ -81,6 +94,71 @@ class SlabOcean(OceanComponent):
                 '--depth', self.depth, '--tconst', self.tconst,
                 '--delta-t', self.delta_t, '--max-lat', self.max_lat,
                 '--restart-file', OCEAN_RESTART]
+
+
+def gaussian_latitudes(nlat):
+    """Isca's Gaussian latitudes [degrees], south to north."""
+    return np.degrees(np.arcsin(np.polynomial.legendre.leggauss(nlat)[0]))
+
+
+def runoff_destinations(coupled, zsurf=None):
+    """Where the runoff of every Isca cell goes.
+
+    coupled: boolean (nlat, nlon), cells whose surface is the coupled ocean.
+    zsurf:   optional surface height (nlat, nlon) [m]; water follows the
+             steepest descent (8 neighbours, periodic in longitude) until it
+             reaches a coupled cell. Cells with no downhill path (pits, flat
+             land, or no zsurf at all) send their water to the nearest coupled
+             cell by great-circle distance.
+    Returns int (nlat, nlon): 1-based global index i + (j-1)*nlon of the
+    destination cell, 0 for coupled cells.
+    """
+    nlat, nlon = coupled.shape
+    if not coupled.any():
+        raise ValueError('no coupled ocean cells to route runoff to')
+    lat = np.radians(gaussian_latitudes(nlat))
+    lon = np.radians(np.arange(nlon) * 360. / nlon)
+    LON, LAT = np.meshgrid(lon, lat)
+    xyz = np.stack([np.cos(LAT) * np.cos(LON), np.cos(LAT) * np.sin(LON), np.sin(LAT)], -1)
+    ocean_j, ocean_i = np.nonzero(coupled)
+    ocean_xyz = xyz[ocean_j, ocean_i]
+
+    def nearest_ocean(j, i):
+        k = np.argmax(ocean_xyz @ xyz[j, i])
+        return ocean_j[k], ocean_i[k]
+
+    dest = np.zeros((nlat, nlon), dtype=np.int32)
+    for j in range(nlat):
+        for i in range(nlon):
+            if coupled[j, i]:
+                continue
+            jj, ii = j, i
+            for _ in range(nlat * nlon):
+                if coupled[jj, ii]:
+                    break
+                step = None
+                if zsurf is not None:
+                    best = zsurf[jj, ii]
+                    for dj in (-1, 0, 1):
+                        for di in (-1, 0, 1):
+                            nj, ni = jj + dj, (ii + di) % nlon
+                            if (dj or di) and 0 <= nj < nlat and zsurf[nj, ni] < best:
+                                best, step = zsurf[nj, ni], (nj, ni)
+                if step is None:
+                    jj, ii = nearest_ocean(jj, ii)
+                else:
+                    jj, ii = step
+            dest[j, i] = ii + 1 + jj * nlon
+    return dest
+
+
+def write_runoff_routing(fname, dest):
+    with netCDF4.Dataset(fname, 'w') as nc:
+        nc.createDimension('lat', dest.shape[0])
+        nc.createDimension('lon', dest.shape[1])
+        v = nc.createVariable('dest', 'i4', ('lat', 'lon'))
+        v.long_name = '1-based global index (i + (j-1)*nlon) of the cell receiving this cell runoff; 0 = none'
+        v[:] = dest
 
 
 def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean_shape,
@@ -147,9 +225,14 @@ def write_zero_flux_restart(fname, isca_shape):
 class CoupledExperiment(Experiment):
     """An Isca Experiment whose surface is coupled to an external ocean through OASIS3-MCT."""
 
-    def __init__(self, name, codebase, ocean, coupling_period=3600, **kwargs):
+    def __init__(self, name, codebase, ocean, coupling_period=3600, land_mask=None, zsurf=None,
+                 **kwargs):
+        """land_mask, zsurf: (nlat, nlon) arrays on the Isca grid, matching the land Isca
+        is configured with, used to route runoff to the ocean (None: aquaplanet)."""
         super(CoupledExperiment, self).__init__(name, codebase, **kwargs)
         self.ocean = ocean
+        self.land_mask = land_mask
+        self.zsurf = zsurf
         self.coupling_period = int(coupling_period)
         self.on('run:ready', self._prepare_coupling)
         self.on('run:complete', self._save_coupling_restarts)
@@ -189,6 +272,12 @@ class CoupledExperiment(Experiment):
                         self.coupling_period, int(self.namelist['main_nml']['dt_atmos']),
                         (nlon, nlat), ocean_shape, self.ocean.grid_name)
 
+        coupled = self.ocean.isca_ocean_mask(nlon, nlat)
+        if self.land_mask is not None:
+            coupled = coupled & ~np.asarray(self.land_mask, dtype=bool)
+        write_runoff_routing(os.path.join(indir, 'runoff_routing.nc'),
+                             runoff_destinations(coupled, self.zsurf))
+
         cold_start = True
         for rst in (ISCA_RESTART, OCEAN_RESTART):
             src = os.path.join(indir, rst)
@@ -211,3 +300,8 @@ class CoupledExperiment(Experiment):
             if os.path.exists(src):
                 shutil.copy(src, os.path.join(resdir, rst))
         self.ocean.save_restart(self, resdir)
+        # Experiment.run only archives Isca's own diagnostics, and empties the
+        # run directory afterwards, so the ocean's output is copied out here.
+        outdir = os.path.join(self.datadir, self.runfmt % i)
+        os.makedirs(outdir, exist_ok=True)
+        self.ocean.save_output(self, outdir)

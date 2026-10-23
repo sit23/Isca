@@ -85,7 +85,8 @@ BASE_MOM_INPUT = {
     'PEN_SW_SCALE': 15.0,
     'PEN_SW_FRAC': 0.42,
     'TRACER_ADVECTION_SCHEME': '"PPM:H3"',
-    'ADJUST_NET_FRESH_WATER_TO_ZERO': True,
+    # off: Isca routes all surface water to the ocean (runoff), so the budget closes by itself
+    'ADJUST_NET_FRESH_WATER_TO_ZERO': False,
     'CHECK_BAD_SURFACE_VALS': True,
     'PARALLEL_RESTARTFILES': False,
     'ENERGYSAVEDAYS': 1.0,
@@ -142,6 +143,41 @@ def write_supergrid(fname, nlon, nlat, max_lat, radius=ISCA_RADIUS):
     return len(rows)
 
 
+def regular_grid(dlat, max_lat):
+    """Cell edges [degrees] of a regular grid covering -max_lat..max_lat."""
+    n = int(round(2 * max_lat / dlat))
+    return np.linspace(-max_lat, max_lat, n + 1)
+
+
+def write_supergrid_regular(fname, dlon, dlat, max_lat, radius=ISCA_RADIUS):
+    """MOM6 supergrid for a regular dlon x dlat grid (cell edges from 0E): used to test
+    coupling through a non-trivial (conservative) remapping."""
+    lat_e = regular_grid(dlat, max_lat)
+    ys = np.empty(2 * (len(lat_e) - 1) + 1)
+    ys[0::2] = lat_e
+    ys[1::2] = 0.5 * (lat_e[:-1] + lat_e[1:])
+    nlon = int(round(360. / dlon))
+    xs = np.linspace(0., 360., 2 * nlon + 1)
+    x, y = np.meshgrid(xs, ys)
+    lam, phi = np.radians(xs), np.radians(ys)
+    dx = radius * np.cos(np.radians(y[:, :-1])) * np.diff(lam)[None, :]
+    dy = np.broadcast_to((radius * np.diff(phi))[:, None], (len(ys) - 1, len(xs))).copy()
+    area = radius**2 * np.diff(lam)[None, :] * np.diff(np.sin(phi))[:, None]
+    with netCDF4.Dataset(fname, 'w') as nc:
+        nc.createDimension('nyp', len(ys)); nc.createDimension('nxp', len(xs))
+        nc.createDimension('ny', len(ys) - 1); nc.createDimension('nx', len(xs) - 1)
+        nc.createDimension('string', 255)
+        for name, dims, data in (('x', ('nyp', 'nxp'), x), ('y', ('nyp', 'nxp'), y),
+                                 ('dx', ('nyp', 'nx'), dx), ('dy', ('ny', 'nxp'), dy),
+                                 ('area', ('ny', 'nx'), area),
+                                 ('angle_dx', ('nyp', 'nxp'), np.zeros_like(x))):
+            nc.createVariable(name, 'f8', dims)[:] = data
+        chars = np.zeros(255, dtype='S1')
+        chars[:5] = list('tile1')
+        nc.createVariable('tile', 'S1', ('string',))[:] = chars
+    return nlon, len(lat_e) - 1
+
+
 def write_vgrid(fname, nk=30, depth=4000.0, dz_top=10.0):
     """Layer thicknesses growing geometrically from dz_top to fill depth."""
     # solve for the stretching factor r: dz_top*(r**nk - 1)/(r - 1) = depth
@@ -168,10 +204,11 @@ def write_initial_ts(fname, nlon, nlat, max_lat, sst_func, t_deep=2.0, decay=800
     The surface temperature is sst_func(lat) [K], decaying exponentially with
     depth to t_deep [degC] (never below freezing).
     """
-    lat_c, _ = gaussian_grid(nlat)
-    rows = ocean_rows(nlat, max_lat)
-    lat = lat_c[rows]
-    lon = np.arange(nlon) * 360. / nlon
+    # global 1-degree data, so it covers whatever ocean grid MOM6 is using
+    # (FMS horizontal interpolation fails if the data do not cover the model grid)
+    lat = np.arange(-89.5, 90., 1.)
+    lon = np.arange(0.5, 360., 1.)
+    nlon = len(lon)
     z = np.array([0., 5., 15., 30., 50., 75., 100., 150., 200., 300., 400., 500., 700., 1000.,
                   1500., 2000., 2500., 3000., 3500., 4000., 4500.])
     sst = np.maximum(sst_func(lat) - 273.15, -1.8)
@@ -195,6 +232,32 @@ def write_initial_ts(fname, nlon, nlat, max_lat, sst_func, t_deep=2.0, decay=800
         s.missing_value = -1.e20
         s.units = 'psu'
         s[:] = salt
+
+
+def write_topography(fname, nlon, nlat, max_lat, land_mask, depth):
+    """MOM6 TOPO_FILE: 'depth' [m, positive down] on the ocean T-points, 0 on land.
+
+    land_mask is (nlat, nlon) on the Isca grid; the MOM6 grid is the Isca grid's
+    ocean rows, so the two masks agree exactly."""
+    rows = ocean_rows(nlat, max_lat)
+    d = np.where(np.asarray(land_mask, dtype=bool)[rows, :], 0., depth)
+    with netCDF4.Dataset(fname, 'w') as nc:
+        nc.createDimension('ny', len(rows)); nc.createDimension('nx', nlon)
+        v = nc.createVariable('depth', 'f8', ('ny', 'nx'))
+        v.units = 'm'
+        v[:] = d
+
+
+def write_isca_land_file(fname, land_mask, zsurf=None):
+    """Isca land file (idealized_moist_phys_nml land_option='input')."""
+    nlat, nlon = land_mask.shape
+    lat_c, _ = gaussian_grid(nlat)
+    with netCDF4.Dataset(fname, 'w', format='NETCDF3_CLASSIC') as nc:
+        nc.createDimension('lat', nlat); nc.createDimension('lon', nlon)
+        nc.createVariable('lat', 'f4', ('lat',))[:] = lat_c
+        nc.createVariable('lon', 'f4', ('lon',))[:] = np.arange(nlon) * 360. / nlon
+        nc.createVariable('land_mask', 'f4', ('lat', 'lon'))[:] = np.asarray(land_mask, dtype=float)
+        nc.createVariable('zsurf', 'f4', ('lat', 'lon'))[:] = 0. if zsurf is None else zsurf
 
 
 def format_mom_input(params):
@@ -225,6 +288,12 @@ DIAG_TABLE = """Isca coupled MOM6
 "ocean_model", "frazil_heat_tend_2d", "frazil_heat_tend_2d", "ocean_month", "all", .true., "none", 2
 "ocean_model", "net_heat_surface", "net_heat_surface", "ocean_month", "all", .true., "none", 2
 "ocean_model", "PRCmE", "PRCmE", "ocean_month", "all", .true., "none", 2
+"ocean_model", "friver", "friver", "ocean_month", "all", .true., "none", 2
+"ocean_model", "net_heat_coupler", "net_heat_coupler", "ocean_month", "all", .true., "none", 2
+"ocean_model", "heat_content_massout", "heat_content_massout", "ocean_month", "all", .true., "none", 2
+"ocean_model", "heat_content_massin", "heat_content_massin", "ocean_month", "all", .true., "none", 2
+"ocean_model", "evs", "evs", "ocean_month", "all", .true., "none", 2
+"ocean_model", "prlq", "prlq", "ocean_month", "all", .true., "none", 2
 "ocean_model", "T_ady_2d", "T_ady_2d", "ocean_month", "all", .true., "none", 2
 "ocean_model", "T_diffy_2d", "T_diffy_2d", "ocean_month", "all", .true., "none", 2
 "ocean_model", "vmo", "vmo", "ocean_month", "all", .true., "none", 2
@@ -242,7 +311,16 @@ class MOM6Ocean(OceanComponent):
     grid_name = 'mom6'
 
     def __init__(self, executable, num_cores=4, max_lat=80., nk=30, depth=4000.,
-                 layout=None, mom_input=None, sst_func=None):
+                 layout=None, mom_input=None, sst_func=None, land_mask=None, regular_dlat=None):
+        """land_mask: optional (nlat, nlon) boolean array on the Isca grid (e.g. a
+        ridge); MOM6 gets zero depth there. Give the same mask to Isca
+        (CoupledExperiment land_mask, and an Isca land file) so they agree."""
+        self.land_mask = land_mask
+        # None: MOM6 cells are exactly Isca's cells. A number: a regular grid of that
+        # spacing instead (tests real remapping; land masks not supported then).
+        self.regular_dlat = regular_dlat
+        if regular_dlat is not None and land_mask is not None:
+            raise ValueError('land_mask is only supported on the Isca-matched grid')
         self.executable = executable
         self.num_cores = num_cores
         self.max_lat = max_lat
@@ -256,7 +334,22 @@ class MOM6Ocean(OceanComponent):
         self.sst_func = sst_func or (lambda lat: 285. - 40. * (3. * np.sin(np.radians(lat))**2 - 1.) / 3.)
 
     def ocean_grid_shape(self, nlon, nlat):
+        if self.regular_dlat is not None:
+            return int(round(360. / self.regular_dlat)), len(regular_grid(self.regular_dlat, self.max_lat)) - 1
         return nlon, len(ocean_rows(nlat, self.max_lat))
+
+    def isca_ocean_mask(self, nlon, nlat):
+        mask = np.zeros((nlat, nlon), dtype=bool)
+        if self.regular_dlat is not None:
+            # Isca cells more than half covered by the ocean (as Isca decides at run time)
+            _, edges = gaussian_grid(nlat)
+            s = np.sin(np.radians(edges))
+            m = np.sin(np.radians(self.max_lat))
+            covered = (np.minimum(s[1:], m) - np.maximum(s[:-1], -m)).clip(0) / np.diff(s)
+            mask[covered > 0.5, :] = True
+            return mask
+        mask[ocean_rows(nlat, self.max_lat), :] = True
+        return mask
 
     def mpmd_options(self, exp):
         return '-wdir ocean'
@@ -274,12 +367,21 @@ class MOM6Ocean(OceanComponent):
         os.makedirs(indir, exist_ok=True)
         os.makedirs(os.path.join(odir, 'RESTART'), exist_ok=True)
 
-        nj = write_supergrid(os.path.join(indir, 'ocean_hgrid.nc'), nlon, nlat, self.max_lat)
+        if self.regular_dlat is not None:
+            ni, nj = write_supergrid_regular(os.path.join(indir, 'ocean_hgrid.nc'), self.regular_dlat,
+                                             self.regular_dlat, self.max_lat)
+        else:
+            ni = nlon
+            nj = write_supergrid(os.path.join(indir, 'ocean_hgrid.nc'), nlon, nlat, self.max_lat)
         write_vgrid(os.path.join(indir, 'vgrid.nc'), self.nk, self.depth)
         write_initial_ts(os.path.join(indir, 'ts_init.nc'), nlon, nlat, self.max_lat, self.sst_func)
 
         params = dict(self.mom_input)
-        params.update({'NIGLOBAL': nlon, 'NJGLOBAL': nj, 'NK': self.nk})
+        if self.land_mask is not None:
+            write_topography(os.path.join(indir, 'topog.nc'), nlon, nlat, self.max_lat,
+                             self.land_mask, self.depth)
+            params.update({'TOPO_CONFIG': '"file"', 'TOPO_FILE': '"topog.nc"', 'TOPO_VARNAME': '"depth"'})
+        params.update({'NIGLOBAL': ni, 'NJGLOBAL': nj, 'NK': self.nk})
         if self.layout:
             params['LAYOUT'] = '%d, %d' % tuple(self.layout)
         with open(os.path.join(odir, 'MOM_input'), 'w') as f:
@@ -324,6 +426,16 @@ class MOM6Ocean(OceanComponent):
         rst = os.path.join(odir, OCEAN_RESTART)
         if os.path.exists(rst):
             shutil.copy(rst, os.path.join(resdir, OCEAN_RESTART))
+
+    def save_output(self, exp, outdir):
+        odir = self.ocean_dir(exp)
+        dest = os.path.join(outdir, 'ocean')
+        os.makedirs(dest, exist_ok=True)
+        for f in sorted(os.listdir(odir)):
+            if (f.startswith('ocean_') and '.nc' in f) or f in ('ocean.stats', 'ocean.stats.nc',
+                                                                 'MOM_parameter_doc.all', 'input.nml',
+                                                                 'MOM_input', 'MOM_override'):
+                shutil.copy(os.path.join(odir, f), dest)
 
     def load_restart(self, exp, indir):
         src = os.path.join(indir, 'ocean')

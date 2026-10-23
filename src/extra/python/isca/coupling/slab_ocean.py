@@ -36,7 +36,7 @@ RHO_CP = 1.035e3 * 3989.24495292815   # Isca constants_mod RHO0*CP_OCEAN
 HLV = 2.500e6
 
 FLUX_FIELDS = ['OCN_TAUX', 'OCN_TAUY', 'OCN_SWNET', 'OCN_LWNET', 'OCN_SENS',
-               'OCN_EVAP', 'OCN_PRECIP', 'OCN_PSURF']
+               'OCN_EVAP', 'OCN_PRECIP', 'OCN_PSURF', 'OCN_RUNOFF']
 
 
 def gaussian_latitudes(nlat):
@@ -96,7 +96,11 @@ def main():
         sst = np.array(nc['SST_OCN'][:], dtype=np.float64).ravel()
 
     partition = pyoasis.SerialPartition(npts)
-    flux_vars = {name: pyoasis.Var(name, partition, OASIS.IN) for name in FLUX_FIELDS}
+    # only fields the namcouple actually exchanges (e.g. OCN_RUNOFF is optional)
+    with open('namcouple') as f:
+        namcouple_words = set(f.read().split())
+    flux_vars = {name: pyoasis.Var(name, partition, OASIS.IN)
+                 for name in FLUX_FIELDS if name in namcouple_words}
     sst_var = pyoasis.Var('SST_OCN', partition, OASIS.OUT)
     frac_var = pyoasis.Var('FRAC_OCN', partition, OASIS.OUT)
     comp.enddef()
