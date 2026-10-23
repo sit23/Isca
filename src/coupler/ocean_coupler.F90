@@ -263,8 +263,11 @@ if (out_ids(9) < 0) return
 routed_g = 0.
 do j = js, je
   do i = is, ie
+    ! dest 0 marks an ocean cell: its own runoff (e.g. P-E over prescribed sea ice,
+    ! which is not coupled at that time) stays in the cell
     k = runoff_dest(i,j)
-    if (k > 0) routed_g(k) = routed_g(k) + runoff(i-is+1, j-js+1) * cell_area(i,j)   ! [kg/s]
+    if (k == 0) k = i + (j-1)*nlon_g
+    routed_g(k) = routed_g(k) + runoff(i-is+1, j-js+1) * cell_area(i,j)   ! [kg/s]
   enddo
 enddo
 call mpp_sum(routed_g, nlon_g*nlat_g)
@@ -334,7 +337,7 @@ end subroutine ocean_coupler_terminate
 subroutine read_runoff_routing()
 ! INPUT/runoff_routing.nc: integer variable 'dest' (lon, lat), the global
 ! index i + (j-1)*nlon of the ocean cell each cell's runoff is sent to
-! (0: produces no runoff, e.g. coupled ocean cells). Written by
+! (0: an ocean cell, which keeps any runoff it produces itself). Written by
 ! isca.coupling. Without it, runoff is not routed (and not sent).
 use netcdf
 integer :: ncid, vid, status
