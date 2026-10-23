@@ -178,6 +178,29 @@ def write_supergrid_regular(fname, dlon, dlat, max_lat, radius=ISCA_RADIUS):
     return nlon, len(lat_e) - 1
 
 
+def write_supergrid_edges(fname, lon_e, lat_e, lat_c=None, radius=ISCA_RADIUS):
+    """MOM6 supergrid from arbitrary cell edges [degrees] (and optional centre latitudes)."""
+    lat_c = 0.5 * (lat_e[:-1] + lat_e[1:]) if lat_c is None else lat_c
+    ys = np.empty(2 * len(lat_c) + 1); ys[0::2] = lat_e; ys[1::2] = lat_c
+    xs = np.empty(2 * (len(lon_e) - 1) + 1); xs[0::2] = lon_e; xs[1::2] = 0.5 * (lon_e[:-1] + lon_e[1:])
+    x, y = np.meshgrid(xs, ys)
+    lam, phi = np.radians(xs), np.radians(ys)
+    with netCDF4.Dataset(fname, 'w') as nc:
+        nc.createDimension('nyp', len(ys)); nc.createDimension('nxp', len(xs))
+        nc.createDimension('ny', len(ys) - 1); nc.createDimension('nx', len(xs) - 1)
+        nc.createDimension('string', 255)
+        for name, dims, data in (
+                ('x', ('nyp', 'nxp'), x), ('y', ('nyp', 'nxp'), y),
+                ('dx', ('nyp', 'nx'), radius * np.cos(np.radians(y[:, :-1])) * np.diff(lam)[None, :]),
+                ('dy', ('ny', 'nxp'), np.broadcast_to((radius * np.diff(phi))[:, None], (len(ys) - 1, len(xs)))),
+                ('area', ('ny', 'nx'), radius**2 * np.diff(lam)[None, :] * np.diff(np.sin(phi))[:, None]),
+                ('angle_dx', ('nyp', 'nxp'), np.zeros_like(x))):
+            nc.createVariable(name, 'f8', dims)[:] = data
+        chars = np.zeros(255, dtype='S1'); chars[:5] = list('tile1')
+        nc.createVariable('tile', 'S1', ('string',))[:] = chars
+    return len(xs) // 2, len(ys) // 2
+
+
 def write_vgrid(fname, nk=30, depth=4000.0, dz_top=10.0):
     """Layer thicknesses growing geometrically from dz_top to fill depth."""
     # solve for the stretching factor r: dz_top*(r**nk - 1)/(r - 1) = depth
@@ -357,6 +380,22 @@ class MOM6Ocean(OceanComponent):
     def command(self, exp, runtime):
         return [self.executable]
 
+    def write_grid_files(self, indir, nlon, nlat, params):
+        """Write the horizontal grid, topography and initial T/S into indir; update
+        params accordingly; return the ocean grid size (ni, nj)."""
+        if self.regular_dlat is not None:
+            ni, nj = write_supergrid_regular(os.path.join(indir, 'ocean_hgrid.nc'), self.regular_dlat,
+                                             self.regular_dlat, self.max_lat)
+        else:
+            ni = nlon
+            nj = write_supergrid(os.path.join(indir, 'ocean_hgrid.nc'), nlon, nlat, self.max_lat)
+        write_initial_ts(os.path.join(indir, 'ts_init.nc'), nlon, nlat, self.max_lat, self.sst_func)
+        if self.land_mask is not None:
+            write_topography(os.path.join(indir, 'topog.nc'), nlon, nlat, self.max_lat,
+                             self.land_mask, self.depth)
+            params.update({'TOPO_CONFIG': '"file"', 'TOPO_FILE': '"topog.nc"', 'TOPO_VARNAME': '"depth"'})
+        return ni, nj
+
     def ocean_dir(self, exp):
         return os.path.join(exp.rundir, 'ocean')
 
@@ -367,20 +406,9 @@ class MOM6Ocean(OceanComponent):
         os.makedirs(indir, exist_ok=True)
         os.makedirs(os.path.join(odir, 'RESTART'), exist_ok=True)
 
-        if self.regular_dlat is not None:
-            ni, nj = write_supergrid_regular(os.path.join(indir, 'ocean_hgrid.nc'), self.regular_dlat,
-                                             self.regular_dlat, self.max_lat)
-        else:
-            ni = nlon
-            nj = write_supergrid(os.path.join(indir, 'ocean_hgrid.nc'), nlon, nlat, self.max_lat)
         write_vgrid(os.path.join(indir, 'vgrid.nc'), self.nk, self.depth)
-        write_initial_ts(os.path.join(indir, 'ts_init.nc'), nlon, nlat, self.max_lat, self.sst_func)
-
         params = dict(self.mom_input)
-        if self.land_mask is not None:
-            write_topography(os.path.join(indir, 'topog.nc'), nlon, nlat, self.max_lat,
-                             self.land_mask, self.depth)
-            params.update({'TOPO_CONFIG': '"file"', 'TOPO_FILE': '"topog.nc"', 'TOPO_VARNAME': '"depth"'})
+        ni, nj = self.write_grid_files(indir, nlon, nlat, params)
         params.update({'NIGLOBAL': ni, 'NJGLOBAL': nj, 'NK': self.nk})
         if self.layout:
             params['LAYOUT'] = '%d, %d' % tuple(self.layout)
@@ -444,3 +472,86 @@ class MOM6Ocean(OceanComponent):
         if os.path.isdir(src):
             for f in os.listdir(src):
                 shutil.copy(os.path.join(src, f), dest)
+
+
+class MOM6EarthOcean(MOM6Ocean):
+    """MOM6 with Earth geometry derived from GFDL OM4 data (as regridded by M2LiNES for
+    Samudra): bathymetry from the per-level ocean fractions, initial temperature and
+    salinity from an OM4 5-day mean. The grid is the OM4-derived lat-lon grid itself,
+    equatorward of max_lat. Sea ice is not modelled (use Isca's prescribed ice lid).
+
+    om4_zarr: path/URL of an om4_*deg OM4.zarr; init_date: date of the initial state.
+    """
+
+    def __init__(self, executable, om4_zarr, init_date='2014-10-10', max_lat=78., **kwargs):
+        super(MOM6EarthOcean, self).__init__(executable, max_lat=max_lat, depth=6500., **kwargs)
+        self.om4_zarr, self.init_date = om4_zarr, init_date
+        self._grid = None
+
+    def _om4(self):
+        if self._grid is None:
+            import xarray as xr
+            ds = xr.open_zarr(self.om4_zarr)
+            lat_b = np.asarray(ds.lat_b.values)[:, 0]
+            lon_b = np.asarray(ds.lon_b.values)[0, :]
+            lat_c = np.asarray(ds.y.values)
+            rows = np.where((lat_b[:-1] >= -self.max_lat) & (lat_b[1:] <= self.max_lat))[0]
+            frac = ds.ocean_fraction.isel(y=rows).values           # (lev, ny, nx)
+            dz = np.asarray(ds.dz.values)
+            depth = (frac * dz[:, None, None]).sum(0)
+            depth = np.where(frac[0] >= 0.5, np.maximum(depth, 10.), 0.)
+            self._grid = dict(ds=ds, rows=rows, lat_e=lat_b[rows[0]:rows[-1] + 2], lat_c=lat_c[rows],
+                              lon_e=lon_b, depth=depth)
+        return self._grid
+
+    def ocean_grid_shape(self, nlon, nlat):
+        g = self._om4()
+        return len(g['lon_e']) - 1, len(g['lat_c'])
+
+    def isca_ocean_mask(self, nlon, nlat):
+        # Isca cells more than half inside max_lat (the land mask is removed separately)
+        _, edges = gaussian_grid(nlat)
+        s = np.sin(np.radians(edges)); m = np.sin(np.radians(self.max_lat))
+        covered = (np.minimum(s[1:], m) - np.maximum(s[:-1], -m)).clip(0) / np.diff(s)
+        return np.broadcast_to((covered > 0.5)[:, None], (nlat, nlon)).copy()
+
+    def write_grid_files(self, indir, nlon, nlat, params):
+        # generated once from the (remote) OM4 data, then reused for every run
+        tag = '%s_%s_%g' % (os.path.basename(os.path.dirname(self.om4_zarr.rstrip('/'))),
+                            self.init_date, self.max_lat)
+        cache = os.path.join(os.environ.get('GFDL_WORK', '.'), 'mom6_earth_cache', tag)
+        files = ('ocean_hgrid.nc', 'topog.nc', 'ts_init.nc')
+        if not all(os.path.exists(os.path.join(cache, f)) for f in files):
+            os.makedirs(cache, exist_ok=True)
+            self._write_grid_files(cache)
+        for f in files:
+            shutil.copy(os.path.join(cache, f), indir)
+        params.update({'TOPO_CONFIG': '"file"', 'TOPO_FILE': '"topog.nc"', 'TOPO_VARNAME': '"depth"',
+                       'MINIMUM_DEPTH': 9.5, 'MASKING_DEPTH': 9.0})
+        with netCDF4.Dataset(os.path.join(indir, 'topog.nc')) as nc:
+            nj, ni = nc['depth'].shape
+        return ni, nj
+
+    def _write_grid_files(self, indir):
+        g = self._om4()
+        ni, nj = write_supergrid_edges(os.path.join(indir, 'ocean_hgrid.nc'), g['lon_e'], g['lat_e'], g['lat_c'])
+        with netCDF4.Dataset(os.path.join(indir, 'topog.nc'), 'w') as nc:
+            nc.createDimension('ny', nj); nc.createDimension('nx', ni)
+            nc.createVariable('depth', 'f8', ('ny', 'nx'))[:] = g['depth']
+        # initial state: OM4 thetao/so on its 19 levels (land filled by MOM6's extrapolation)
+        ds = g['ds'].sel(time=slice(self.init_date, None)).isel(time=0)   # first record from init_date (cftime axis)
+        lev = np.asarray(ds.lev.values)
+        # float64 first: a float32 -1e20 is not equal to the float64 missing_value
+        T = np.stack([ds['thetao_%d' % k].values for k in range(len(lev))]).astype(np.float64)
+        S = np.stack([ds['so_%d' % k].values for k in range(len(lev))]).astype(np.float64)
+        lat = np.asarray(g['ds'].y.values); lon = 0.5 * (g['lon_e'][:-1] + g['lon_e'][1:])
+        with netCDF4.Dataset(os.path.join(indir, 'ts_init.nc'), 'w') as nc:
+            nc.createDimension('lon', len(lon)); nc.createDimension('lat', len(lat)); nc.createDimension('depth', len(lev))
+            for name, data, axis in (('lon', lon, 'X'), ('lat', lat, 'Y'), ('depth', lev, 'Z')):
+                v = nc.createVariable(name, 'f8', (name,)); v.axis = axis; v[:] = data
+                if axis == 'Z':
+                    v.positive = 'down'
+            for name, data in (('ptemp', T), ('salt', S)):
+                v = nc.createVariable(name, 'f8', ('depth', 'lat', 'lon'), fill_value=-1.e20)
+                v.missing_value = -1.e20
+                v[:] = np.where(np.isfinite(data), data, -1.e20)
