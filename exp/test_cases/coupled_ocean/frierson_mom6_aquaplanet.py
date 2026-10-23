@@ -83,6 +83,9 @@ if land is not None:
 
 if __name__ == '__main__':
     cb.compile()
-    exp.run(1, use_restart=False, num_cores=NCORES, overwrite_data=True)
-    for i in range(2, NMONTHS + 1):
-        exp.run(i, num_cores=NCORES, overwrite_data=True)
+    # several coupled jobs share this machine: let the OS place processes rather than
+    # every mpirun binding its ranks to the same cores
+    opts = os.environ.get('MPIRUN_OPTS', '--bind-to none')
+    first = int(os.environ.get('FIRST_MONTH', 1))
+    for i in range(first, NMONTHS + 1):
+        exp.run(i, use_restart=(i > 1), num_cores=NCORES, overwrite_data=True, mpirun_opts=opts)

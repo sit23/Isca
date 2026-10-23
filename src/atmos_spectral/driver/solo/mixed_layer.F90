@@ -831,8 +831,11 @@ if (coupled) then
     evap_out = 0.
   endif
   ! flux_u/v from surface_flux are the stress on the atmosphere; the ocean feels minus that.
-  call ocean_coupler_put(Time, -flux_u, -flux_v, net_surf_sw_down, lwnet_out, sens_out, &
-                         evap_out, precip, psurf)
+  ! Under prescribed sea ice (update_albedo_from_ice) the ocean gets no fluxes at all: the
+  ! ice is treated as an insulating lid, as there is no sea-ice model in the coupled system.
+  call ocean_coupler_put(Time, ice_lid(-flux_u), ice_lid(-flux_v), ice_lid(net_surf_sw_down), &
+                         ice_lid(lwnet_out), ice_lid(sens_out), ice_lid(evap_out), &
+                         ice_lid(precip), psurf)
   if (id_cpl_heat > 0) used = send_data(id_cpl_heat, &
         net_surf_sw_down + lwnet_out - sens_out - HLV*evap_out, Time)
   if (id_cpl_evap > 0) used = send_data(id_cpl_evap, evap_out, Time)
@@ -857,6 +860,18 @@ if(id_flux_oceanq > 0)   used = send_data(id_flux_oceanq, ocean_qflux, Time_next
 if(id_delta_t_surf > 0)   used = send_data(id_delta_t_surf, delta_t_surf, Time_next)
 
 end subroutine mixed_layer
+
+!=================================================================================================================================
+
+function ice_lid(field)
+! field, set to zero over ocean points covered by prescribed sea ice
+real, intent(in), dimension(:,:) :: field
+real, dimension(size(field,1),size(field,2)) :: ice_lid
+ice_lid = field
+if (update_albedo_from_ice) then
+  where (ice_concentration > ice_concentration_threshold .and. .not. land_mask) ice_lid = 0.
+endif
+end function ice_lid
 
 !=================================================================================================================================
 

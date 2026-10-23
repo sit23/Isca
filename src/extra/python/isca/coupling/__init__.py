@@ -39,6 +39,10 @@ class OceanComponent(object):
     """Interface for an ocean program that Isca can be coupled to."""
     grid_name = ISCA_GRID   # OASIS grid name used by the ocean
     num_cores = 1
+    # Lag of the ocean-to-Isca fields [s]. None: one coupling period (concurrent
+    # coupling, both models run at once). 0: sequential, Isca waits for the
+    # ocean's step and uses its SST without lag (no ocean OASIS restart needed).
+    sst_lag = None
 
     def ocean_grid_shape(self, nlon, nlat):
         """(nx, ny) of the ocean grid, given the Isca grid size."""
@@ -162,7 +166,7 @@ def write_runoff_routing(fname, dest):
 
 
 def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean_shape,
-                    ocean_grid, ocean_coupling_period=None, nlogprt=1):
+                    ocean_grid, ocean_coupling_period=None, nlogprt=1, sst_lag=None):
     """Write the OASIS3-MCT namcouple file.
 
     Fluxes from Isca are averaged by OASIS over the coupling period (LOCTRANS
@@ -173,6 +177,7 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
     If the ocean grid differs from Isca's, fields are remapped conservatively.
     """
     ocean_coupling_period = ocean_coupling_period or coupling_period
+    sst_lag = ocean_coupling_period if sst_lag is None else sst_lag
     same_grid = (ocean_grid == ISCA_GRID)
     nx, ny = isca_shape
     ox, oy = ocean_shape
@@ -181,6 +186,8 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
              '$NLOGPRT', '  %d 0' % nlogprt, '$END',
              '$STRINGS']
     conserv = 'CONSERV LR SCALAR LATLON 1 FRACAREA FIRST'
+    # ocean cells under Isca land (coastlines differ) take the nearest Isca ocean value
+    conserv_to_ocean = 'CONSERV LR SCALAR LATLON 1 FRACNNEI FIRST'
     for src, tgt in ISCA_TO_OCEAN:
         ntrans = 1 if same_grid else 2
         lines += ['%s %s 1 %d %d %s EXPORTED' % (src, tgt, coupling_period, ntrans, ISCA_RESTART),
@@ -189,17 +196,17 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
                   'LOCTRANS' if same_grid else 'LOCTRANS SCRIPR',
                   'AVERAGE']
         if not same_grid:
-            lines.append(conserv)
+            lines.append(conserv_to_ocean)
     for src, tgt in OCEAN_TO_ISCA:
         if same_grid:
             lines += ['%s %s 1 %d 0 %s EXPORTED' % (src, tgt, ocean_coupling_period, OCEAN_RESTART),
                       '%d %d %d %d %s %s LAG=+%d' % (ox, oy, nx, ny, ocean_grid, ISCA_GRID,
-                                                     ocean_coupling_period),
+                                                     sst_lag),
                       'P 0 P 0']
         else:
             lines += ['%s %s 1 %d 1 %s EXPORTED' % (src, tgt, ocean_coupling_period, OCEAN_RESTART),
                       '%d %d %d %d %s %s LAG=+%d' % (ox, oy, nx, ny, ocean_grid, ISCA_GRID,
-                                                     ocean_coupling_period),
+                                                     sst_lag),
                       'P 0 P 0', 'SCRIPR',
                       # the ocean fraction must be normalised by the whole Isca cell
                       # area to give the covered fraction; everything else by the
@@ -270,7 +277,7 @@ class CoupledExperiment(Experiment):
         ocean_shape = self.ocean.ocean_grid_shape(nlon, nlat)
         write_namcouple(os.path.join(self.rundir, 'namcouple'), self.runtime_seconds(),
                         self.coupling_period, int(self.namelist['main_nml']['dt_atmos']),
-                        (nlon, nlat), ocean_shape, self.ocean.grid_name)
+                        (nlon, nlat), ocean_shape, self.ocean.grid_name, sst_lag=self.ocean.sst_lag)
 
         coupled = self.ocean.isca_ocean_mask(nlon, nlat)
         if self.land_mask is not None:
@@ -305,3 +312,41 @@ class CoupledExperiment(Experiment):
         outdir = os.path.join(self.datadir, self.runfmt % i)
         os.makedirs(outdir, exist_ok=True)
         self.ocean.save_output(self, outdir)
+
+
+class SamudraOcean(OceanComponent):
+    """The Samudra ML ocean emulator (samudra_ocean.py) on its 1-degree OM4 grid.
+
+    python: interpreter of an environment with Samudra, torch, mpi4py and pyOASIS.
+    config: Samudra eval-style YAML (data + model), ckpt: checkpoint.
+    Couples every 5 days, sequentially (Isca uses the SST Samudra predicts for
+    each 5-day interval without lag). Earth geometry only.
+    """
+    grid_name = 'smdr'
+    sst_lag = 0
+    state_file = 'samudra_state.pt'
+
+    def __init__(self, python, config, ckpt, threads=8, grid_shape=(360, 180)):
+        self.python, self.config, self.ckpt = python, config, ckpt
+        self.threads = threads
+        self.grid_shape = grid_shape
+
+    def ocean_grid_shape(self, nlon, nlat):
+        return self.grid_shape
+
+    def command(self, exp, runtime):
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'samudra_ocean.py')
+        return ['env', 'OMP_NUM_THREADS=%d' % self.threads, self.python, script,
+                '--config', self.config, '--ckpt', self.ckpt, '--runtime', runtime,
+                '--coupling-period', exp.coupling_period, '--state-file', self.state_file,
+                '--threads', self.threads]
+
+    def save_restart(self, exp, resdir):
+        src = os.path.join(exp.rundir, self.state_file)
+        if os.path.exists(src):
+            shutil.copy(src, os.path.join(resdir, self.state_file))
+
+    def load_restart(self, exp, indir):
+        src = os.path.join(indir, self.state_file)
+        if os.path.exists(src):
+            shutil.copy(src, os.path.join(exp.rundir, self.state_file))
