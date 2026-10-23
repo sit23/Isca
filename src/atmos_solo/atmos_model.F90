@@ -61,6 +61,7 @@ use diag_manager_mod, only: diag_manager_init, diag_manager_end, get_base_date
 
 use  field_manager_mod, only: MODEL_ATMOS
 use tracer_manager_mod, only: register_tracers
+use  ocean_coupler_mod, only: ocean_coupler_init_comp, ocean_coupler_terminate
 use       memutils_mod, only: print_memuse_stats
 use   constants_mod,    only: SECONDS_PER_HOUR,  SECONDS_PER_MINUTE, constants_init
 
@@ -81,6 +82,8 @@ character(len=128), parameter :: tag = &
 !s Mima 2013 has changed this - a calendar is required to run the rrtm radiation properly.
 
    type (time_type) :: Time, Time_init, Time_end, Time_step_atmos
+   integer :: oasis_localcomm
+   logical :: oasis_coupled
    integer :: num_atmos_calls, na
 
 ! ----- model initial date -----
@@ -112,8 +115,13 @@ character(len=128), parameter :: tag = &
                           days, hours, minutes, seconds, memuse_interval, print_memuse, atmos_nthreads, calendar, current_time
 
 !#######################################################################
+ ! If a namcouple file is present, Isca is one component of a coupled
+ ! OASIS3-MCT run and must use the communicator OASIS gives it. This has to
+ ! come first: constants_init can itself start FMS (and MPI) on MPI_COMM_WORLD.
+ call ocean_coupler_init_comp(oasis_localcomm, oasis_coupled)
+ if (oasis_coupled) call fms_init (oasis_localcomm)
  call constants_init
- call fms_init ( )
+ call fms_init ( )   ! does nothing if already initialised above
  call atmos_model_init
 
 !   ------ atmosphere integration loop -------
@@ -140,6 +148,7 @@ character(len=128), parameter :: tag = &
  call atmos_model_end
  call fms_io_exit
  call fms_end
+ call ocean_coupler_terminate()  ! finalises MPI in a coupled run
 
 contains
 

@@ -19,7 +19,7 @@ if [ $debug == True ]; then
    echo "Opening idb for debugging"
    exec idb -gdb  {{ executable}}
 else
-  exec nice -{{nice_score}} mpirun {{mpirun_opts}} -np {{ num_cores }} {{ execdir }}/{{ executable }}
+  exec nice -{{nice_score}} mpirun {{mpirun_opts}} -np {{ num_cores }} {{ execdir }}/{{ executable }} {{ mpmd_suffix }}
 fi
 
 err_code=$?

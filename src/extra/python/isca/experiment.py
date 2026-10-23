@@ -195,7 +195,7 @@ class Experiment(Logger, EventEmitter):
 
     @destructive
     @useworkdir
-    def run(self, i, restart_file=None, use_restart=True, multi_node=False, num_cores=8, overwrite_data=False, save_run=False, run_idb=False, nice_score=0, mpirun_opts=''):
+    def run(self, i, restart_file=None, use_restart=True, multi_node=False, num_cores=8, overwrite_data=False, save_run=False, run_idb=False, nice_score=0, mpirun_opts='', mpmd_suffix=''):
         """Run the model.0
             `num_cores`: Number of mpi cores to distribute over.
             `restart_file` (optional): A path to a valid restart archive.  If None and `use_restart=True`,
@@ -203,6 +203,8 @@ class Experiment(Logger, EventEmitter):
             `save_run`:  If True, copy the entire working directory over to GFDL_DATA
                          so that the run can rerun without the python script.
                          (This uses a lot of data storage!)
+            `mpmd_suffix`: Extra mpirun MPMD program(s) launched alongside Isca,
+                         e.g. ': -np 1 python ocean.py' (used for coupled runs).
 
         """
 
@@ -262,7 +264,8 @@ class Experiment(Logger, EventEmitter):
             'mpirun_opts': mpirun_opts,
             'num_cores': num_cores,
             'run_idb': run_idb,
-            'nice_score': nice_score
+            'nice_score': nice_score,
+            'mpmd_suffix': mpmd_suffix
         }
 
         runscript = self.templates.get_template('run.sh')

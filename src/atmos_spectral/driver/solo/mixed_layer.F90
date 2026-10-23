@@ -63,6 +63,8 @@ use interpolator_mod, only: interpolate_type,interpolator_init&
      &,CONSTANT,interpolator
 !mj q-flux
 use qflux_mod, only: qflux_init,qflux,warmpool
+! coupling to an external ocean model (MOM6, ML ocean) through OASIS3-MCT
+use ocean_coupler_mod, only: ocean_coupler_init, ocean_coupler_put, ocean_coupler_get
 
 implicit none
 private
@@ -115,6 +117,13 @@ logical :: do_warmpool      = .false. !mj
 logical :: do_read_sst      = .false. !mj
 logical :: do_sc_sst        = .false. !mj use specified SSTs
 logical :: do_ape_sst       = .false. ! use the AquaPlanet Experiement (APE) sst profile.
+
+! 'none' : surface temperature from this module's slab ocean / prescribed SSTs as usual.
+! 'oasis': over points covered by an external ocean model, t_surf is the SST
+!          received through OASIS3-MCT, and the surface fluxes are sent back.
+!          Points not covered by the ocean (land, polar caps) keep the slab physics.
+character(len=16) :: ocean_coupling = 'none'
+real :: coupled_ocean_frac_threshold = 0.5 ! cells with ocean fraction above this are coupled
 logical :: specify_sst_over_ocean_only = .false.
 logical :: do_calc_eff_heat_cap = .true. ! assumes specified SST are off the default.
 
@@ -158,7 +167,8 @@ namelist/mixed_layer_nml/ evaporation, depth, qflux_amp, qflux_width, tconst,&
                               add_latent_heat_flux_anom,flux_lhe_anom_file_name,&
                               flux_lhe_anom_field_name, specify_constant_sst,&
                               sst_prescribed_constant,                       &
-                              do_ape_sst, qflux_field_name
+                              do_ape_sst, qflux_field_name,                  &
+                              ocean_coupling, coupled_ocean_frac_threshold
 
 !=================================================================================================================================
 
@@ -209,6 +219,11 @@ real, allocatable, dimension(:,:)   ::                                        &
      albedo_initial
 
 logical, allocatable, dimension(:,:) ::      land_mask
+
+logical :: coupled = .false.
+real, allocatable, dimension(:,:) :: sst_coupled, ocean_frac_coupled
+logical, allocatable, dimension(:,:) :: coupled_mask
+integer :: id_ocean_frac
 
 !mj read sst from input file
   type(interpolate_type),save :: sst_interp
@@ -563,6 +578,22 @@ endif !end of if(.not.do_sc_sst)
 if ( id_heat_cap > 0 ) used = send_data ( id_heat_cap, land_sea_heat_capacity )
 !s end surface heat capacity calculation
 
+if (trim(ocean_coupling) == 'oasis') then
+  coupled = .true.
+  allocate(sst_coupled(is:ie, js:je), ocean_frac_coupled(is:ie, js:je), coupled_mask(is:ie, js:je))
+  sst_coupled = t_surf
+  ocean_frac_coupled = 0.
+  coupled_mask = .false.
+  call mpp_get_global_domain(grid_domain, xsize=global_num_lon, ysize=global_num_lat)
+  call ocean_coupler_init(Time, is, ie, js, je, global_num_lon, global_num_lat, &
+                          rad_lonb_2d, rad_latb_2d, land)
+  id_ocean_frac = register_diag_field(mod_name, 'coupled_ocean_frac', axes(1:2), Time, &
+                                      'fraction of cell covered by the coupled ocean', 'none')
+else if (trim(ocean_coupling) /= 'none') then
+  call error_mesg('mixed_layer','"'//trim(ocean_coupling)//'" is not a valid ocean_coupling. '// &
+                  'Choices are: none or oasis.', FATAL)
+endif
+
 module_is_initialized = .true.
 
 return
@@ -588,7 +619,8 @@ subroutine mixed_layer (                                               &
      drdt_surf,                                                        &
      dhdt_atm,                                                         &
      dedq_atm,                                                         &
-     albedo_out)
+     albedo_out,                                                       &
+     flux_u, flux_v, precip, psurf)
 
 ! ---- arguments -----------------------------------------------------------
 type(time_type), intent(in)         :: Time, Time_next
@@ -601,6 +633,11 @@ real, intent(in), dimension(:,:)    :: dhdt_surf, dedt_surf, dedq_surf, &
 real, intent(in)                    :: dt
 real, intent(out), dimension(:,:)   :: albedo_out
 type(surf_diff_type), intent(inout) :: Tri_surf
+! needed only when coupled to an external ocean: surface stress on the atmosphere [Pa],
+! precipitation reaching the surface [kg/m2/s] and surface pressure [Pa]
+real, intent(in), dimension(:,:), optional :: flux_u, flux_v, precip, psurf
+real, dimension(size(t_surf,1),size(t_surf,2)) :: sens_out, evap_out, lwnet_out
+logical :: sst_received
 logical, dimension(size(land_mask,1),size(land_mask,2)) :: land_ice_mask
 
 !local variables
@@ -681,6 +718,20 @@ if (evaporation) then
   t_surf_dependence = t_surf_dependence + beta_q * HLV
 endif
 
+if (coupled) then
+  ! SST from the ocean component: only changes at coupling times, so between
+  ! them delta_t_surf is zero over the coupled points.
+  call ocean_coupler_get(Time, sst_coupled, ocean_frac_coupled, sst_received)
+  coupled_mask = (ocean_frac_coupled > coupled_ocean_frac_threshold) .and. .not. land_ice_mask
+  where (coupled_mask)
+    delta_t_surf = sst_coupled - t_surf
+    t_surf = sst_coupled
+    ! any q-flux is the ocean model's job over coupled points
+    corrected_flux = corrected_flux + ocean_qflux
+  end where
+  if (id_ocean_frac > 0) used = send_data(id_ocean_frac, ocean_frac_coupled, Time)
+endif
+
 !s Surface heat_capacity calculation based on that in MiMA by mj
 
 if(do_sc_sst) then !mj sst read from input file
@@ -742,6 +793,9 @@ if (do_calc_eff_heat_cap) then
     if(do_sc_sst.and.specify_sst_over_ocean_only) then
         where (land_ice_mask) delta_t_surf = - corrected_flux  * dt / eff_heat_capacity
         where (land_ice_mask) t_surf = t_surf + delta_t_surf             
+    else if (coupled) then
+        where (.not. coupled_mask) delta_t_surf = - corrected_flux  * dt / eff_heat_capacity
+        where (.not. coupled_mask) t_surf = t_surf + delta_t_surf
     else
         delta_t_surf = - corrected_flux  * dt / eff_heat_capacity
         t_surf = t_surf + delta_t_surf
@@ -754,6 +808,23 @@ endif !s end of if(do_sc_sst).
 !
 Tri_surf%delta_t = fn_t + en_t * delta_t_surf
 if (evaporation) Tri_surf%delta_tr(:,:,nhum) = fn_q + en_q * delta_t_surf
+
+if (coupled) then
+  ! Send the fluxes consistent with the implicit surface step, i.e. the ones
+  ! the atmosphere actually feels, so that energy and water are conserved.
+  if (.not. (present(flux_u) .and. present(flux_v) .and. present(precip) .and. present(psurf))) &
+    call error_mesg('mixed_layer', 'flux_u, flux_v, precip and psurf are needed for ocean coupling', FATAL)
+  sens_out  = CP_AIR * (alpha_t + beta_t * delta_t_surf)
+  lwnet_out = surf_lw_down - (alpha_lw + beta_lw * delta_t_surf)
+  if (evaporation) then
+    evap_out = alpha_q + beta_q * delta_t_surf
+  else
+    evap_out = 0.
+  endif
+  ! flux_u/v from surface_flux are the stress on the atmosphere; the ocean feels minus that.
+  call ocean_coupler_put(Time, -flux_u, -flux_v, net_surf_sw_down, lwnet_out, sens_out, &
+                         evap_out, precip, psurf)
+endif
 
 !
 ! Note:

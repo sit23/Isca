@@ -1416,7 +1416,10 @@ if(turb) then
                            drdt_surf(:,:),                                 &
                             dhdt_atm(:,:),                                 &
                             dedq_atm(:,:),                                 &
-                              albedo(:,:))
+                              albedo(:,:),                                 &
+                              flux_u=flux_u(:,:), flux_v=flux_v(:,:),      &
+                              precip=precip(:,:),                          &
+                              psurf=p_half(:,:,num_levels+1,previous))
    endif
 
    call gcm_vert_diff_up (1, 1, delta_t, Tri_surf, dt_tg(:,:,:), dt_tracers(:,:,:,nsphum), dt_tracers(:,:,:,:))

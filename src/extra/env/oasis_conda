@@ -1,0 +1,13 @@
+echo "Loading conda environment for Isca coupled through OASIS3-MCT"
+
+# gfortran + OpenMPI from a conda environment, plus an OASIS3-MCT build.
+# OASIS_ROOT must point at the OASIS install directory (the one containing
+# include/ and lib/, e.g. oasis3-mct/INSTALL_OASIS.<arch>).
+export GFDL_MKMF_TEMPLATE=oasis_conda
+export F90=mpifort
+export CC=mpicc
+export CDEFS="-DISCA_OASIS"
+if [ -z "$OASIS_ROOT" ]; then
+  echo "ERROR: OASIS_ROOT is not set"
+  exit 1
+fi

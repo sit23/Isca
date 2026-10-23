@@ -1,0 +1,213 @@
+"""Running Isca coupled to an external ocean model through OASIS3-MCT.
+
+Isca and the ocean are separate programs started by one MPMD mpirun. Isca's
+side of the exchange is src/coupler/ocean_coupler.F90 (switched on with
+mixed_layer_nml: ocean_coupling = 'oasis'); this package writes the OASIS
+configuration (namcouple), prepares the ocean component's files, launches
+the run and carries the OASIS coupling restart files from one run to the next
+inside Isca's normal restart archives.
+
+    from isca.coupling import CoupledExperiment, SlabOcean
+    ocean = SlabOcean(depth=2.5)
+    exp = CoupledExperiment('my_exp', codebase=cb, ocean=ocean, coupling_period=3600)
+"""
+
+import os
+import shutil
+import sys
+
+import netCDF4
+import numpy as np
+
+from isca.experiment import Experiment
+
+# Fields Isca sends (Isca name -> ocean name) and receives (ocean name -> Isca name).
+# The Isca names must match src/coupler/ocean_coupler.F90.
+ISCA_TO_OCEAN = [('ISCA_TAUX', 'OCN_TAUX'), ('ISCA_TAUY', 'OCN_TAUY'),
+                 ('ISCA_SWNET', 'OCN_SWNET'), ('ISCA_LWNET', 'OCN_LWNET'),
+                 ('ISCA_SENS', 'OCN_SENS'), ('ISCA_EVAP', 'OCN_EVAP'),
+                 ('ISCA_PRECIP', 'OCN_PRECIP'), ('ISCA_PSURF', 'OCN_PSURF')]
+OCEAN_TO_ISCA = [('SST_OCN', 'OCN_SST'), ('FRAC_OCN', 'OCN_FRAC')]
+
+ISCA_GRID = 'isca'
+ISCA_RESTART = 'isca_rst.nc'    # OASIS restart file for the fluxes Isca sends
+OCEAN_RESTART = 'ocn_rst.nc'    # OASIS restart file for the fields the ocean sends
+
+
+class OceanComponent(object):
+    """Interface for an ocean program that Isca can be coupled to."""
+    grid_name = ISCA_GRID   # OASIS grid name used by the ocean
+    num_cores = 1
+
+    def ocean_grid_shape(self, nlon, nlat):
+        """(nx, ny) of the ocean grid, given the Isca grid size."""
+        return nlon, nlat
+
+    def command(self, exp, runtime):
+        """Program and arguments to launch (a list of strings)."""
+        raise NotImplementedError
+
+    def mpmd_options(self, exp):
+        """Extra mpirun options for the ocean's MPMD context (e.g. -wdir)."""
+        return ''
+
+    def prepare_rundir(self, exp, cold_start):
+        """Put any files the ocean needs into exp.rundir before a run."""
+        pass
+
+    def save_restart(self, exp, resdir):
+        """Copy the ocean model's own restart files into Isca's RESTART dir."""
+        pass
+
+    def load_restart(self, exp, indir):
+        """Bring the ocean's restart files out of the extracted restart archive."""
+        pass
+
+
+class SlabOcean(OceanComponent):
+    """The Python slab ocean in slab_ocean.py, on the Isca grid. For testing the coupling."""
+
+    def __init__(self, depth=2.5, tconst=285., delta_t=40., max_lat=90.):
+        self.depth = depth
+        self.tconst = tconst
+        self.delta_t = delta_t
+        self.max_lat = max_lat
+
+    def command(self, exp, runtime):
+        nlon, nlat = exp.isca_grid_shape()
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'slab_ocean.py')
+        return [sys.executable, script, '--nlon', nlon, '--nlat', nlat,
+                '--runtime', runtime, '--coupling-period', exp.coupling_period,
+                '--depth', self.depth, '--tconst', self.tconst,
+                '--delta-t', self.delta_t, '--max-lat', self.max_lat,
+                '--restart-file', OCEAN_RESTART]
+
+
+def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean_shape,
+                    ocean_grid, ocean_coupling_period=None, nlogprt=1):
+    """Write the OASIS3-MCT namcouple file.
+
+    Fluxes from Isca are averaged by OASIS over the coupling period (LOCTRANS
+    AVERAGE) and lagged by one atmospheric step; ocean fields are lagged by one
+    ocean coupling period. Both components therefore run concurrently, with
+    the ocean seeing the fluxes of the previous coupling period and Isca the
+    SST at the end of the previous ocean step (the usual concurrent coupling).
+    If the ocean grid differs from Isca's, fields are remapped conservatively.
+    """
+    ocean_coupling_period = ocean_coupling_period or coupling_period
+    same_grid = (ocean_grid == ISCA_GRID)
+    nx, ny = isca_shape
+    ox, oy = ocean_shape
+    lines = ['$NFIELDS', '  %d' % (len(ISCA_TO_OCEAN) + len(OCEAN_TO_ISCA)), '$END',
+             '$RUNTIME', '  %d' % runtime, '$END',
+             '$NLOGPRT', '  %d 0' % nlogprt, '$END',
+             '$STRINGS']
+    conserv = 'CONSERV LR SCALAR LATLON 1 FRACAREA FIRST'
+    for src, tgt in ISCA_TO_OCEAN:
+        ntrans = 1 if same_grid else 2
+        lines += ['%s %s 1 %d %d %s EXPORTED' % (src, tgt, coupling_period, ntrans, ISCA_RESTART),
+                  '%d %d %d %d %s %s LAG=+%d' % (nx, ny, ox, oy, ISCA_GRID, ocean_grid, atmos_dt),
+                  'P 0 P 0',
+                  'LOCTRANS' if same_grid else 'LOCTRANS SCRIPR',
+                  'AVERAGE']
+        if not same_grid:
+            lines.append(conserv)
+    for src, tgt in OCEAN_TO_ISCA:
+        if same_grid:
+            lines += ['%s %s 1 %d 0 %s EXPORTED' % (src, tgt, ocean_coupling_period, OCEAN_RESTART),
+                      '%d %d %d %d %s %s LAG=+%d' % (ox, oy, nx, ny, ocean_grid, ISCA_GRID,
+                                                     ocean_coupling_period),
+                      'P 0 P 0']
+        else:
+            lines += ['%s %s 1 %d 1 %s EXPORTED' % (src, tgt, ocean_coupling_period, OCEAN_RESTART),
+                      '%d %d %d %d %s %s LAG=+%d' % (ox, oy, nx, ny, ocean_grid, ISCA_GRID,
+                                                     ocean_coupling_period),
+                      'P 0 P 0', 'SCRIPR',
+                      # the ocean fraction must be normalised by the whole Isca cell
+                      # area to give the covered fraction; everything else by the
+                      # covered area only (FRACAREA), so values are not diluted.
+                      conserv.replace('FRACAREA', 'DESTAREA') if src == 'FRAC_OCN' else conserv]
+    lines.append('$END')
+    with open(fname, 'w') as f:
+        f.write('\n'.join(lines) + '\n')
+
+
+def write_zero_flux_restart(fname, isca_shape):
+    """Cold-start OASIS restart file for the Isca fluxes: zero fluxes for the
+    ocean's first coupling period (surface pressure set to 1e5 Pa)."""
+    nx, ny = isca_shape
+    with netCDF4.Dataset(fname, 'w') as nc:
+        nc.createDimension('nx', nx)
+        nc.createDimension('ny', ny)
+        for src, _ in ISCA_TO_OCEAN:
+            v = nc.createVariable(src, 'f8', ('ny', 'nx'))
+            v[:] = 1.e5 if src == 'ISCA_PSURF' else 0.
+
+
+class CoupledExperiment(Experiment):
+    """An Isca Experiment whose surface is coupled to an external ocean through OASIS3-MCT."""
+
+    def __init__(self, name, codebase, ocean, coupling_period=3600, **kwargs):
+        super(CoupledExperiment, self).__init__(name, codebase, **kwargs)
+        self.ocean = ocean
+        self.coupling_period = int(coupling_period)
+        self.on('run:ready', self._prepare_coupling)
+        self.on('run:complete', self._save_coupling_restarts)
+
+    def isca_grid_shape(self):
+        nml = self.namelist.get('spectral_dynamics_nml', {})
+        return int(nml.get('lon_max', 128)), int(nml.get('lat_max', 64))   # Isca's defaults
+
+    def runtime_seconds(self):
+        m = self.namelist['main_nml']
+        return (int(m.get('days', 0)) * 86400 + int(m.get('hours', 0)) * 3600
+                + int(m.get('minutes', 0)) * 60 + int(m.get('seconds', 0)))
+
+    def _check_namelist(self):
+        self.namelist.setdefault('mixed_layer_nml', {})['ocean_coupling'] = 'oasis'
+        runtime, dt = self.runtime_seconds(), int(self.namelist['main_nml']['dt_atmos'])
+        if self.coupling_period % dt != 0:
+            raise ValueError('coupling_period (%d s) must be a multiple of dt_atmos (%d s)'
+                             % (self.coupling_period, dt))
+        if runtime % self.coupling_period != 0:
+            raise ValueError('run length (%d s) must be a multiple of coupling_period (%d s)'
+                             % (runtime, self.coupling_period))
+
+    def run(self, i, num_cores=8, mpirun_opts='', **kwargs):
+        self._check_namelist()
+        runtime = self.runtime_seconds()
+        program = ' '.join(str(a) for a in self.ocean.command(self, runtime))
+        mpmd = ': %s -np %d %s' % (self.ocean.mpmd_options(self), self.ocean.num_cores, program)
+        return super(CoupledExperiment, self).run(i, num_cores=num_cores, mpirun_opts=mpirun_opts,
+                                                  mpmd_suffix=mpmd, **kwargs)
+
+    def _prepare_coupling(self, exp, i):
+        indir = os.path.join(self.rundir, 'INPUT')
+        nlon, nlat = self.isca_grid_shape()
+        ocean_shape = self.ocean.ocean_grid_shape(nlon, nlat)
+        write_namcouple(os.path.join(self.rundir, 'namcouple'), self.runtime_seconds(),
+                        self.coupling_period, int(self.namelist['main_nml']['dt_atmos']),
+                        (nlon, nlat), ocean_shape, self.ocean.grid_name)
+
+        cold_start = True
+        for rst in (ISCA_RESTART, OCEAN_RESTART):
+            src = os.path.join(indir, rst)
+            if os.path.exists(src):
+                shutil.copy(src, os.path.join(self.rundir, rst))
+                cold_start = False
+        if cold_start:
+            self.log.info('Coupled cold start: zero fluxes for the first ocean coupling period')
+            write_zero_flux_restart(os.path.join(self.rundir, ISCA_RESTART), (nlon, nlat))
+        else:
+            self.ocean.load_restart(self, indir)
+        self.ocean.prepare_rundir(self, cold_start)
+
+    def _save_coupling_restarts(self, exp, i):
+        # OASIS rewrites its restart files in the run directory at the end of
+        # the run; put them in RESTART/ so they go into Isca's restart archive.
+        resdir = os.path.join(self.rundir, 'RESTART')
+        for rst in (ISCA_RESTART, OCEAN_RESTART):
+            src = os.path.join(self.rundir, rst)
+            if os.path.exists(src):
+                shutil.copy(src, os.path.join(resdir, rst))
+        self.ocean.save_restart(self, resdir)
