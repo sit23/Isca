@@ -51,6 +51,12 @@ for mod, field in [('dynamics', 'ps'), ('dynamics', 'bk'), ('dynamics', 'pk'), (
                    ('dynamics', 'ucomp'), ('dynamics', 'vcomp'), ('dynamics', 'temp'),
                    ('dynamics', 'sphum'), ('rrtm_radiation', 'olr'), ('rrtm_radiation', 'toa_sw')]:
     diag.add_field(mod, field, time_avg=True)
+if os.environ.get('DAILY'):
+    diag.add_file('atmos_daily', 1, 'days', time_units='days')
+    for mod, field in [('mixed_layer', 't_surf'), ('mixed_layer', 'flux_t'), ('mixed_layer', 'flux_lhe'),
+                       ('atmosphere', 'precipitation'), ('dynamics', 'ps'), ('dynamics', 'temp'),
+                       ('dynamics', 'ucomp'), ('dynamics', 'vcomp'), ('dynamics', 'sphum')]:
+        diag.add_field(mod, field, time_avg=True, files=['atmos_daily'])
 exp.diag_table = diag
 
 exp.namelist = f90nml.read(os.path.join(rc_dir, 'namelist_basefile.nml'))

@@ -48,6 +48,12 @@ def main():
     p.add_argument('--coupling-period', type=int, default=5 * 86400)
     p.add_argument('--state-file', default='samudra_state.pt')
     p.add_argument('--threads', type=int, default=8)
+    p.add_argument('--hfds-range', type=float, nargs=2, default=[-1350., 1950.],
+                   help='clip the net heat flux given to Samudra [W/m2] to the 5-day range of its '
+                        'OM4 training data (min, 99.99th percentile)')
+    p.add_argument('--temp-range', type=float, nargs=2, default=[-2.0, 35.],
+                   help='bound the ocean temperatures Samudra predicts [deg C]: no sea-ice model, '
+                        'so water cannot cool below freezing')
     args = p.parse_args()
 
     comp = pyoasis.Component('samudra', True, MPI.COMM_WORLD)
@@ -85,6 +91,13 @@ def main():
                                output_steps=n_out, normalize_before_mask=cfg.data.normalize_before_mask,
                                masked_fill_value=cfg.data.masked_fill_value, long_rollout=True)
     i_sst = prog_names.index('thetao_0')
+    # bounds on the temperature channels, in normalised units (only wet points are bounded)
+    i_temp = [k for k, n in enumerate(prog_names) if n.startswith('thetao_')]
+    t_mean = torch.as_tensor(pre._prognostic_mean_np, dtype=torch.float32)[i_temp]
+    t_std = torch.as_tensor(pre._prognostic_std_np, dtype=torch.float32)[i_temp]
+    t_lo = ((args.temp_range[0] - t_mean) / t_std).reshape(-1, *([1] * (3 - t_mean.dim())))
+    t_hi = ((args.temp_range[1] - t_mean) / t_std).reshape(-1, *([1] * (3 - t_mean.dim())))
+    t_wet = torch.as_tensor(np.asarray(pre.prognostic_mask))[i_temp]
 
     # ---- the 1-degree grid and surface wet mask, for OASIS
     coords = source.to_xarray_dataset()
@@ -144,6 +157,7 @@ def main():
               flush=True)
 
     fields = {n: pyoasis.asarray(np.zeros(npts)) for n in flux_vars}
+    n_clipped = 0
     dt = args.coupling_period
     with torch.no_grad():
         for date in range(0, args.runtime, dt):
@@ -152,14 +166,19 @@ def main():
             if date == 0 and cold:
                 newer = newer_forcing_om4                 # Isca has not run yet
             else:
-                hfds = (fields['OCN_SWNET'] + fields['OCN_LWNET'] - fields['OCN_SENS']
-                        - HLV * fields['OCN_EVAP'])
+                hfds_raw = (fields['OCN_SWNET'] + fields['OCN_LWNET'] - fields['OCN_SENS']
+                            - HLV * fields['OCN_EVAP'])
+                n_clipped = int(((hfds_raw < args.hfds_range[0]) | (hfds_raw > args.hfds_range[1])).sum())
+                hfds = np.clip(hfds_raw, *args.hfds_range)
                 newer = torch.from_numpy(np.stack([unF(fields['OCN_TAUX']), unF(fields['OCN_TAUY']),
                                                    unF(hfds)])[None].astype(np.float32))
             raw = torch.stack([older_forcing, newer], dim=1)          # (1, 2, 3, ny, nx)
             boundary = pre.prepare_boundary(raw, torch.device('cpu'))
             out = model.forward_once(prog, boundary, dataset.ctx)
             pred = model._assemble_prediction(prog, out)
+            temp = pred[0, i_temp]
+            n_bounded = int((t_wet & ((temp < t_lo) | (temp > t_hi))).sum())
+            pred[0, i_temp] = torch.where(t_wet, torch.minimum(torch.maximum(temp, t_lo), t_hi), temp)
             prog = model._advance_prognostic_history(prog, pred)
             older_forcing = newer
 
@@ -168,9 +187,9 @@ def main():
             sst = np.where(wet & np.isfinite(sst), sst, 0.)
             sst_var.put(date, pyoasis.asarray(F(sst)))
             frac_var.put(date, pyoasis.asarray(F(wet.astype(np.float64))))
-            if date % (6 * dt) == 0:
-                print('samudra_ocean: day %d, mean SST %.3f C' %
-                      (date // 86400, float(np.mean(sst[wet]) - 273.15)), flush=True)
+            print('samudra_ocean: day %d, mean SST %.3f C, %d heat fluxes clipped, '
+                  '%d temperatures bounded' % (date // 86400, float(np.mean(sst[wet]) - 273.15),
+                                               n_clipped, n_bounded), flush=True)
 
     torch.save({'prog': prog, 'older_forcing': older_forcing}, args.state_file)
     print('samudra_ocean: finished, wrote %s' % args.state_file, flush=True)

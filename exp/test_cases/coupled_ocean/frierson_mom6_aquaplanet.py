@@ -82,7 +82,8 @@ if land is not None:
         'land_option': 'input', 'land_h_capacity_prefactor': 0.05})   # ~1 m of water on land
 
 if __name__ == '__main__':
-    cb.compile()
+    if not os.environ.get('SKIP_COMPILE'):
+        cb.compile()
     # several coupled jobs share this machine: let the OS place processes rather than
     # every mpirun binding its ranks to the same cores
     opts = os.environ.get('MPIRUN_OPTS', '--bind-to none')
