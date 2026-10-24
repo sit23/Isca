@@ -55,11 +55,14 @@ exp.diag_table = diag
 
 exp.namelist = f90nml.read(os.path.join(rc_dir, 'namelist_basefile.nml'))
 exp.namelist['main_nml']['days'] = DAYS
+if 'DT_ATMOS' in os.environ:
+    exp.namelist['main_nml']['dt_atmos'] = int(os.environ['DT_ATMOS'])
 # The ocean model replaces the q-flux; ice points keep the slab with ice albedo.
 exp.namelist['mixed_layer_nml'].update({'do_qflux': False, 'load_qflux': False})
 
 if __name__ == '__main__':
-    cb.compile()
+    if not os.environ.get('SKIP_COMPILE'):
+        cb.compile()
     first = int(os.environ.get('FIRST_MONTH', 1))
     for i in range(first, NMONTHS + 1):
         exp.run(i, use_restart=(i > 1), num_cores=NCORES, overwrite_data=True,
