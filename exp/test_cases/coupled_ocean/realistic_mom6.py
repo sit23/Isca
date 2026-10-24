@@ -49,7 +49,8 @@ for mod, field in [('dynamics', 'ps'), ('dynamics', 'bk'), ('dynamics', 'pk'), (
                    ('mixed_layer', 'ice_conc'), ('atmosphere', 'cpl_runoff'),
                    ('dynamics', 'ucomp'), ('dynamics', 'vcomp'), ('dynamics', 'temp'),
                    ('dynamics', 'sphum'), ('rrtm_radiation', 'olr'), ('rrtm_radiation', 'toa_sw'),
-                   ('mixed_layer', 'cpl_evap'), ('mixed_layer', 'cpl_precip')]:
+                   ('mixed_layer', 'cpl_evap'), ('mixed_layer', 'cpl_precip'),
+                   ('atmosphere', 'bucket_depth')]:
     diag.add_field(mod, field, time_avg=True)
 exp.diag_table = diag
 
@@ -57,6 +58,10 @@ exp.namelist = f90nml.read(os.path.join(rc_dir, 'namelist_basefile.nml'))
 exp.namelist['main_nml']['days'] = DAYS
 # The ocean model replaces the q-flux; ice points keep the slab with ice albedo.
 exp.namelist['mixed_layer_nml'].update({'do_qflux': False, 'load_qflux': False})
+# Land bucket hydrology: its overflow is the river runoff routed to the river mouths.
+# Without it there are no rivers, and land P-E is spread over the whole ocean.
+exp.namelist['idealized_moist_phys_nml'].update({
+    'bucket': True, 'init_bucket_depth_land': 0.15, 'max_bucket_depth_land': 0.15})
 
 if __name__ == '__main__':
     if not os.environ.get('SKIP_COMPILE'):
