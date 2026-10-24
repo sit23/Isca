@@ -114,6 +114,24 @@ if all(os.path.exists(f) for f in ocn_files):
         ax.plot(o[yq], oht, 'C1--', label='ocean (MOM6 advective+diffusive)')
         print('OHT (MOM6) peak: NH %.2f PW at %.0f, SH %.2f PW at %.0f'
               % (float(oht.max()), float(o[yq][oht.argmax()]), float(oht.min()), float(o[yq][oht.argmin()])))
+    if 'thetao' in o and 'hfds' in o:
+        # Out of equilibrium the ocean stores heat unevenly, so the transport implied by the
+        # surface flux must subtract the actual storage (heat content change over the period;
+        # z* layers taken at their rest thickness).
+        th = xr.open_mfdataset([ocn_files[0], ocn_files[-1]], decode_times=False,
+                               combine='by_coords').thetao.load()
+        zi = np.concatenate([[0.], 0.5 * (o.zl.values[1:] + o.zl.values[:-1]), [2 * o.zl.values[-1] - o.zl.values[-2]]])
+        rho_cp = 1035. * 3989.24495292815
+        hc = (th.fillna(0.) * xr.DataArray(np.diff(zi), dims='zl')).sum('zl') * rho_cp
+        storage = (hc.isel(time=-1) - hc.isel(time=0)).values / ((len(ocn_files) - 1) * 30 * 86400.)
+        yh, xh = o.yh.values, o.xh.values
+        ocn_area = (R**2 * np.cos(np.deg2rad(yh)) * np.deg2rad(np.gradient(yh)))[:, None] * \
+            np.deg2rad(np.gradient(xh))[None, :]
+        oht_store = np.cumsum(((o.hfds.fillna(0.).values - storage) * ocn_area).sum(1)) / 1e15
+        ax.plot(yh, oht_store, 'C3', lw=1, label='ocean (surface flux minus storage)')
+        print('ocean heat uptake %.2f W/m2 of ocean, storage %.2f W/m2'
+              % ((o.hfds.fillna(0.).values * ocn_area).sum() / ocn_area.sum(),
+                 (storage * ocn_area).sum() / ocn_area.sum()))
 print('AHT peak: NH %.2f PW, SH %.2f PW; total peak NH %.2f PW' % (aht.max(), aht.min(), total.max()))
 
 if ref:
