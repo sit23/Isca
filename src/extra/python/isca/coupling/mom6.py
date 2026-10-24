@@ -285,6 +285,64 @@ def fill_dead_end_cells(depth):
         depth[dead] = 0.
 
 
+# Straits closed by regridding OM4 to 2 degrees, opened as OM4 does by hand:
+# (lon, lat) of the cell centres to open and their sill depth [m].
+EARTH_STRAITS_2DEG = (
+    [(355., 36.8, 300.), (357., 36.8, 300.), (359., 36.8, 300.)]                  # Gibraltar
+    + [(lo, 56.7, 30.) for lo in (9., 11., 13., 15.)]                              # Kattegat/Danish straits
+    + [(29., 42.8, 50.), (29., 40.8, 50.), (27., 40.8, 50.), (27., 38.8, 50.)]    # Bosporus/Dardanelles
+    + [(lo, 62.7, 300.) for lo in range(283, 295, 2)])                            # Hudson Strait
+
+
+def connect_basins(depth, max_channel=4, max_sill=300., min_sill=20.):
+    """Join every enclosed basin to the largest one through the shortest channel of at most
+    max_channel land cells (4-connected, zonally periodic), as OM4 opens its straits by hand;
+    the channel depth is the basin's mean depth within [min_sill, max_sill]. Basins with no
+    such channel are filled. Coarse regridding closes Gibraltar, the Danish straits, the
+    Bosporus and Hudson Strait, and closed basins fill or empty with P-E and runoff."""
+    from collections import deque
+    from scipy import ndimage
+    depth = np.array(depth, dtype=float)
+    nj, ni = depth.shape
+    while True:
+        lab, _ = ndimage.label(depth > 0)
+        for j in range(nj):                       # zonal periodicity
+            a, b = lab[j, 0], lab[j, -1]
+            if a and b and a != b:
+                lab[lab == b] = a
+        ids, counts = np.unique(lab[lab > 0], return_counts=True)
+        if len(ids) == 1:
+            return depth
+        main = ids[np.argmax(counts)]
+        basin = ids[ids != main][np.argmin(counts[ids != main])]   # smallest first
+        inb = lab == basin
+        # breadth-first search through land from the basin to any other basin
+        prev = {(j, i): None for j, i in zip(*np.where(inb))}
+        queue, end = deque(prev), None
+        while queue and end is None:
+            j, i = queue.popleft()
+            steps, p = 0, prev[(j, i)]
+            while p is not None and not inb[p]:
+                steps, p = steps + 1, prev[p]
+            if steps >= max_channel:
+                continue
+            for jj, ii in ((j + 1, i), (j - 1, i), (j, (i + 1) % ni), (j, (i - 1) % ni)):
+                if 0 <= jj < nj and (jj, ii) not in prev:
+                    prev[(jj, ii)] = (j, i)
+                    if lab[jj, ii] not in (0, basin):
+                        end = (jj, ii)
+                        break
+                    queue.append((jj, ii))
+        if end is None:
+            depth[inb] = 0.
+            continue
+        sill = min(max(depth[inb].mean(), min_sill), max_sill)
+        p = prev[end]
+        while not inb[p]:
+            depth[p] = sill
+            p = prev[p]
+
+
 def write_isca_land_file(fname, land_mask, zsurf=None):
     """Isca land file (idealized_moist_phys_nml land_option='input')."""
     nlat, nlon = land_mask.shape
@@ -515,6 +573,11 @@ class MOM6EarthOcean(MOM6Ocean):
             depth = (frac * dz[:, None, None]).sum(0)
             depth = np.where(frac[0] >= 0.5, np.maximum(depth, 10.), 0.)
             depth = fill_dead_end_cells(depth)
+            lon_c = 0.5 * (lon_b[:-1] + lon_b[1:]) % 360.
+            for lo, la, sill in EARTH_STRAITS_2DEG:
+                j = np.argmin(abs(lat_c[rows] - la)); i = np.argmin(abs(lon_c - lo))
+                depth[j, i] = max(depth[j, i], sill)
+            depth = fill_dead_end_cells(connect_basins(depth, max_channel=2))
             self._grid = dict(ds=ds, rows=rows, lat_e=lat_b[rows[0]:rows[-1] + 2], lat_c=lat_c[rows],
                               lon_e=lon_b, depth=depth)
         return self._grid
@@ -532,7 +595,7 @@ class MOM6EarthOcean(MOM6Ocean):
 
     def write_grid_files(self, indir, nlon, nlat, params):
         # generated once from the (remote) OM4 data, then reused for every run
-        tag = '%s_%s_%g_v2' % (os.path.basename(os.path.dirname(self.om4_zarr.rstrip('/'))),
+        tag = '%s_%s_%g_v3' % (os.path.basename(os.path.dirname(self.om4_zarr.rstrip('/'))),
                             self.init_date, self.max_lat)
         cache = os.path.join(os.environ.get('GFDL_WORK', '.'), 'mom6_earth_cache', tag)
         files = ('ocean_hgrid.nc', 'topog.nc', 'ts_init.nc')

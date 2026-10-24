@@ -35,7 +35,8 @@ with netCDF4.Dataset(land_file) as nc:
 
 cb = IscaCodeBase.from_directory(GFDL_BASE)
 ocean = SamudraOcean(SAMUDRA_PYTHON, SAMUDRA_CONFIG, SAMUDRA_CKPT,
-                     threads=int(os.environ.get('SAMUDRA_THREADS', 8)))
+                     threads=int(os.environ.get('SAMUDRA_THREADS', 8)),
+                     extra_args=['--ra-nu', os.environ.get('RA_NU', '0.25')])
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=5 * 86400,
                         land_mask=land, zsurf=zsurf)
 exp.inputfiles = [land_file, os.path.join(GFDL_BASE, 'input/rrtm_input_files/ozone_1990.nc'),

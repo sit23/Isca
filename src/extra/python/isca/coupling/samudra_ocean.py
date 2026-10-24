@@ -54,6 +54,10 @@ def main():
     p.add_argument('--temp-range', type=float, nargs=2, default=[-2.0, 35.],
                    help='bound the ocean temperatures Samudra predicts [deg C]: no sea-ice model, '
                         'so water cannot cool below freezing')
+    p.add_argument('--ra-nu', type=float, default=0.25,
+                   help='Robert-Asselin filter strength applied to the emulator history (0: off). '
+                        'Coupled to Isca, Samudra drifts off its training climate and develops a '
+                        'growing two-step (10-day) mode; nu = 0.25 removes it')
     args = p.parse_args()
 
     comp = pyoasis.Component('samudra', True, MPI.COMM_WORLD)
@@ -179,6 +183,10 @@ def main():
             temp = pred[0, i_temp]
             n_bounded = int((t_wet & ((temp < t_lo) | (temp > t_hi))).sum())
             pred[0, i_temp] = torch.where(t_wet, torch.minimum(torch.maximum(temp, t_lo), t_hi), temp)
+            if args.ra_nu:
+                # filter interval n-1 (newer input) with n-2 and the prediction n: damps the 2-step mode
+                n_prog = len(prog_names)
+                prog[:, n_prog:] += args.ra_nu * (prog[:, :n_prog] - 2 * prog[:, n_prog:] + pred)
             prog = model._advance_prognostic_history(prog, pred)
             older_forcing = newer
 

@@ -321,13 +321,15 @@ class SamudraOcean(OceanComponent):
     config: Samudra eval-style YAML (data + model), ckpt: checkpoint.
     Couples every 5 days, sequentially (Isca uses the SST Samudra predicts for
     each 5-day interval without lag). Earth geometry only.
+    extra_args: further samudra_ocean.py options, e.g. ['--ra-nu', 0.1].
     """
     grid_name = 'smdr'
     sst_lag = 0
     state_file = 'samudra_state.pt'
 
-    def __init__(self, python, config, ckpt, threads=8, grid_shape=(360, 180)):
+    def __init__(self, python, config, ckpt, threads=8, grid_shape=(360, 180), extra_args=()):
         self.python, self.config, self.ckpt = python, config, ckpt
+        self.extra_args = list(extra_args)
         self.threads = threads
         self.grid_shape = grid_shape
 
@@ -339,7 +341,7 @@ class SamudraOcean(OceanComponent):
         return ['env', 'OMP_NUM_THREADS=%d' % self.threads, self.python, script,
                 '--config', self.config, '--ckpt', self.ckpt, '--runtime', runtime,
                 '--coupling-period', exp.coupling_period, '--state-file', self.state_file,
-                '--threads', self.threads]
+                '--threads', self.threads] + self.extra_args
 
     def save_restart(self, exp, resdir):
         src = os.path.join(exp.rundir, self.state_file)
