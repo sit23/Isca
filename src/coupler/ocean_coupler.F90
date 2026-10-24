@@ -73,6 +73,7 @@ integer :: is, ie, js, je, nlon_g, nlat_g
 type(time_type) :: Time_run_start
 real, allocatable :: cell_area(:,:)          ! local cell areas [m2]
 integer, allocatable :: runoff_dest(:,:)     ! global index (i + (j-1)*nlon) a cell's runoff goes to; 0 = none
+real, allocatable :: frac_last(:,:)          ! ocean fraction of each cell, as last received
 
 contains
 
@@ -147,7 +148,8 @@ call mpp_sum(latb_g, num_lat+1); call mpp_sum(cnt_lat, num_lat+1)
 lonb_g = lonb_g / cnt_lon
 latb_g = latb_g / cnt_lat
 
-allocate(cell_area(is:ie, js:je))
+allocate(cell_area(is:ie, js:je), frac_last(is:ie, js:je))
+frac_last = 1.
 do j = js, je
   do i = is, ie
     cell_area(i,j) = RADIUS**2 * (lonb_g(i+1) - lonb_g(i)) * (sin(latb_g(j+1)) - sin(latb_g(j)))
@@ -273,10 +275,12 @@ enddo
 call mpp_sum(routed_g, nlon_g*nlat_g)
 do j = js, je
   do i = is, ie
-    buf(i,j) = routed_g(i + (j-1)*nlon_g) / cell_area(i,j)
+    ! Remapping delivers only the ocean-covered fraction of a cell's value to the
+    ! ocean, so spread the routed water over that fraction to deliver all of it.
+    buf(i,j) = routed_g(i + (j-1)*nlon_g) / (cell_area(i,j) * max(frac_last(i,j), 1.e-3))
   enddo
 enddo
-if (present(routed)) routed = buf
+if (present(routed)) routed = buf * max(frac_last, 1.e-3)   ! per unit cell area
 date = seconds_since_start(Time)
 call oasis_put(out_ids(9), date, buf, info)
 #else
@@ -306,7 +310,10 @@ if (is_received(info)) then
 endif
 if (in_ids(2) >= 0) then
   call oasis_get(in_ids(2), date, buf, info)
-  if (is_received(info)) ocean_frac = buf
+  if (is_received(info)) then
+    ocean_frac = buf
+    frac_last = buf
+  endif
 endif
 #else
 received = .false.
