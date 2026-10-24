@@ -31,6 +31,7 @@ ISCA_TO_OCEAN = [('ISCA_TAUX', 'OCN_TAUX'), ('ISCA_TAUY', 'OCN_TAUY'),
 OCEAN_TO_ISCA = [('SST_OCN', 'OCN_SST'), ('FRAC_OCN', 'OCN_FRAC')]
 
 ISCA_GRID = 'isca'
+ISCA_GRID_RUNOFF = 'iscr'   # the Isca grid without its land mask (runoff only)
 ISCA_RESTART = 'isca_rst.nc'    # OASIS restart file for the fluxes Isca sends
 OCEAN_RESTART = 'ocn_rst.nc'    # OASIS restart file for the fields the ocean sends
 
@@ -190,13 +191,20 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
     conserv_to_ocean = 'CONSERV LR SCALAR LATLON 1 FRACNNEI FIRST'
     for src, tgt in ISCA_TO_OCEAN:
         ntrans = 1 if same_grid else 2
+        # Runoff arrives in coastal cells that the ocean may barely cover. Isca has already
+        # divided it by the covered fraction, so it must be remapped from the unmasked grid
+        # by overlap area (DESTAREA); FRACNNEI would hand a sliver's value to whole ocean
+        # cells lying under Isca land and multiply the water delivered.
+        runoff = (src == 'ISCA_RUNOFF')
         lines += ['%s %s 1 %d %d %s EXPORTED' % (src, tgt, coupling_period, ntrans, ISCA_RESTART),
-                  '%d %d %d %d %s %s LAG=+%d' % (nx, ny, ox, oy, ISCA_GRID, ocean_grid, atmos_dt),
+                  '%d %d %d %d %s %s LAG=+%d' % (nx, ny, ox, oy,
+                                                 ISCA_GRID_RUNOFF if runoff and not same_grid else ISCA_GRID,
+                                                 ocean_grid, atmos_dt),
                   'P 0 P 0',
                   'LOCTRANS' if same_grid else 'LOCTRANS SCRIPR',
                   'AVERAGE']
         if not same_grid:
-            lines.append(conserv_to_ocean)
+            lines.append(conserv.replace('FRACAREA', 'DESTAREA') if runoff else conserv_to_ocean)
     for src, tgt in OCEAN_TO_ISCA:
         if same_grid:
             lines += ['%s %s 1 %d 0 %s EXPORTED' % (src, tgt, ocean_coupling_period, OCEAN_RESTART),

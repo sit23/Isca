@@ -64,6 +64,7 @@ character(len=11), parameter :: out_names(n_out) = (/ 'ISCA_TAUX  ', 'ISCA_TAUY 
      'ISCA_RUNOFF' /)
 character(len=8),  parameter :: in_names(n_in) = (/ 'OCN_SST ', 'OCN_FRAC' /)
 character(len=4),  parameter :: grid_name = 'isca'
+character(len=4),  parameter :: grid_name_runoff = 'iscr'   ! unmasked copy, for runoff
 
 logical :: oasis_active = .false.   ! OASIS was initialised (a namcouple exists)
 logical :: module_is_initialized = .false.
@@ -182,6 +183,13 @@ if (mpp_pe() == mpp_root_pe()) then
   call oasis_write_corner(grid_name, num_lon, num_lat, 4, clon, clat)
   call oasis_write_mask(grid_name, num_lon, num_lat, mask)
   call oasis_write_area(grid_name, num_lon, num_lat, area)
+  ! The same grid with no mask, for runoff: remapped with DESTAREA normalisation it
+  ! delivers to the ocean exactly the ocean-covered fraction of each cell's value
+  mask = 0
+  call oasis_write_grid(grid_name_runoff, num_lon, num_lat, lon_c, lat_c)
+  call oasis_write_corner(grid_name_runoff, num_lon, num_lat, 4, clon, clat)
+  call oasis_write_mask(grid_name_runoff, num_lon, num_lat, mask)
+  call oasis_write_area(grid_name_runoff, num_lon, num_lat, area)
   call oasis_terminate_grids_writing()
   deallocate(lon_c, lat_c, area, clon, clat, mask)
 endif
@@ -280,8 +288,9 @@ enddo
 call mpp_sum(routed_g, nlon_g*nlat_g)
 do j = js, je
   do i = is, ie
-    ! Remapping delivers only the ocean-covered fraction of a cell's value to the
-    ! ocean, so spread the routed water over that fraction to deliver all of it.
+    ! Remapping (unmasked grid, DESTAREA) delivers only the ocean-covered fraction of a
+    ! cell's value to the ocean, so spread the routed water over that fraction to deliver
+    ! all of it.
     buf(i,j) = routed_g(i + (j-1)*nlon_g) / (cell_area(i,j) * max(frac_last(i,j), 1.e-3))
   enddo
 enddo
