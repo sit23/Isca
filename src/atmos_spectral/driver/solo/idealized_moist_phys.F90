@@ -896,6 +896,7 @@ real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 
 real :: delta_t
 real, dimension(size(ug,1), size(ug,2)) :: runoff, routed   ! runoff produced / arriving at ocean cells [kg/m2/s]
+real, dimension(size(ug,1), size(ug,2)) :: pme_spread       ! water spread over the whole coupled ocean [kg/m2/s]
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv, tdt_local_heating
 real, dimension(size(ug,1), size(ug,2)) :: flux_q_surf_part, flux_q_atm_part, flux_t_surf_part, flux_t_atm_part, e_sat_out
 
@@ -1525,16 +1526,19 @@ endif
 
 ! With a coupled ocean, water leaving the surface where neither the ocean nor a
 ! land bucket keeps it is routed to the ocean as runoff instead of being lost.
+! Only river runoff (land bucket overflow, never negative) is routed to river mouths;
+! the rest (P-E over the uncovered part of ocean cells or under the ice lid, or over
+! land without a bucket) is spread over the whole coupled ocean.
 if (mixed_layer_bc .and. ocean_coupler_active()) then
-   call mixed_layer_uncoupled_pme(runoff)
+   call mixed_layer_uncoupled_pme(pme_spread)
+   runoff = 0.
    if (bucket) then
+      where (land) pme_spread = 0.
       if (finite_bucket_depth_over_land) then
          where (land) runoff = bucket_overflow
-      else
-         where (land) runoff = 0.
       endif
    endif
-   call ocean_coupler_put_runoff(Time, runoff, routed)
+   call ocean_coupler_put_runoff(Time, runoff, routed, pme_spread)
    if (id_cpl_runoff > 0) used = send_data(id_cpl_runoff, routed, Time)
 endif
 

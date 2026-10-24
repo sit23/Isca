@@ -247,16 +247,21 @@ end subroutine ocean_coupler_put
 
 !#######################################################################
 
-subroutine ocean_coupler_put_runoff(Time, runoff, routed)
+subroutine ocean_coupler_put_runoff(Time, runoff, routed, spread)
 ! Route runoff [kg/m2/s] from the cells where it is produced to their
 ! destination ocean cells and send it. Called every atmospheric timestep.
 ! Routing is a global operation (rivers cross PE boundaries), done with one
 ! mpp_sum of a global array: cheap at the resolutions Isca is used at.
+! spread [kg/m2/s]: water (of either sign) that is not river runoff, e.g. P-E over
+! parts of cells the coupled ocean does not cover. It is added uniformly over the
+! whole coupled ocean: routing it would concentrate it, negative when evaporation
+! wins, in single coastal cells (salinifying and draining a shallow river mouth).
 type(time_type), intent(in) :: Time
 real, intent(in), dimension(:,:) :: runoff
 real, intent(out), dimension(:,:), optional :: routed   ! runoff arriving in each cell [kg/m2/s]
+real, intent(in), dimension(:,:), optional :: spread
 #ifdef ISCA_OASIS
-real :: routed_g(nlon_g*nlat_g)
+real :: routed_g(nlon_g*nlat_g), sums(2)
 real(kind=8) :: buf(is:ie, js:je)
 integer :: i, j, k, date, info
 
@@ -280,6 +285,13 @@ do j = js, je
     buf(i,j) = routed_g(i + (j-1)*nlon_g) / (cell_area(i,j) * max(frac_last(i,j), 1.e-3))
   enddo
 enddo
+if (present(spread)) then
+  ! total water to spread [kg/s] and the coupled ocean area [m2]
+  sums(1) = sum(spread * cell_area)
+  sums(2) = sum(min(max(frac_last, 0.), 1.) * cell_area)
+  call mpp_sum(sums, 2)
+  if (sums(2) > 0.) buf = buf + sums(1) / sums(2)
+endif
 if (present(routed)) routed = buf * max(frac_last, 1.e-3)   ! per unit cell area
 date = seconds_since_start(Time)
 call oasis_put(out_ids(9), date, buf, info)
