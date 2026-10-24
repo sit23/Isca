@@ -271,6 +271,20 @@ def write_topography(fname, nlon, nlat, max_lat, land_mask, depth):
         v[:] = d
 
 
+def fill_dead_end_cells(depth):
+    """Set to land (repeatedly) wet cells with at most one wet neighbour (zonally periodic):
+    single-cell inlets have no through-flow and blow up (e.g. the Gulf of Ob at 2 degrees)."""
+    depth = np.array(depth, dtype=float)
+    while True:
+        w = (depth > 0).astype(int)
+        n = np.roll(w, 1, 1) + np.roll(w, -1, 1)
+        n[1:] += w[:-1]; n[:-1] += w[1:]
+        dead = (w > 0) & (n <= 1)
+        if not dead.any():
+            return depth
+        depth[dead] = 0.
+
+
 def write_isca_land_file(fname, land_mask, zsurf=None):
     """Isca land file (idealized_moist_phys_nml land_option='input')."""
     nlat, nlon = land_mask.shape
@@ -500,6 +514,7 @@ class MOM6EarthOcean(MOM6Ocean):
             dz = np.asarray(ds.dz.values)
             depth = (frac * dz[:, None, None]).sum(0)
             depth = np.where(frac[0] >= 0.5, np.maximum(depth, 10.), 0.)
+            depth = fill_dead_end_cells(depth)
             self._grid = dict(ds=ds, rows=rows, lat_e=lat_b[rows[0]:rows[-1] + 2], lat_c=lat_c[rows],
                               lon_e=lon_b, depth=depth)
         return self._grid
@@ -517,7 +532,7 @@ class MOM6EarthOcean(MOM6Ocean):
 
     def write_grid_files(self, indir, nlon, nlat, params):
         # generated once from the (remote) OM4 data, then reused for every run
-        tag = '%s_%s_%g' % (os.path.basename(os.path.dirname(self.om4_zarr.rstrip('/'))),
+        tag = '%s_%s_%g_v2' % (os.path.basename(os.path.dirname(self.om4_zarr.rstrip('/'))),
                             self.init_date, self.max_lat)
         cache = os.path.join(os.environ.get('GFDL_WORK', '.'), 'mom6_earth_cache', tag)
         files = ('ocean_hgrid.nc', 'topog.nc', 'ts_init.nc')

@@ -59,7 +59,8 @@ exp.namelist['main_nml']['days'] = DAYS
 exp.namelist['mixed_layer_nml'].update({'do_qflux': False, 'load_qflux': False})
 
 if __name__ == '__main__':
-    cb.compile()
+    if not os.environ.get('SKIP_COMPILE'):
+        cb.compile()
     first = int(os.environ.get('FIRST_MONTH', 1))
     for i in range(first, NMONTHS + 1):
         exp.run(i, use_restart=(i > 1), num_cores=NCORES, overwrite_data=True,
