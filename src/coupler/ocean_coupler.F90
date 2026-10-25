@@ -65,6 +65,7 @@ character(len=11), parameter :: out_names(n_out) = (/ 'ISCA_TAUX  ', 'ISCA_TAUY 
 character(len=8),  parameter :: in_names(n_in) = (/ 'OCN_SST ', 'OCN_FRAC' /)
 character(len=4),  parameter :: grid_name = 'isca'
 character(len=4),  parameter :: grid_name_runoff = 'iscr'   ! unmasked copy, for runoff
+real, parameter :: frac_min_routed = 1.e-3   ! least ocean fraction a cell needs to receive routed runoff
 
 logical :: oasis_active = .false.   ! OASIS was initialised (a namcouple exists)
 logical :: module_is_initialized = .false.
@@ -286,22 +287,29 @@ do j = js, je
   enddo
 enddo
 call mpp_sum(routed_g, nlon_g*nlat_g)
+! total water to spread [kg/s] and the coupled ocean area [m2]
+sums = 0.
+if (present(spread)) sums(1) = sum(spread * cell_area)
+sums(2) = sum(min(max(frac_last, 0.), 1.) * cell_area)
 do j = js, je
   do i = is, ie
-    ! Remapping (unmasked grid, DESTAREA) delivers only the ocean-covered fraction of a
-    ! cell's value to the ocean, so spread the routed water over that fraction to deliver
-    ! all of it.
-    buf(i,j) = routed_g(i + (j-1)*nlon_g) / (cell_area(i,j) * max(frac_last(i,j), 1.e-3))
+    k = i + (j-1)*nlon_g
+    if (frac_last(i,j) < frac_min_routed) then
+      ! a destination the ocean does not cover (the routing map follows Isca's land
+      ! mask): its runoff would be lost, so spread it with the rest
+      sums(1) = sums(1) + routed_g(k)
+      buf(i,j) = 0.
+    else
+      ! Remapping (unmasked grid, DESTAREA) delivers only the ocean-covered fraction of
+      ! a cell's value to the ocean, so spread the routed water over that fraction to
+      ! deliver all of it.
+      buf(i,j) = routed_g(k) / (cell_area(i,j) * frac_last(i,j))
+    endif
   enddo
 enddo
-if (present(spread)) then
-  ! total water to spread [kg/s] and the coupled ocean area [m2]
-  sums(1) = sum(spread * cell_area)
-  sums(2) = sum(min(max(frac_last, 0.), 1.) * cell_area)
-  call mpp_sum(sums, 2)
-  if (sums(2) > 0.) buf = buf + sums(1) / sums(2)
-endif
-if (present(routed)) routed = buf * max(frac_last, 1.e-3)   ! per unit cell area
+call mpp_sum(sums, 2)
+if (sums(2) > 0.) buf = buf + sums(1) / sums(2)
+if (present(routed)) routed = buf * frac_last   ! per unit cell area
 date = seconds_since_start(Time)
 call oasis_put(out_ids(9), date, buf, info)
 #else

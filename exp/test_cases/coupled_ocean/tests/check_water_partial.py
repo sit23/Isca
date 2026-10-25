@@ -15,3 +15,5 @@ print('water [1e6 kg/s]: Isca global P-E %.3f | sent (P-E)*frac + runoff %.3f | 
     np.nansum(o.PRCmE.values * ao) / 1e6))
 print('heat [TW]: sent*frac %.3f | MOM6 net_heat_coupler %.3f' % (
     np.nansum(a.cpl_net_heat.values * area * frac) / 1e12, np.nansum(o.net_heat_coupler.values * ao) / 1e12))
+print('runoff [1e6 kg/s]: Isca cpl_runoff %.3f | MOM6 friver %.3f' % (
+    np.nansum(a.cpl_runoff.values * area) / 1e6, np.nansum(o.friver.values * ao) / 1e6))
