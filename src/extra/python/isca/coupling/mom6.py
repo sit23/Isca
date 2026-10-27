@@ -18,7 +18,7 @@ import shutil
 import netCDF4
 import numpy as np
 
-from isca.coupling import OceanComponent, OCEAN_RESTART
+from isca.coupling import OceanComponent, OCEAN_RESTART, OCEAN_TO_ISCA
 
 ISCA_RADIUS = 6376.0e3     # constants_mod RADIUS
 ISCA_CP_OCEAN = 3989.24495292815
@@ -404,6 +404,9 @@ DIAG_TABLE = """Isca coupled MOM6
 class MOM6Ocean(OceanComponent):
     """MOM6 on an idealised (aquaplanet-type) domain matched to the Isca grid."""
     grid_name = 'mom6'
+    # the frazil heat MOM6 adds to keep water at freezing: Isca's thermodynamic sea ice
+    # (mixed_layer_nml do_thermo_ice) grows ice from it instead
+    fields_to_isca = OCEAN_TO_ISCA + [('FRAZIL_OCN', 'OCN_FRAZIL')]
 
     def __init__(self, executable, num_cores=4, max_lat=80., nk=30, depth=4000.,
                  layout=None, mom_input=None, sst_func=None, land_mask=None, regular_dlat=None):

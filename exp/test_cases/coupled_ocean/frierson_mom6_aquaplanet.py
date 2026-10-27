@@ -4,6 +4,10 @@ CONFIG=ridge adds a pole-to-pole ridge (two grid columns at 0E) in both models,
 with a land bucket whose overflow is routed to the ocean (Ridge world, cf.
 Enderton & Marshall 2009).
 
+THERMO_ICE=1 turns on Isca's thermodynamic sea ice (zero-layer, Lewis's PR #266):
+over the coupled ocean it grows from MOM6's frazil heat and insulates the ocean,
+in the polar caps it sits on Isca's slab. THERMO_ICE_ALBEDO sets its albedo (0.55).
+
 The ocean is 4 km deep everywhere with no continents, on a grid whose cells
 are exactly Isca's Gaussian-grid cells equatorward of +-80 degrees (MOM6
 cannot include the poles); poleward of that Isca's own slab ocean is used.
@@ -63,6 +67,10 @@ for mod, field in [('dynamics', 'ps'), ('dynamics', 'bk'), ('dynamics', 'pk'),
                    ('mixed_layer', 'cpl_net_heat'), ('mixed_layer', 'cpl_evap'),
                    ('mixed_layer', 'cpl_precip'), ('atmosphere', 'cpl_runoff')]:
     diag.add_field(mod, field, time_avg=True)
+THERMO_ICE = bool(int(os.environ.get('THERMO_ICE', 0)))
+if THERMO_ICE:
+    for field in ('h_thermo_ice', 't_ml', 'albedo', 'flux_thermo_ice', 'cpl_frazil', 'ice_ocean_heat'):
+        diag.add_field('mixed_layer', field, time_avg=True)
 exp.diag_table = diag
 
 exp.namelist = frierson_exp.namelist.copy()
@@ -70,6 +78,15 @@ exp.namelist['main_nml']['days'] = DAYS
 exp.namelist['main_nml']['dt_atmos'] = DT_ATMOS
 # slab depth used only for the polar caps outside the MOM6 domain
 exp.namelist['mixed_layer_nml']['depth'] = 20.
+if THERMO_ICE:
+    # ice forms and its base sits at MOM6's surface freezing point (linear, -0.054 K/psu at
+    # about 34.7 psu); thermodynamic ice requires the explicit surface step
+    t_freeze = 273.15 - 0.054 * 34.7
+    exp.namelist['mixed_layer_nml'].update({
+        'do_thermo_ice': True, 'do_explicit': True,
+        'thermo_ice_albedo': float(os.environ.get('THERMO_ICE_ALBEDO', 0.55)),
+        't_thermo_ice_base': t_freeze, 't_surf_freeze': t_freeze,
+        'read_const_correct': False, 'read_nudge_out': False})
 
 if land is not None:
     land_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'land_%s.nc' % CONFIG)

@@ -37,6 +37,9 @@ module ocean_coupler_mod
 ! Fields received from the ocean:
 !   OCN_SST              : sea-surface temperature [K]
 !   OCN_FRAC             : fraction of the Isca cell covered by coupled ocean [0-1]
+!   OCN_FRAZIL           : (optional) heat the ocean added to stop water cooling below
+!                          freezing [W/m2 of ocean], averaged over the last coupling period.
+!                          With Isca's thermodynamic sea ice this heat grows ice instead.
 
 #ifdef ISCA_OASIS
 use mod_oasis
@@ -58,11 +61,11 @@ public :: ocean_coupler_init_comp, ocean_coupler_init, ocean_coupler_put, &
 character(len=128), parameter :: version = '$Id: ocean_coupler.F90 2026-10-23 $'
 character(len=128), parameter :: tagname = '$Name: coupled_ocean_oasis $'
 
-integer, parameter :: n_out = 9, n_in = 2
+integer, parameter :: n_out = 9, n_in = 3
 character(len=11), parameter :: out_names(n_out) = (/ 'ISCA_TAUX  ', 'ISCA_TAUY  ', &
      'ISCA_SWNET ', 'ISCA_LWNET ', 'ISCA_SENS  ', 'ISCA_EVAP  ', 'ISCA_PRECIP', 'ISCA_PSURF ', &
      'ISCA_RUNOFF' /)
-character(len=8),  parameter :: in_names(n_in) = (/ 'OCN_SST ', 'OCN_FRAC' /)
+character(len=10), parameter :: in_names(n_in) = (/ 'OCN_SST   ', 'OCN_FRAC  ', 'OCN_FRAZIL' /)
 character(len=4),  parameter :: grid_name = 'isca'
 character(len=4),  parameter :: grid_name_runoff = 'iscr'   ! unmasked copy, for runoff
 real, parameter :: frac_min_routed = 1.e-3   ! least ocean fraction a cell needs to receive routed runoff
@@ -319,12 +322,13 @@ end subroutine ocean_coupler_put_runoff
 
 !#######################################################################
 
-subroutine ocean_coupler_get(Time, sst, ocean_frac, received)
-! Called every atmospheric timestep. sst and ocean_frac are only changed
+subroutine ocean_coupler_get(Time, sst, ocean_frac, received, frazil)
+! Called every atmospheric timestep. sst, ocean_frac and frazil are only changed
 ! when a coupling field actually arrives (received = .true.).
 type(time_type), intent(in) :: Time
 real, intent(inout), dimension(:,:) :: sst, ocean_frac
 logical, intent(out) :: received
+real, intent(inout), dimension(:,:), optional :: frazil   ! [W/m2 of ocean]; unchanged if the ocean sends none
 #ifdef ISCA_OASIS
 real(kind=8) :: buf(size(sst,1), size(sst,2))
 integer :: date, info
@@ -343,6 +347,10 @@ if (in_ids(2) >= 0) then
     ocean_frac = buf
     frac_last = buf
   endif
+endif
+if (present(frazil) .and. in_ids(3) >= 0) then
+  call oasis_get(in_ids(3), date, buf, info)
+  if (is_received(info)) frazil = buf
 endif
 #else
 received = .false.

@@ -38,7 +38,7 @@ use  field_manager_mod, only: MODEL_ATMOS
 use tracer_manager_mod, only: get_tracer_names, get_number_tracers
 
 use      constants_mod, only: HLV, PI, RHO_CP, CP_AIR, KELVIN, & 
-                              HLF, DENS_ICE, TFREEZE ! NTL 01/23 for sea ice code 
+                              HLF_WATER, DENS_ICE, TFREEZE_WATER ! sea ice: water constants (HLF, TFREEZE are run-time variables)
 
 use   diag_manager_mod, only: register_diag_field, register_static_field, send_data
 
@@ -153,11 +153,11 @@ character(len=256) :: flux_lhe_anom_field_name = 'flux_lhe_anom'
 logical :: do_explicit = .false. ! explicit or implicit timestepping for ocean covered surface 
 logical :: do_thermo_ice = .false. ! do thermodynamic sea ice? 
 real :: thermo_ice_albedo = 0.4 ! from Feldl & Merlis - original XZ is 0.8, M. England 0.6 
-real :: L_thermo_ice = DENS_ICE * HLF ! latent heat of fusion (J/m^3) 
+real :: L_thermo_ice = DENS_ICE * HLF_WATER ! latent heat of fusion (J/m^3) 
 real, parameter  :: k_thermo_ice = 2 ! conductivity of ice (W/m/K)
 real, parameter  :: thermo_ice_basal_flux_const = 120 ! linear coefficient for heat flux from ocean to ice base (W/m^2/K)
-real :: t_thermo_ice_base = TFREEZE ! temperature at base of ice, taken to be freshwater freezing point
-real :: t_surf_freeze = TFREEZE
+real :: t_thermo_ice_base = TFREEZE_WATER ! temperature at base of ice, taken to be freshwater freezing point
+real :: t_surf_freeze = TFREEZE_WATER
 real :: thermo_ice_nudge_timescale = 7. * 86400. 
 logical :: do_nudge_ice = .false. 
 logical :: do_nudging_correction = .false.
@@ -266,7 +266,11 @@ logical :: coupled = .false.
 real, allocatable, dimension(:,:) :: sst_coupled, ocean_frac_coupled
 real, allocatable, dimension(:,:) :: uncoupled_pme   ! P-E [kg/m2/s] at uncoupled points (see mixed_layer_uncoupled_pme)
 logical, allocatable, dimension(:,:) :: coupled_mask
-integer :: id_ocean_frac, id_cpl_heat, id_cpl_evap, id_cpl_precip
+! with do_thermo_ice: frazil heat the ocean reports [W/m2 of ocean], and the heat
+! going into the ocean under the ice [W/m2 of ocean, positive down]
+real, allocatable, dimension(:,:) :: frazil_coupled, ice_ocean_heat
+logical, allocatable, dimension(:,:) :: ice_covered_coupled
+integer :: id_ocean_frac, id_cpl_heat, id_cpl_evap, id_cpl_precip, id_cpl_frazil, id_ice_ocean_heat
 
 !mj read sst from input file
   type(interpolate_type),save :: sst_interp
@@ -765,6 +769,16 @@ if (trim(ocean_coupling) == 'oasis') then
                   'evaporation sent to the ocean', 'kg/m2/s')
   id_cpl_precip = register_diag_field(mod_name, 'cpl_precip', axes(1:2), Time, &
                   'precipitation sent to the ocean', 'kg/m2/s')
+  allocate(frazil_coupled(is:ie, js:je), ice_ocean_heat(is:ie, js:je), ice_covered_coupled(is:ie, js:je))
+  frazil_coupled = 0. ; ice_ocean_heat = 0. ; ice_covered_coupled = .false.
+  if (do_thermo_ice) then
+    if (update_albedo_from_ice) call error_mesg('mixed_layer', 'do_thermo_ice and the prescribed-ice '// &
+        'lid (update_albedo_from_ice) cannot both be used with a coupled ocean', FATAL)
+    id_cpl_frazil = register_diag_field(mod_name, 'cpl_frazil', axes(1:2), Time, &
+                    'frazil heat received from the ocean (turned into sea ice)', 'W/m2 of ocean')
+    id_ice_ocean_heat = register_diag_field(mod_name, 'ice_ocean_heat', axes(1:2), Time, &
+                    'heat flux into the coupled ocean under sea ice (melt minus basal flux)', 'W/m2 of ocean')
+  endif
 else if (trim(ocean_coupling) /= 'none') then
   call error_mesg('mixed_layer','"'//trim(ocean_coupling)//'" is not a valid ocean_coupling. '// &
                   'Choices are: none or oasis.', FATAL)
@@ -819,7 +833,10 @@ type(surf_diff_type), intent(inout) :: Tri_surf
 ! needed only when coupled to an external ocean: surface stress on the atmosphere [Pa],
 ! precipitation reaching the surface [kg/m2/s] and surface pressure [Pa]
 real, intent(in), dimension(:,:), optional :: flux_u, flux_v, precip, psurf
-real, dimension(size(t_surf,1),size(t_surf,2)) :: sens_out, evap_out, lwnet_out
+real, dimension(size(t_surf,1),size(t_surf,2)) :: sens_out, evap_out, lwnet_out, swnet_out, dts_flux
+real, dimension(size(t_surf,1),size(t_surf,2)) :: h_ice_old, t_surf_old, frac_cpl, basal_flux, melt_excess
+real, dimension(size(t_surf,1),size(t_surf,2)) :: h_old_save, t_surf_save
+logical, dimension(size(t_surf,1),size(t_surf,2)) :: cpl
 logical :: sst_received
 logical, dimension(size(land_mask,1),size(land_mask,2)) :: land_ice_mask
 
@@ -951,14 +968,15 @@ endif
 if (coupled) then
   ! SST from the ocean component: only changes at coupling times, so between
   ! them delta_t_surf is zero over the coupled points.
-  call ocean_coupler_get(Time, sst_coupled, ocean_frac_coupled, sst_received)
+  call ocean_coupler_get(Time, sst_coupled, ocean_frac_coupled, sst_received, frazil_coupled)
   coupled_mask = (ocean_frac_coupled > coupled_ocean_frac_threshold) .and. .not. land_ice_mask
-  where (coupled_mask)
+  ! open water takes the ocean's SST; over sea ice (do_thermo_ice) t_surf is the ice surface
+  where (coupled_mask .and. h_thermo_ice <= 0.)
     delta_t_surf = sst_coupled - t_surf
     t_surf = sst_coupled
-    ! any q-flux is the ocean model's job over coupled points
-    corrected_flux = corrected_flux + ocean_qflux
   end where
+  ! any q-flux is the ocean model's job over coupled points
+  where (coupled_mask) corrected_flux = corrected_flux + ocean_qflux
   if (id_ocean_frac > 0) used = send_data(id_ocean_frac, ocean_frac_coupled, Time)
 endif
 if (do_thermo_ice) then 
@@ -1050,6 +1068,8 @@ if (.not. do_thermo_ice) then ! NTL 01/23 thermodynamic sea ice switch
     endif !s end of if(do_sc_sst).
     
 else if (do_thermo_ice) then 
+    h_old_save = h_thermo_ice
+    t_surf_save = t_surf
     where (land_ice_mask) ! name misleading, for thermo sea ice, land_ice_mask is just land mask 
         delta_t_ml = - corrected_flux * dt / land_sea_heat_capacity
         delta_h_thermo_ice  = 0
@@ -1135,6 +1155,8 @@ else if (do_thermo_ice) then
         
        
     endwhere 
+
+    if (coupled) call coupled_thermo_ice()
     
     
     ! compute albedo
@@ -1190,21 +1212,41 @@ if (coupled) then
   ! the atmosphere actually feels, so that energy and water are conserved.
   if (.not. (present(flux_u) .and. present(flux_v) .and. present(precip) .and. present(psurf))) &
     call error_mesg('mixed_layer', 'flux_u, flux_v, precip and psurf are needed for ocean coupling', FATAL)
-  sens_out  = CP_AIR * (alpha_t + beta_t * delta_t_surf)
-  lwnet_out = surf_lw_down - (alpha_lw + beta_lw * delta_t_surf)
+  ! with explicit stepping (do_explicit, required by do_thermo_ice) the atmosphere feels the
+  ! fluxes at the old surface temperature
+  dts_flux = delta_t_surf
+  if (do_explicit) dts_flux = 0.
+  sens_out  = CP_AIR * (alpha_t + beta_t * dts_flux)
+  lwnet_out = surf_lw_down - (alpha_lw + beta_lw * dts_flux)
+  swnet_out = net_surf_sw_down
   if (evaporation) then
-    evap_out = alpha_q + beta_q * delta_t_surf
+    evap_out = alpha_q + beta_q * dts_flux
   else
     evap_out = 0.
+  endif
+  ! Under coupled sea ice the ocean gets only the ice-ocean heat flux (basal flux and melt):
+  ! the radiative and turbulent heat goes into the ice. Wind stress (free-drifting ice) and
+  ! water (the zero-layer ice holds none) pass through; MOM6 takes HLV*evap as latent heat
+  ! loss, so the sensible flux sent is adjusted to deliver exactly ice_ocean_heat.
+  if (do_thermo_ice) then
+    where (ice_covered_coupled)
+      swnet_out = 0.
+      lwnet_out = 0.
+      sens_out = - ice_ocean_heat - HLV * evap_out
+    end where
   endif
   ! flux_u/v from surface_flux are the stress on the atmosphere; the ocean feels minus that.
   ! Under prescribed sea ice (update_albedo_from_ice) the ocean gets no fluxes at all: the
   ! ice is treated as an insulating lid, as there is no sea-ice model in the coupled system.
-  call ocean_coupler_put(Time, ice_lid(-flux_u), ice_lid(-flux_v), ice_lid(net_surf_sw_down), &
+  call ocean_coupler_put(Time, ice_lid(-flux_u), ice_lid(-flux_v), ice_lid(swnet_out), &
                          ice_lid(lwnet_out), ice_lid(sens_out), ice_lid(evap_out), &
                          ice_lid(precip), psurf)
   if (id_cpl_heat > 0) used = send_data(id_cpl_heat, &
-        net_surf_sw_down + lwnet_out - sens_out - HLV*evap_out, Time)
+        swnet_out + lwnet_out - sens_out - HLV*evap_out, Time)
+  if (do_thermo_ice) then
+    if (id_cpl_frazil > 0) used = send_data(id_cpl_frazil, frazil_coupled, Time)
+    if (id_ice_ocean_heat > 0) used = send_data(id_ice_ocean_heat, ice_ocean_heat, Time)
+  endif
   if (id_cpl_evap > 0) used = send_data(id_cpl_evap, evap_out, Time)
   if (id_cpl_precip > 0) used = send_data(id_cpl_precip, precip, Time)
   ! Water the ocean does not get directly becomes runoff. The precip/evap fields reach
@@ -1232,6 +1274,54 @@ if(id_delta_t_surf > 0)   used = send_data(id_delta_t_surf, delta_t_surf, Time_n
 if(id_h_thermo_ice > 0) used = send_data(id_h_thermo_ice, h_thermo_ice, Time_next)
 if(id_t_ml > 0) used = send_data(id_t_ml, t_ml, Time_next)
 if(id_flux_thermo_ice > 0) used = send_data(id_flux_thermo_ice, flux_thermo_ice, Time_next)
+
+contains
+
+subroutine coupled_thermo_ice()
+! Thermodynamic sea ice over the points coupled to an external ocean. The zero-layer
+! ice of the slab version above, with the ocean beneath it the coupled ocean model:
+!  - open water: t_surf is the ocean's SST, all surface fluxes go to the ocean, and the
+!    frazil heat the ocean had to add to stay at freezing grows ice instead;
+!  - ice: the surface energy balance grows or melts the ice, which also takes the basal
+!    flux thermo_ice_basal_flux_const*(SST - t_thermo_ice_base) from the ocean; ice that
+!    melts completely returns the excess heat to the ocean.
+! Heat per unit area of Isca cell for the ice, per unit area of ocean for the ocean: the
+! ocean covers the fraction frac_cpl of a coupled cell, the ice the whole cell. Uses the
+! explicit surface step (do_explicit), as the slab ice does.
+h_ice_old = h_old_save
+t_surf_old = t_surf_save
+cpl = coupled_mask
+frac_cpl = min(max(ocean_frac_coupled, 0.), 1.)
+ice_covered_coupled = cpl .and. (h_ice_old > 0.)
+basal_flux = 0. ; melt_excess = 0. ; ice_ocean_heat = 0.
+where (ice_covered_coupled)
+  basal_flux = thermo_ice_basal_flux_const * (sst_coupled - t_thermo_ice_base)
+  delta_h_thermo_ice = (corrected_flux - basal_flux * frac_cpl) * dt / L_thermo_ice
+elsewhere (cpl)
+  delta_h_thermo_ice = 0.
+end where
+where (cpl) delta_h_thermo_ice = delta_h_thermo_ice + frazil_coupled * frac_cpl * dt / L_thermo_ice
+where (cpl .and. (h_ice_old + delta_h_thermo_ice < 0.))   ! complete ablation
+  melt_excess = - (h_ice_old + delta_h_thermo_ice) * L_thermo_ice / dt
+  delta_h_thermo_ice = - h_ice_old
+end where
+where (ice_covered_coupled) ice_ocean_heat = - basal_flux + melt_excess / max(frac_cpl, 1.e-3)
+where (cpl)
+  h_thermo_ice = h_ice_old + delta_h_thermo_ice
+  t_ml = sst_coupled
+end where
+! surface temperature: steady-state ice surface where ice remains, else the SST
+where (ice_covered_coupled .and. h_thermo_ice > 0.)
+  flux_thermo_ice = k_thermo_ice / h_thermo_ice * (t_thermo_ice_base - t_surf_old)
+  delta_t_thermo_ice = (- corrected_flux + flux_thermo_ice) / (k_thermo_ice / h_thermo_ice + dFdt_surf)
+  where (t_surf_old + delta_t_thermo_ice > t_surf_freeze) delta_t_thermo_ice = t_surf_freeze - t_surf_old
+  t_surf = t_surf_old + delta_t_thermo_ice
+elsewhere (cpl)
+  flux_thermo_ice = 0.
+  t_surf = sst_coupled
+end where
+where (cpl) delta_t_surf = t_surf - t_surf_old
+end subroutine coupled_thermo_ice
 
 end subroutine mixed_layer
 

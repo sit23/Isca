@@ -39,6 +39,7 @@ OCEAN_RESTART = 'ocn_rst.nc'    # OASIS restart file for the fields the ocean se
 class OceanComponent(object):
     """Interface for an ocean program that Isca can be coupled to."""
     grid_name = ISCA_GRID   # OASIS grid name used by the ocean
+    fields_to_isca = OCEAN_TO_ISCA   # (ocean name, Isca name) of the fields the ocean sends
     num_cores = 1
     # Lag of the ocean-to-Isca fields [s]. None: one coupling period (concurrent
     # coupling, both models run at once). 0: sequential, Isca waits for the
@@ -167,7 +168,8 @@ def write_runoff_routing(fname, dest):
 
 
 def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean_shape,
-                    ocean_grid, ocean_coupling_period=None, nlogprt=1, sst_lag=None):
+                    ocean_grid, ocean_coupling_period=None, nlogprt=1, sst_lag=None,
+                    ocean_to_isca=OCEAN_TO_ISCA):
     """Write the OASIS3-MCT namcouple file.
 
     Fluxes from Isca are averaged by OASIS over the coupling period (LOCTRANS
@@ -182,7 +184,7 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
     same_grid = (ocean_grid == ISCA_GRID)
     nx, ny = isca_shape
     ox, oy = ocean_shape
-    lines = ['$NFIELDS', '  %d' % (len(ISCA_TO_OCEAN) + len(OCEAN_TO_ISCA)), '$END',
+    lines = ['$NFIELDS', '  %d' % (len(ISCA_TO_OCEAN) + len(ocean_to_isca)), '$END',
              '$RUNTIME', '  %d' % runtime, '$END',
              '$NLOGPRT', '  %d 0' % nlogprt, '$END',
              '$STRINGS']
@@ -205,7 +207,7 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
                   'AVERAGE']
         if not same_grid:
             lines.append(conserv.replace('FRACAREA', 'DESTAREA') if runoff else conserv_to_ocean)
-    for src, tgt in OCEAN_TO_ISCA:
+    for src, tgt in ocean_to_isca:
         if same_grid:
             lines += ['%s %s 1 %d 0 %s EXPORTED' % (src, tgt, ocean_coupling_period, OCEAN_RESTART),
                       '%d %d %d %d %s %s LAG=+%d' % (ox, oy, nx, ny, ocean_grid, ISCA_GRID,
@@ -285,7 +287,8 @@ class CoupledExperiment(Experiment):
         ocean_shape = self.ocean.ocean_grid_shape(nlon, nlat)
         write_namcouple(os.path.join(self.rundir, 'namcouple'), self.runtime_seconds(),
                         self.coupling_period, int(self.namelist['main_nml']['dt_atmos']),
-                        (nlon, nlat), ocean_shape, self.ocean.grid_name, sst_lag=self.ocean.sst_lag)
+                        (nlon, nlat), ocean_shape, self.ocean.grid_name, sst_lag=self.ocean.sst_lag,
+                        ocean_to_isca=self.ocean.fields_to_isca)
 
         coupled = self.ocean.isca_ocean_mask(nlon, nlat)
         if self.land_mask is not None:
