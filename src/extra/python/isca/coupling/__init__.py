@@ -219,9 +219,12 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
                                                      sst_lag),
                       'P 0 P 0', 'SCRIPR',
                       # the ocean fraction must be normalised by the whole Isca cell
-                      # area to give the covered fraction; everything else by the
-                      # covered area only (FRACAREA), so values are not diluted.
-                      conserv.replace('FRACAREA', 'DESTAREA') if src == 'FRAC_OCN' else conserv]
+                      # area to give the covered fraction, and frazil heat too, so that
+                      # every Isca cell gets the frazil of all the ocean under it
+                      # (DESTAREA conserves the total); the SST by the covered area only
+                      # (FRACAREA), so values are not diluted.
+                      conserv.replace('FRACAREA', 'DESTAREA')
+                      if src in ('FRAC_OCN', 'FRAZIL_OCN') else conserv]
     lines.append('$END')
     with open(fname, 'w') as f:
         f.write('\n'.join(lines) + '\n')

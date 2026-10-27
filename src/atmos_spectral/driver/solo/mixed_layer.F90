@@ -266,8 +266,9 @@ logical :: coupled = .false.
 real, allocatable, dimension(:,:) :: sst_coupled, ocean_frac_coupled
 real, allocatable, dimension(:,:) :: uncoupled_pme   ! P-E [kg/m2/s] at uncoupled points (see mixed_layer_uncoupled_pme)
 logical, allocatable, dimension(:,:) :: coupled_mask
-! with do_thermo_ice: frazil heat the ocean reports [W/m2 of ocean], and the heat
-! going into the ocean under the ice [W/m2 of ocean, positive down]
+! with do_thermo_ice: frazil heat the ocean reports [W/m2 of Isca cell, from all the
+! ocean under the cell], and the heat going into the ocean under the ice [W/m2 of
+! ocean, positive down]
 real, allocatable, dimension(:,:) :: frazil_coupled, ice_ocean_heat
 logical, allocatable, dimension(:,:) :: ice_covered_coupled
 integer :: id_ocean_frac, id_cpl_heat, id_cpl_evap, id_cpl_precip, id_cpl_frazil, id_ice_ocean_heat
@@ -775,7 +776,7 @@ if (trim(ocean_coupling) == 'oasis') then
     if (update_albedo_from_ice) call error_mesg('mixed_layer', 'do_thermo_ice and the prescribed-ice '// &
         'lid (update_albedo_from_ice) cannot both be used with a coupled ocean', FATAL)
     id_cpl_frazil = register_diag_field(mod_name, 'cpl_frazil', axes(1:2), Time, &
-                    'frazil heat received from the ocean (turned into sea ice)', 'W/m2 of ocean')
+                    'frazil heat received from the ocean (turned into sea ice)', 'W/m2')
     id_ice_ocean_heat = register_diag_field(mod_name, 'ice_ocean_heat', axes(1:2), Time, &
                     'heat flux into the coupled ocean under sea ice (melt minus basal flux)', 'W/m2 of ocean')
   endif
@@ -1300,7 +1301,7 @@ where (ice_covered_coupled)
 elsewhere (cpl)
   delta_h_thermo_ice = 0.
 end where
-where (cpl) delta_h_thermo_ice = delta_h_thermo_ice + frazil_coupled * frac_cpl * dt / L_thermo_ice
+where (cpl) delta_h_thermo_ice = delta_h_thermo_ice + frazil_coupled * dt / L_thermo_ice
 where (cpl .and. (h_ice_old + delta_h_thermo_ice < 0.))   ! complete ablation
   melt_excess = - (h_ice_old + delta_h_thermo_ice) * L_thermo_ice / dt
   delta_h_thermo_ice = - h_ice_old
@@ -1321,6 +1322,11 @@ elsewhere (cpl)
   t_surf = sst_coupled
 end where
 where (cpl) delta_t_surf = t_surf - t_surf_old
+! Ocean can lie under a cell that Isca treats as uncoupled (a polar cap, or land where the
+! coastlines differ). Its frazil grows that cell's slab ice, so the heat is not lost.
+! Under Isca land it is still dropped until Isca has fractional surface tiles.
+where (.not. cpl .and. .not. land_mask) &
+  h_thermo_ice = h_thermo_ice + frazil_coupled * dt / L_thermo_ice
 end subroutine coupled_thermo_ice
 
 end subroutine mixed_layer
