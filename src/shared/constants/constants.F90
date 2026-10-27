@@ -128,6 +128,7 @@ real, public, parameter :: HLV_WATER = 2.500e6
 real, public, parameter :: HLF_WATER = 3.34e5
 real, public, parameter :: HLS_WATER = HLV_WATER + HLF_WATER
 real, public, parameter :: TFREEZE_WATER = 273.16
+real, public, parameter :: DENS_ICE = 917.   ! density of sea ice [kg/m3]
 
 !-------------- radiation constants -----------------
 
