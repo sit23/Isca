@@ -7,10 +7,11 @@ module idealized_moist_phys_mod
 #endif
 
 use fms_mod, only: write_version_number, file_exist, close_file, stdlog, error_mesg, NOTE, &
-                   FATAL, WARNING, read_data, field_size, uppercase, mpp_pe, check_nml_error
+                   FATAL, WARNING, read_data, field_size, uppercase, mpp_pe, check_nml_error, &
+                   write_data, nullify_domain
 
 ! cp_air needed for rrtmg and pstd_mks needed for pref calculation
-use           constants_mod, only: grav, rdgas, rvgas, cp_air, PSTD_MKS, dens_h2o, dens_vapor 
+use           constants_mod, only: grav, rdgas, rvgas, cp_air, PSTD_MKS, dens_h2o, dens_vapor, HLV
 
 use        time_manager_mod, only: time_type, get_time, operator( + )
 
@@ -25,7 +26,8 @@ use        cloud_simple_mod, only: cloud_simple_init, cloud_simple_end, cloud_si
 use       cloud_spookie_mod, only: cloud_spookie_init, cloud_spookie
 
 use         mixed_layer_mod, only: mixed_layer_init, mixed_layer, mixed_layer_end, albedo_calc, &
-                                     mixed_layer_uncoupled_pme
+                                     mixed_layer_uncoupled_pme, mixed_layer_tile_albedo, &
+                                     mixed_layer_tile_diagnostics, mixed_layer_tile_coupling
 use       ocean_coupler_mod, only: ocean_coupler_active, ocean_coupler_put_runoff
 
 use         lscale_cond_mod, only: lscale_cond_init, lscale_cond, lscale_cond_end
@@ -165,6 +167,15 @@ logical :: finite_bucket_depth_over_land = .true. !When using bucket model do we
 logical :: do_local_heating = .false.
 !s end Adding localised heating option from Held-Suarez
 
+! Fractional surface tiles. Every cell has an ocean tile (1) and a land tile (2), covering
+! the fractions tile_frac (land: the land file's values, which may lie between 0 and 1;
+! with a coupled ocean, the ocean tile is the ocean model's coverage wherever it has any).
+! Each tile has its own surface temperature, sea ice, albedo, roughness and humidity;
+! surface fluxes and the mixed layer are computed on each, and the atmosphere feels the
+! area-weighted sum, as with an exchange grid. Off by default; with 0/1 fractions it
+! reproduces the model without tiles.
+logical :: surface_tiles = .false.
+
 namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roughness_heat,  &
                                       do_cloud_simple, do_cloud_spookie,             &
                                       two_stream_gray, do_rrtm_radiation, do_damping,&
@@ -177,13 +188,21 @@ namelist / idealized_moist_phys_nml / turb, lwet_convection, do_bm, do_ras, roug
                                       max_bucket_depth_land, robert_bucket, raw_bucket, &
                                       do_lscale_cond, do_socrates_radiation, do_lcl_diffusivity_depth, damping_coeff_bucket, &
                                       finite_bucket_depth_over_land, &
-                                      do_local_heating
+                                      do_local_heating, surface_tiles
 
 
 integer, parameter :: num_time_levels = 2 ! Add bucket - number of time levels added to allow timestepping in this module
 real, allocatable, dimension(:,:,:)   :: bucket_depth
 real, allocatable, dimension(:,:    ) :: dt_bucket, filt, bucket_diffusion
 real, allocatable, dimension(:,:    ) :: bucket_overflow   ! water above the land bucket capacity [kg/m2/s]
+
+! surface tiles (see surface_tiles): state, inputs and fluxes of each tile, last index the tile
+integer, parameter :: n_tiles = 2
+real, allocatable, dimension(:,:,:) :: tile_frac, t_surf_tile, h_ice_tile, t_ml_tile, albedo_tile, &
+     q_surf_tile, rough_mom_tile, rough_heat_tile, rough_moist_tile, sw_tile, dts_tile, lh_tile, &
+     flux_t_tile, flux_q_tile, flux_r_tile, flux_u_tile, flux_v_tile, dhdt_surf_tile, dedt_surf_tile, &
+     dedq_surf_tile, drdt_surf_tile, dhdt_atm_tile, dedq_atm_tile, tile_diag, evap_tile
+real, allocatable, dimension(:,:) :: bucket_tile, cc_tile, nudge_tile, cpl_frac
 
 real, allocatable, dimension(:,:)   ::                                        &
      z_surf,               &   ! surface height
@@ -653,6 +672,39 @@ where(land)
 end where
 endif
 
+if (surface_tiles) then
+  if (.not. mixed_layer_bc .or. gp_surface) call error_mesg('idealized_moist_phys', &
+      'surface_tiles needs mixed_layer_bc and not gp_surface', FATAL)
+  if (trim(land_option) /= 'input' .and. trim(land_option) /= 'none') call error_mesg('idealized_moist_phys', &
+      'surface_tiles needs land_option = "input" (fractions from the land file) or "none"', FATAL)
+  allocate(tile_frac(is:ie, js:je, n_tiles))
+  ! every tile array starts at zero, so tiles of zero area stay finite
+  call alloc_tile(t_surf_tile); call alloc_tile(h_ice_tile); call alloc_tile(t_ml_tile)
+  call alloc_tile(albedo_tile); call alloc_tile(q_surf_tile); call alloc_tile(sw_tile)
+  call alloc_tile(rough_mom_tile); call alloc_tile(rough_heat_tile); call alloc_tile(rough_moist_tile)
+  call alloc_tile(dts_tile); call alloc_tile(lh_tile); call alloc_tile(evap_tile)
+  call alloc_tile(flux_t_tile); call alloc_tile(flux_q_tile); call alloc_tile(flux_r_tile)
+  call alloc_tile(flux_u_tile); call alloc_tile(flux_v_tile)
+  call alloc_tile(dhdt_surf_tile); call alloc_tile(dedt_surf_tile); call alloc_tile(dedq_surf_tile)
+  call alloc_tile(drdt_surf_tile); call alloc_tile(dhdt_atm_tile); call alloc_tile(dedq_atm_tile)
+  allocate(tile_diag(is:ie, js:je, 15))
+  allocate(bucket_tile(is:ie, js:je), cc_tile(is:ie, js:je), nudge_tile(is:ie, js:je), cpl_frac(is:ie, js:je))
+  cc_tile = 0. ; nudge_tile = 0. ; cpl_frac = 0.
+  tile_frac(:,:,2) = 0.
+  if (trim(land_option) == 'input') tile_frac(:,:,2) = min(max(land_ones, 0.), 1.)
+  tile_frac(:,:,1) = 1. - tile_frac(:,:,2)
+  ! roughness as above, for a tile entirely ocean or land
+  rough_mom_tile(:,:,1) = roughness_mom ; rough_heat_tile(:,:,1) = roughness_heat
+  rough_moist_tile(:,:,1) = roughness_moist
+  rough_mom_tile(:,:,2) = rough_mom_tile(:,:,1) ; rough_heat_tile(:,:,2) = rough_heat_tile(:,:,1)
+  rough_moist_tile(:,:,2) = rough_moist_tile(:,:,1)
+  if (trim(land_option) == 'input') then
+    rough_mom_tile(:,:,2)   = land_roughness_prefactor * rough_mom_tile(:,:,2)
+    rough_heat_tile(:,:,2)  = land_roughness_prefactor * rough_heat_tile(:,:,2)
+    rough_moist_tile(:,:,2) = land_roughness_prefactor * rough_moist_tile(:,:,2)
+  endif
+endif
+
 if (gp_surface) then
 call rayleigh_bottom_drag_init(get_axis_id(), Time)
 axes = get_axis_id()
@@ -680,9 +732,17 @@ if(mixed_layer_bc) then
   ! to quickly enter the atmosphere avoiding problems with the convection scheme
   t_surf = t_surf_init + 1.0
 
+  if (surface_tiles) then
+    call mixed_layer_init(is, ie, js, je, num_levels, t_surf, &
+                          h_thermo_ice, t_ml, const_correct,nudge_out, &
+                          bucket_depth, get_axis_id(), Time, albedo, rad_lonb_2d(:,:), rad_latb_2d(:,:), land, bucket, &
+                          tiles=.true., land_full=(tile_frac(:,:,1) <= 0.))
+    call init_tile_state()
+  else
   call mixed_layer_init(is, ie, js, je, num_levels, t_surf, &
                         h_thermo_ice, t_ml, const_correct,nudge_out, & ! NTL 01/23 thermodynamic sea ice
                         bucket_depth, get_axis_id(), Time, albedo, rad_lonb_2d(:,:), rad_latb_2d(:,:), land, bucket) ! t_surf is intent(inout) !s albedo distribution set here.
+  endif
   
 
 elseif(gp_surface) then
@@ -907,6 +967,7 @@ real, dimension(:,:,:,:),   intent(inout) :: dt_tracers
 real :: delta_t
 real, dimension(size(ug,1), size(ug,2)) :: runoff, routed   ! runoff produced / arriving at ocean cells [kg/m2/s]
 real, dimension(size(ug,1), size(ug,2)) :: pme_spread       ! water spread over the whole coupled ocean [kg/m2/s]
+logical, dimension(size(ug,1), size(ug,2)) :: land_bucket   ! cells whose bucket is land's
 real, dimension(size(ug,1), size(ug,2), size(ug,3)) :: tg_tmp, qg_tmp, RH,tg_interp, mc, dt_ug_conv, dt_vg_conv, tdt_local_heating
 real, dimension(size(ug,1), size(ug,2)) :: flux_q_surf_part, flux_q_atm_part, flux_t_surf_part, flux_t_atm_part, e_sat_out
 
@@ -1155,63 +1216,12 @@ end if
 
 
 if(.not.gp_surface) then 
-  call surface_flux(                                                        &
-                  tg(:,:,num_levels,previous),                              &
- grid_tracers(:,:,num_levels,previous,nsphum),                              &
-                  ug(:,:,num_levels,previous),                              &
-                  vg(:,:,num_levels,previous),                              &
-               p_full(:,:,num_levels,current),                              &
-   z_full(:,:,num_levels,current)-z_surf(:,:),                              &
-             p_half(:,:,num_levels+1,current),                              &
-                                  t_surf(:,:),                              &
-                                  t_surf(:,:),                              &
-                                  q_surf(:,:),                              &
-                                       bucket,                              & 
-                    bucket_depth(:,:,current),                              &
-                        max_bucket_depth_land,                              &
-                         depth_change_lh(:,:),                              &
-                       depth_change_conv(:,:),                              &
-                       depth_change_cond(:,:),                              &
-                                  u_surf(:,:),                              &
-                                  v_surf(:,:),                              &
-                               rough_mom(:,:),                              &
-                              rough_heat(:,:),                              &
-                             rough_moist(:,:),                              &
-                               rough_mom(:,:),                              &
-                                    gust(:,:),                              &
-                                  flux_t(:,:),                              &
-                                  flux_q(:,:),                              &
-                                  flux_r(:,:),                              &
-                                  flux_u(:,:),                              &
-                                  flux_v(:,:),                              &
-                                  drag_m(:,:),                              &
-                                  drag_t(:,:),                              &
-                                  drag_q(:,:),                              &
-                                   w_atm(:,:),                              &
-                                   ustar(:,:),                              &
-                                   bstar(:,:),                              &
-                                   qstar(:,:),                              &
-                               dhdt_surf(:,:),                              &
-                               dedt_surf(:,:),                              &
-                               dedq_surf(:,:),                              &
-                               drdt_surf(:,:),                              &
-                                dhdt_atm(:,:),                              &
-                                dedq_atm(:,:),                              &
-                              dtaudu_atm(:,:),                              &
-                              dtaudv_atm(:,:),                              &
-                              q_surf_out(:,:),                              & ! is intent(out)                              
-                                ex_del_m(:,:),                              &
-                                ex_del_h(:,:),                              &
-                                ex_del_q(:,:),                              &
-                                 temp_2m(:,:),                              &
-                                   u_10m(:,:),                              &
-                                   v_10m(:,:),                              &
-                                    q_2m(:,:),                              &
-                                   rh_2m(:,:),                              &
-                                      delta_t,                              &
-                                    land(:,:),                              &
-                               .not.land(:,:),                              &
-                                  avail(:,:)  )
+  if (surface_tiles) then
+    call tile_surface_fluxes()
+  else
+    call call_surface_flux(t_surf, q_surf, bucket_depth(:,:,current), depth_change_lh, land, &
+                           rough_mom, rough_heat, rough_moist)
+  endif
 
           if(id_w_atm > 0) used = send_data(id_w_atm, w_atm, Time)
           if(id_drag_m > 0) used = send_data(id_drag_m, drag_m*w_atm, Time)
@@ -1416,7 +1426,9 @@ if(turb) then
 !
 ! update surface temperature
 !
-   if(mixed_layer_bc) then
+   if(mixed_layer_bc .and. surface_tiles) then
+     call tile_mixed_layer()
+   else if(mixed_layer_bc) then
    call mixed_layer(                                                       &
                               Time, Time+Time_step,                        &
                               js,                                          & 
@@ -1515,7 +1527,12 @@ if(bucket) then
    if (finite_bucket_depth_over_land) then
        ! with a coupled ocean the overflow is river runoff rather than lost:
        ! the excess removed from the new leapfrog level is the input over delta_t
-       where(land .and. (bucket_depth(:,:,future) > max_bucket_depth_land))
+       if (surface_tiles) then
+         land_bucket = (tile_frac(:,:,2) > 0.)
+       else
+         land_bucket = land
+       endif
+       where(land_bucket .and. (bucket_depth(:,:,future) > max_bucket_depth_land))
             bucket_overflow = (bucket_depth(:,:,future) - max_bucket_depth_land) * 1000. / delta_t
             bucket_depth(:,:,future) = max_bucket_depth_land
        elsewhere
@@ -1541,20 +1558,284 @@ endif
 ! the rest (P-E over the uncovered part of ocean cells or under the ice lid, or over
 ! land without a bucket) is spread over the whole coupled ocean.
 if (mixed_layer_bc .and. ocean_coupler_active()) then
-   call mixed_layer_uncoupled_pme(pme_spread)
    runoff = 0.
+   if (surface_tiles) then
+      ! the ocean tile's P-E reaches the ocean model directly where it covers the cell and is
+      ! spread elsewhere; the land tile's is held by the bucket, whose overflow is routed
+      pme_spread = 0.
+      where (cpl_frac <= 0.) pme_spread = tile_frac(:,:,1) * (precip - evap_tile(:,:,1))
+      if (bucket) then
+         if (finite_bucket_depth_over_land) runoff = tile_frac(:,:,2) * bucket_overflow
+      else
+         pme_spread = pme_spread + tile_frac(:,:,2) * (precip - evap_tile(:,:,2))
+      endif
+   else
+   call mixed_layer_uncoupled_pme(pme_spread)
    if (bucket) then
       where (land) pme_spread = 0.
       if (finite_bucket_depth_over_land) then
          where (land) runoff = bucket_overflow
       endif
    endif
+   endif
    call ocean_coupler_put_runoff(Time, runoff, routed, pme_spread)
    if (id_cpl_runoff > 0) used = send_data(id_cpl_runoff, routed, Time)
 endif
 
+contains
+
+subroutine call_surface_flux(ts, qs, bd, lh, landm, rm, rh, rq)
+! surface_flux for one surface (the whole cell, or one tile) with the lowest model level;
+! the fluxes and their derivatives go to the module arrays (flux_t, ..., rh_2m)
+real, intent(in),    dimension(:,:) :: ts, rm, rh, rq
+real, intent(inout), dimension(:,:) :: qs, bd, lh
+logical, intent(in), dimension(:,:) :: landm
+  call surface_flux(                                                        &
+                  tg(:,:,num_levels,previous),                              &
+ grid_tracers(:,:,num_levels,previous,nsphum),                              &
+                  ug(:,:,num_levels,previous),                              &
+                  vg(:,:,num_levels,previous),                              &
+               p_full(:,:,num_levels,current),                              &
+   z_full(:,:,num_levels,current)-z_surf(:,:),                              &
+             p_half(:,:,num_levels+1,current),                              &
+                                           ts,                              &
+                                           ts,                              &
+                                           qs,                              &
+                                       bucket,                              & 
+                                           bd,                              &
+                        max_bucket_depth_land,                              &
+                                           lh,                              &
+                       depth_change_conv(:,:),                              &
+                       depth_change_cond(:,:),                              &
+                                  u_surf(:,:),                              &
+                                  v_surf(:,:),                              &
+                                           rm,                              &
+                                           rh,                              &
+                                           rq,                              &
+                                           rm,                              &
+                                    gust(:,:),                              &
+                                  flux_t(:,:),                              &
+                                  flux_q(:,:),                              &
+                                  flux_r(:,:),                              &
+                                  flux_u(:,:),                              &
+                                  flux_v(:,:),                              &
+                                  drag_m(:,:),                              &
+                                  drag_t(:,:),                              &
+                                  drag_q(:,:),                              &
+                                   w_atm(:,:),                              &
+                                   ustar(:,:),                              &
+                                   bstar(:,:),                              &
+                                   qstar(:,:),                              &
+                               dhdt_surf(:,:),                              &
+                               dedt_surf(:,:),                              &
+                               dedq_surf(:,:),                              &
+                               drdt_surf(:,:),                              &
+                                dhdt_atm(:,:),                              &
+                                dedq_atm(:,:),                              &
+                              dtaudu_atm(:,:),                              &
+                              dtaudv_atm(:,:),                              &
+                              q_surf_out(:,:),                              & ! is intent(out)                              
+                                ex_del_m(:,:),                              &
+                                ex_del_h(:,:),                              &
+                                ex_del_q(:,:),                              &
+                                 temp_2m(:,:),                              &
+                                   u_10m(:,:),                              &
+                                   v_10m(:,:),                              &
+                                    q_2m(:,:),                              &
+                                   rh_2m(:,:),                              &
+                                      delta_t,                              &
+                                        landm,                              &
+                                   .not.landm,                              &
+                                  avail(:,:)  )
+end subroutine call_surface_flux
+
+subroutine tile_surface_fluxes()
+! Surface fluxes on each tile; the cell gets their sums weighted by area. The bucket is
+! the land tile's (cells with no land keep the ocean's evaporation in it, as without tiles).
+integer :: k
+real, dimension(size(t_surf,1), size(t_surf,2)) :: lh
+logical, dimension(size(t_surf,1), size(t_surf,2)) :: landm
+tile_diag = 0.
+do k = 1, n_tiles
+  if (k == 1) then
+    bucket_tile = bucket_depth(:,:,current)
+    where (tile_frac(:,:,2) > 0.) bucket_tile = init_bucket_depth
+  else
+    bucket_tile = bucket_depth(:,:,current)
+  endif
+  lh = depth_change_lh
+  landm = (k == 2)
+  call call_surface_flux(t_surf_tile(:,:,k), q_surf_tile(:,:,k), bucket_tile, lh, landm, &
+                         rough_mom_tile(:,:,k), rough_heat_tile(:,:,k), rough_moist_tile(:,:,k))
+  lh_tile(:,:,k) = lh
+  flux_t_tile(:,:,k) = flux_t ; flux_q_tile(:,:,k) = flux_q ; flux_r_tile(:,:,k) = flux_r
+  flux_u_tile(:,:,k) = flux_u ; flux_v_tile(:,:,k) = flux_v
+  dhdt_surf_tile(:,:,k) = dhdt_surf ; dedt_surf_tile(:,:,k) = dedt_surf
+  dedq_surf_tile(:,:,k) = dedq_surf ; drdt_surf_tile(:,:,k) = drdt_surf
+  dhdt_atm_tile(:,:,k) = dhdt_atm ; dedq_atm_tile(:,:,k) = dedq_atm
+  ! the rest are only needed for the cell: accumulate them
+  call add_tile(tile_diag(:,:,1), dtaudu_atm, k) ; call add_tile(tile_diag(:,:,2), dtaudv_atm, k)
+  call add_tile(tile_diag(:,:,3), drag_m, k) ; call add_tile(tile_diag(:,:,4), drag_t, k)
+  call add_tile(tile_diag(:,:,5), drag_q, k) ; call add_tile(tile_diag(:,:,6), w_atm, k)
+  call add_tile(tile_diag(:,:,7), ustar, k) ; call add_tile(tile_diag(:,:,8), bstar, k)
+  call add_tile(tile_diag(:,:,9), qstar, k) ; call add_tile(tile_diag(:,:,10), q_surf_out, k)
+  call add_tile(tile_diag(:,:,11), temp_2m, k) ; call add_tile(tile_diag(:,:,12), u_10m, k)
+  call add_tile(tile_diag(:,:,13), v_10m, k) ; call add_tile(tile_diag(:,:,14), q_2m, k)
+  call add_tile(tile_diag(:,:,15), rh_2m, k)
+enddo
+flux_t = tile_sum(flux_t_tile) ; flux_q = tile_sum(flux_q_tile) ; flux_r = tile_sum(flux_r_tile)
+flux_u = tile_sum(flux_u_tile) ; flux_v = tile_sum(flux_v_tile)
+dhdt_surf = tile_sum(dhdt_surf_tile) ; dedt_surf = tile_sum(dedt_surf_tile)
+dedq_surf = tile_sum(dedq_surf_tile) ; drdt_surf = tile_sum(drdt_surf_tile)
+dhdt_atm = tile_sum(dhdt_atm_tile) ; dedq_atm = tile_sum(dedq_atm_tile)
+dtaudu_atm = tile_diag(:,:,1) ; dtaudv_atm = tile_diag(:,:,2)
+drag_m = tile_diag(:,:,3) ; drag_t = tile_diag(:,:,4) ; drag_q = tile_diag(:,:,5)
+w_atm = tile_diag(:,:,6) ; ustar = tile_diag(:,:,7) ; bstar = tile_diag(:,:,8) ; qstar = tile_diag(:,:,9)
+q_surf_out = tile_diag(:,:,10) ; temp_2m = tile_diag(:,:,11) ; u_10m = tile_diag(:,:,12)
+v_10m = tile_diag(:,:,13) ; q_2m = tile_diag(:,:,14) ; rh_2m = tile_diag(:,:,15)
+q_surf = tile_sum(q_surf_tile)
+depth_change_lh = lh_tile(:,:,1)
+where (tile_frac(:,:,2) > 0.) depth_change_lh = lh_tile(:,:,2)
+end subroutine tile_surface_fluxes
+
+subroutine tile_mixed_layer()
+! The mixed layer (and sea ice, and coupling on the ocean tile) on each tile, each with
+! the same lowest-level atmosphere; the increments to that level are combined by area,
+! fn + sum_k f_k en_k dTs_k (see mixed_layer).
+integer :: k
+real, dimension(size(t_surf,1), size(t_surf,2)) :: dt_save, dq_save, dt_acc, dq_acc, ts_old
+dt_save = Tri_surf%delta_t
+dq_save = Tri_surf%delta_tr(:,:,nsphum)
+dt_acc = 0. ; dq_acc = 0.
+! net shortwave on each tile, from the cell's (which used the area-weighted albedo); the
+! ratio is taken first so a tile alone in its cell gets exactly the cell's shortwave
+do k = 1, n_tiles
+  sw_tile(:,:,k) = net_surf_sw_down
+  where (albedo < 1.) sw_tile(:,:,k) = net_surf_sw_down * ((1. - albedo_tile(:,:,k)) / (1. - albedo))
+enddo
+do k = 1, n_tiles
+  Tri_surf%delta_t = dt_save
+  Tri_surf%delta_tr(:,:,nsphum) = dq_save
+  ts_old = t_surf_tile(:,:,k)
+  call mixed_layer(Time, Time+Time_step, js, je, t_surf_tile(:,:,k), &
+                   h_ice_tile(:,:,k), t_ml_tile(:,:,k), cc_tile, nudge_tile, &
+                   flux_t_tile(:,:,k), flux_q_tile(:,:,k), flux_r_tile(:,:,k), dt_real, &
+                   sw_tile(:,:,k), surf_lw_down, Tri_surf, &
+                   dhdt_surf_tile(:,:,k), dedt_surf_tile(:,:,k), dedq_surf_tile(:,:,k), &
+                   drdt_surf_tile(:,:,k), dhdt_atm_tile(:,:,k), dedq_atm_tile(:,:,k), &
+                   albedo_tile(:,:,k), flux_u=flux_u_tile(:,:,k), flux_v=flux_v_tile(:,:,k), &
+                   precip=precip, psurf=p_half(:,:,num_levels+1,previous), &
+                   tile=k, dhdt_atm_grid=dhdt_atm, dedq_atm_grid=dedq_atm)
+  call add_tile(dt_acc, Tri_surf%delta_t, k)
+  call add_tile(dq_acc, Tri_surf%delta_tr(:,:,nsphum), k)
+  dts_tile(:,:,k) = t_surf_tile(:,:,k) - ts_old
+enddo
+Tri_surf%delta_t = dt_acc
+Tri_surf%delta_tr(:,:,nsphum) = dq_acc
+call combine_tile_surface()
+call mixed_layer_tile_diagnostics(Time+Time_step, t_surf, flux_t, HLV*flux_q, tile_sum(dts_tile), albedo)
+! with a coupled ocean the ocean tile is what the ocean model covers, wherever it covers any
+if (ocean_coupler_active()) then
+  call mixed_layer_tile_coupling(cpl_frac, evap_tile)
+  ! land the coupled fractions add to a cell the land file had as ocean starts a land bucket
+  if (bucket) then
+    do k = 1, size(bucket_depth, 3)
+      where (cpl_frac > 0. .and. cpl_frac < 1. .and. tile_frac(:,:,2) <= 0.) &
+        bucket_depth(:,:,k) = init_bucket_depth_land
+    enddo
+  endif
+  where (cpl_frac > 0.)
+    tile_frac(:,:,1) = cpl_frac
+    tile_frac(:,:,2) = 1. - cpl_frac
+  end where
+endif
+end subroutine tile_mixed_layer
+
+subroutine add_tile(acc, x, k)
+real, intent(inout), dimension(:,:) :: acc
+real, intent(in),    dimension(:,:) :: x
+integer, intent(in) :: k
+acc = acc + tile_frac(:,:,k) * x
+end subroutine add_tile
+
 end subroutine idealized_moist_phys
 !=================================================================================================================================
+subroutine alloc_tile(a)
+real, allocatable, intent(inout) :: a(:,:,:)
+allocate(a(is:ie, js:je, n_tiles)); a = 0.
+end subroutine alloc_tile
+
+!=================================================================================================================================
+
+function tile_sum(x)
+! area-weighted sum over the surface tiles
+real, intent(in) :: x(:,:,:)
+real, dimension(size(x,1), size(x,2)) :: tile_sum
+tile_sum = tile_frac(:,:,1) * x(:,:,1) + tile_frac(:,:,2) * x(:,:,2)
+end function tile_sum
+
+!=================================================================================================================================
+
+subroutine combine_tile_surface()
+! The cell's surface as the radiation sees it: albedo weighted by area, and the temperature
+! whose sigma*T**4 is the area-weighted upward longwave (exactly a tile's where it is alone).
+! The cell's sea ice and mixed-layer temperature are the ocean tile's.
+where (tile_frac(:,:,2) <= 0.)
+  t_surf = t_surf_tile(:,:,1)
+elsewhere (tile_frac(:,:,1) <= 0.)
+  t_surf = t_surf_tile(:,:,2)
+elsewhere
+  t_surf = (tile_frac(:,:,1) * t_surf_tile(:,:,1)**4 + tile_frac(:,:,2) * t_surf_tile(:,:,2)**4)**0.25
+end where
+albedo = tile_sum(albedo_tile)
+h_thermo_ice = h_ice_tile(:,:,1)
+t_ml = t_ml_tile(:,:,1)
+end subroutine combine_tile_surface
+
+!=================================================================================================================================
+
+subroutine init_tile_state()
+! Each tile starts from the cell's surface state, unless the tiles' own restart file exists.
+integer :: k
+character(len=5), dimension(n_tiles) :: tname = (/ 'ocean', 'land ' /)
+do k = 1, n_tiles
+  t_surf_tile(:,:,k) = t_surf
+  h_ice_tile(:,:,k) = h_thermo_ice
+  t_ml_tile(:,:,k) = t_ml
+  q_surf_tile(:,:,k) = q_surf
+enddo
+call mixed_layer_tile_albedo(albedo, albedo_tile)
+if (file_exist('INPUT/surface_tiles.res.nc')) then
+  call nullify_domain()
+  do k = 1, n_tiles
+    call read_data('INPUT/surface_tiles.res', 't_surf_'//trim(tname(k)), t_surf_tile(:,:,k), grid_domain)
+    call read_data('INPUT/surface_tiles.res', 'h_ice_'//trim(tname(k)), h_ice_tile(:,:,k), grid_domain)
+    call read_data('INPUT/surface_tiles.res', 't_ml_'//trim(tname(k)), t_ml_tile(:,:,k), grid_domain)
+    call read_data('INPUT/surface_tiles.res', 'albedo_'//trim(tname(k)), albedo_tile(:,:,k), grid_domain)
+  enddo
+  call read_data('INPUT/surface_tiles.res', 'frac_ocean', tile_frac(:,:,1), grid_domain)
+  tile_frac(:,:,2) = 1. - tile_frac(:,:,1)
+endif
+call combine_tile_surface()
+end subroutine init_tile_state
+
+!=================================================================================================================================
+
+subroutine write_tile_restart()
+integer :: k
+character(len=5), dimension(n_tiles) :: tname = (/ 'ocean', 'land ' /)
+call nullify_domain()
+do k = 1, n_tiles
+  call write_data('RESTART/surface_tiles.res', 't_surf_'//trim(tname(k)), t_surf_tile(:,:,k), grid_domain)
+  call write_data('RESTART/surface_tiles.res', 'h_ice_'//trim(tname(k)), h_ice_tile(:,:,k), grid_domain)
+  call write_data('RESTART/surface_tiles.res', 't_ml_'//trim(tname(k)), t_ml_tile(:,:,k), grid_domain)
+  call write_data('RESTART/surface_tiles.res', 'albedo_'//trim(tname(k)), albedo_tile(:,:,k), grid_domain)
+enddo
+call write_data('RESTART/surface_tiles.res', 'frac_ocean', tile_frac(:,:,1), grid_domain)
+end subroutine write_tile_restart
+
+!=================================================================================================================================
+
 subroutine idealized_moist_phys_end
 
 deallocate (dt_bucket, filt)
@@ -1567,6 +1848,7 @@ if(turb) then
    call vert_turb_driver_end
 endif
 call lscale_cond_end
+if(surface_tiles) call write_tile_restart()
 if(mixed_layer_bc)  call mixed_layer_end(t_surf, &
                                          h_thermo_ice, t_ml, const_correct, nudge_out, albedo, & ! NTL 01/23 thermodynamic sea ice
                                          bucket_depth, bucket)

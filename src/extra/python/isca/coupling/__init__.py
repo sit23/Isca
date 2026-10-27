@@ -169,7 +169,7 @@ def write_runoff_routing(fname, dest):
 
 def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean_shape,
                     ocean_grid, ocean_coupling_period=None, nlogprt=1, sst_lag=None,
-                    ocean_to_isca=OCEAN_TO_ISCA):
+                    ocean_to_isca=OCEAN_TO_ISCA, surface_tiles=False):
     """Write the OASIS3-MCT namcouple file.
 
     Fluxes from Isca are averaged by OASIS over the coupling period (LOCTRANS
@@ -178,6 +178,11 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
     the ocean seeing the fluxes of the previous coupling period and Isca the
     SST at the end of the previous ocean step (the usual concurrent coupling).
     If the ocean grid differs from Isca's, fields are remapped conservatively.
+
+    With surface_tiles (Isca's fractional surface tiles) Isca sends the fluxes of its
+    ocean tile, per unit area of ocean, from every cell with ocean in it. They are then
+    all remapped like runoff, from the unmasked grid by overlap area (DESTAREA), so the
+    ocean gets exactly what each cell's ocean tile gave up.
     """
     ocean_coupling_period = ocean_coupling_period or coupling_period
     sst_lag = ocean_coupling_period if sst_lag is None else sst_lag
@@ -196,17 +201,18 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
         # Runoff arrives in coastal cells that the ocean may barely cover. Isca has already
         # divided it by the covered fraction, so it must be remapped from the unmasked grid
         # by overlap area (DESTAREA); FRACNNEI would hand a sliver's value to whole ocean
-        # cells lying under Isca land and multiply the water delivered.
-        runoff = (src == 'ISCA_RUNOFF')
+        # cells lying under Isca land and multiply the water delivered. With surface tiles
+        # every flux goes this way.
+        by_overlap = (src == 'ISCA_RUNOFF') or surface_tiles
         lines += ['%s %s 1 %d %d %s EXPORTED' % (src, tgt, coupling_period, ntrans, ISCA_RESTART),
                   '%d %d %d %d %s %s LAG=+%d' % (nx, ny, ox, oy,
-                                                 ISCA_GRID_RUNOFF if runoff and not same_grid else ISCA_GRID,
+                                                 ISCA_GRID_RUNOFF if by_overlap and not same_grid else ISCA_GRID,
                                                  ocean_grid, atmos_dt),
                   'P 0 P 0',
                   'LOCTRANS' if same_grid else 'LOCTRANS SCRIPR',
                   'AVERAGE']
         if not same_grid:
-            lines.append(conserv.replace('FRACAREA', 'DESTAREA') if runoff else conserv_to_ocean)
+            lines.append(conserv.replace('FRACAREA', 'DESTAREA') if by_overlap else conserv_to_ocean)
     for src, tgt in ocean_to_isca:
         if same_grid:
             lines += ['%s %s 1 %d 0 %s EXPORTED' % (src, tgt, ocean_coupling_period, OCEAN_RESTART),
@@ -291,7 +297,8 @@ class CoupledExperiment(Experiment):
         write_namcouple(os.path.join(self.rundir, 'namcouple'), self.runtime_seconds(),
                         self.coupling_period, int(self.namelist['main_nml']['dt_atmos']),
                         (nlon, nlat), ocean_shape, self.ocean.grid_name, sst_lag=self.ocean.sst_lag,
-                        ocean_to_isca=self.ocean.fields_to_isca)
+                        ocean_to_isca=self.ocean.fields_to_isca,
+                        surface_tiles=bool(self.namelist['idealized_moist_phys_nml'].get('surface_tiles', False)))
 
         coupled = self.ocean.isca_ocean_mask(nlon, nlat)
         if self.land_mask is not None:

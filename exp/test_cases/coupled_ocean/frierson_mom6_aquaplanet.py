@@ -10,6 +10,9 @@ THERMO_ICE=1 turns on Isca's thermodynamic sea ice (zero-layer, Lewis's PR #266)
 over the coupled ocean it grows from MOM6's frazil heat and insulates the ocean,
 in the polar caps it sits on Isca's slab. THERMO_ICE_ALBEDO sets its albedo (0.55).
 
+SURFACE_TILES=1 turns on Isca's fractional surface tiles: each cell's ocean tile covers
+what the ocean model covers, and all fluxes reach the ocean by overlap area.
+
 The ocean is 4 km deep everywhere with no continents, on a grid whose cells
 are exactly Isca's Gaussian-grid cells equatorward of +-80 degrees (MOM6
 cannot include the poles); poleward of that Isca's own slab ocean is used.
@@ -74,6 +77,7 @@ for mod, field in [('dynamics', 'ps'), ('dynamics', 'bk'), ('dynamics', 'pk'),
                    ('mixed_layer', 'cpl_precip'), ('atmosphere', 'cpl_runoff')]:
     diag.add_field(mod, field, time_avg=True)
 THERMO_ICE = bool(int(os.environ.get('THERMO_ICE', 0)))
+SURFACE_TILES = bool(int(os.environ.get('SURFACE_TILES', 0)))
 if THERMO_ICE:
     for field in ('h_thermo_ice', 't_ml', 'albedo', 'flux_thermo_ice', 'cpl_frazil', 'ice_ocean_heat'):
         diag.add_field('mixed_layer', field, time_avg=True)
@@ -82,6 +86,8 @@ exp.diag_table = diag
 exp.namelist = frierson_exp.namelist.copy()
 exp.namelist['main_nml']['days'] = DAYS
 exp.namelist['main_nml']['dt_atmos'] = DT_ATMOS
+if SURFACE_TILES:
+    exp.namelist['idealized_moist_phys_nml']['surface_tiles'] = True
 # slab depth used only for the polar caps outside the MOM6 domain
 exp.namelist['mixed_layer_nml']['depth'] = 20.
 if THERMO_ICE:
