@@ -2,7 +2,9 @@
 
 CONFIG=ridge adds a pole-to-pole ridge (two grid columns at 0E) in both models,
 with a land bucket whose overflow is routed to the ocean (Ridge world, cf.
-Enderton & Marshall 2009).
+Enderton & Marshall 2009). RIDGE_WIDTH widens it to that many degrees of longitude
+(rounded to whole grid columns), leaving a narrower basin as in Vallis & Farneti
+(2009). MOM6_KD sets the ocean's background diapycnal diffusivity (m2/s).
 
 THERMO_ICE=1 turns on Isca's thermodynamic sea ice (zero-layer, Lewis's PR #266):
 over the coupled ocean it grows from MOM6's frazil heat and insulates the ocean,
@@ -44,7 +46,9 @@ NLON, NLAT = 128, 64
 land = None
 if CONFIG == 'ridge':
     land = np.zeros((NLAT, NLON), dtype=bool)
-    land[:, [0, NLON - 1]] = True      # cells centred on 0E and 357.2E
+    # cells centred on 0E and 357.2E by default
+    ncol = int(round(float(os.environ.get('RIDGE_WIDTH', 2 * 360. / NLON)) * NLON / 360.))
+    land[:, np.arange(ncol) - ncol // 2] = True
 
 cb = IscaCodeBase.from_directory(GFDL_BASE)
 
@@ -52,6 +56,8 @@ MAX_LAT = float(os.environ.get('MAX_LAT', 80.))
 OCEAN_DLAT = float(os.environ['OCEAN_DLAT']) if 'OCEAN_DLAT' in os.environ else None
 ocean = MOM6Ocean(MOM6_EXE, num_cores=NCORES_OCEAN, max_lat=MAX_LAT, land_mask=land,
                   regular_dlat=OCEAN_DLAT)
+if 'MOM6_KD' in os.environ:
+    ocean.mom_input['KD'] = float(os.environ['MOM6_KD'])
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=COUPLING_PERIOD,
                         land_mask=land)
 
