@@ -13,6 +13,9 @@ in the polar caps it sits on Isca's slab. THERMO_ICE_ALBEDO sets its albedo (0.5
 SURFACE_TILES=1 turns on Isca's fractional surface tiles: each cell's ocean tile covers
 what the ocean model covers, and all fluxes reach the ocean by overlap area.
 
+SIS2=1 runs GFDL's SIS2 sea ice with MOM6 (mom6_sis2_isca.x) instead of Isca's sea ice;
+Isca sees it as a sea-ice tile. Implies SURFACE_TILES=1 and needs THERMO_ICE=0.
+
 The ocean is 4 km deep everywhere with no continents, on a grid whose cells
 are exactly Isca's Gaussian-grid cells equatorward of +-80 degrees (MOM6
 cannot include the poles); poleward of that Isca's own slab ocean is used.
@@ -27,7 +30,7 @@ import sys
 
 from isca import IscaCodeBase, DiagTable, GFDL_BASE
 from isca.coupling import CoupledExperiment
-from isca.coupling.mom6 import MOM6Ocean, write_isca_land_file
+from isca.coupling.mom6 import MOM6Ocean, MOM6SIS2Ocean, write_isca_land_file
 import numpy as np
 
 sys.path.insert(0, os.path.join(GFDL_BASE, 'exp', 'test_cases', 'frierson'))
@@ -57,8 +60,13 @@ cb = IscaCodeBase.from_directory(GFDL_BASE)
 
 MAX_LAT = float(os.environ.get('MAX_LAT', 80.))
 OCEAN_DLAT = float(os.environ['OCEAN_DLAT']) if 'OCEAN_DLAT' in os.environ else None
-ocean = MOM6Ocean(MOM6_EXE, num_cores=NCORES_OCEAN, max_lat=MAX_LAT, land_mask=land,
-                  regular_dlat=OCEAN_DLAT)
+SIS2 = bool(int(os.environ.get('SIS2', 0)))
+if SIS2:
+    ocean = MOM6SIS2Ocean(os.environ.get('MOM6_ISCA_EXE'), num_cores=NCORES_OCEAN, max_lat=MAX_LAT,
+                          land_mask=land, regular_dlat=OCEAN_DLAT)
+else:
+    ocean = MOM6Ocean(MOM6_EXE, num_cores=NCORES_OCEAN, max_lat=MAX_LAT, land_mask=land,
+                      regular_dlat=OCEAN_DLAT)
 if 'MOM6_KD' in os.environ:
     ocean.mom_input['KD'] = float(os.environ['MOM6_KD'])
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=COUPLING_PERIOD,
@@ -77,7 +85,9 @@ for mod, field in [('dynamics', 'ps'), ('dynamics', 'bk'), ('dynamics', 'pk'),
                    ('mixed_layer', 'cpl_precip'), ('atmosphere', 'cpl_runoff')]:
     diag.add_field(mod, field, time_avg=True)
 THERMO_ICE = bool(int(os.environ.get('THERMO_ICE', 0)))
-SURFACE_TILES = bool(int(os.environ.get('SURFACE_TILES', 0)))
+SURFACE_TILES = bool(int(os.environ.get('SURFACE_TILES', 0))) or SIS2
+if SIS2 and THERMO_ICE:
+    raise ValueError('SIS2=1 replaces Isca\'s sea ice: use THERMO_ICE=0')
 if THERMO_ICE:
     for field in ('h_thermo_ice', 't_ml', 'albedo', 'flux_thermo_ice', 'cpl_frazil', 'ice_ocean_heat'):
         diag.add_field('mixed_layer', field, time_avg=True)

@@ -65,7 +65,8 @@ use interpolator_mod, only: interpolate_type,interpolator_init&
 !mj q-flux
 use qflux_mod, only: qflux_init,qflux,warmpool
 ! coupling to an external ocean model (MOM6, ML ocean) through OASIS3-MCT
-use ocean_coupler_mod, only: ocean_coupler_init, ocean_coupler_put, ocean_coupler_get
+use ocean_coupler_mod, only: ocean_coupler_init, ocean_coupler_put, ocean_coupler_get, &
+                             ocean_coupler_has_ice, ocean_coupler_get_ice, ocean_coupler_put_ice
 
 implicit none
 private
@@ -264,7 +265,10 @@ type(interpolate_type),save :: albedo_interp
 logical, allocatable, dimension(:,:) ::      land_mask
 
 ! Fractional surface tiles (idealized_moist_phys_nml surface_tiles): every cell has an
-! ocean tile (1) and a land tile (2), and mixed_layer is called once for each. These hold
+! ocean tile (1, the coupled ocean when there is one; open water when the ocean component
+! has a sea-ice model), a land tile (2), a slab-ocean tile (3, ocean the coupled ocean
+! model does not cover) and a sea-ice tile (4, the ice of the ocean component's sea-ice
+! model, e.g. SIS2), and mixed_layer is called once for each. These hold
 ! the land mask the model was started with, and the heat capacity and initial albedo of
 ! each tile; land_mask, land_sea_heat_capacity and albedo_initial are set from them for
 ! the tile being stepped.
@@ -272,6 +276,10 @@ logical :: surface_tiles = .false.
 logical, allocatable, dimension(:,:) :: land_mask_grid
 real, allocatable, dimension(:,:,:) :: heat_cap_tile, albedo_initial_tile
 real, allocatable, dimension(:,:,:) :: tile_evap   ! coupled: each tile's evaporation [kg/m2/s]
+! with an ocean component that has a sea-ice model: its ice fraction (of the ocean), surface
+! temperature and albedo as last received, and the albedo the radiation last used for the ice
+real, allocatable, dimension(:,:) :: ice_frac_cpl, ice_ts_cpl, ice_alb_cpl, ice_alb_rad
+logical :: coupled_ice = .false.
 
 logical :: coupled = .false.
 real, allocatable, dimension(:,:) :: sst_coupled, ocean_frac_coupled
@@ -379,7 +387,7 @@ allocate(land_mask                 (is:ie, js:je)); land_mask=land
 allocate(land_mask_grid            (is:ie, js:je)); land_mask_grid=land
 if (present(tiles)) surface_tiles = tiles
 if (surface_tiles) then
-  allocate(heat_cap_tile(is:ie, js:je, 2), albedo_initial_tile(is:ie, js:je, 2))
+  allocate(heat_cap_tile(is:ie, js:je, 4), albedo_initial_tile(is:ie, js:je, 4))
   heat_cap_tile = depth*RHO_CP ; albedo_initial_tile = albedo_value
   if (update_albedo_from_ice .or. do_nudge_ice .or. do_nudging_correction .or. add_latent_heat_flux_anom) &
     call error_mesg('mixed_layer', 'surface_tiles cannot be used with update_albedo_from_ice, '// &
@@ -704,6 +712,8 @@ if ((.not. do_thermo_ice) .and. (.not. do_prescribe_albedo)) then ! NTL 01/23 th
         albedo_initial_tile(:,:,1) = albedo_value
         if (trim(land_option) .eq. 'input') albedo_initial_tile(:,:,2) = land_albedo_prefactor * albedo_value
       endif
+      albedo_initial_tile(:,:,3) = albedo_initial_tile(:,:,1)
+      albedo_initial_tile(:,:,4) = albedo_initial_tile(:,:,1)
     endif
 
     if (update_albedo_from_ice) then
@@ -788,6 +798,8 @@ if (do_calc_eff_heat_cap) then
       heat_cap_tile(:,:,1) = land_sea_heat_capacity
       heat_cap_tile(:,:,2) = land_sea_heat_capacity
     endif
+    if (surface_tiles) heat_cap_tile(:,:,3) = heat_cap_tile(:,:,1)
+    if (surface_tiles) heat_cap_tile(:,:,4) = heat_cap_tile(:,:,1)
 endif !end of if(.not.do_sc_sst)
 
 if ( id_heat_cap > 0 ) used = send_data ( id_heat_cap, land_sea_heat_capacity )
@@ -821,7 +833,18 @@ if (trim(ocean_coupling) == 'oasis') then
   allocate(frazil_coupled(is:ie, js:je), ice_ocean_heat(is:ie, js:je), ice_covered_coupled(is:ie, js:je))
   frazil_coupled = 0. ; ice_ocean_heat = 0. ; ice_covered_coupled = .false.
   if (surface_tiles) then
-    allocate(tile_evap(is:ie, js:je, 2)); tile_evap = 0.
+    allocate(tile_evap(is:ie, js:je, 4)); tile_evap = 0.
+    coupled_ice = ocean_coupler_has_ice()
+    if (coupled_ice) then
+      if (do_thermo_ice) call error_mesg('mixed_layer', 'the ocean component has a sea-ice '// &
+          'model: do_thermo_ice must be off', FATAL)
+      allocate(ice_frac_cpl(is:ie, js:je), ice_ts_cpl(is:ie, js:je), ice_alb_cpl(is:ie, js:je), &
+               ice_alb_rad(is:ie, js:je))
+      ice_frac_cpl = 0. ; ice_ts_cpl = t_surf ; ice_alb_cpl = albedo_value ; ice_alb_rad = albedo_value
+    endif
+  else if (ocean_coupler_has_ice()) then
+    call error_mesg('mixed_layer', 'the ocean component has a sea-ice model: '// &
+        'it needs surface_tiles', FATAL)
   endif
   if (do_thermo_ice) then
     if (update_albedo_from_ice) call error_mesg('mixed_layer', 'do_thermo_ice and the prescribed-ice '// &
@@ -885,13 +908,13 @@ type(surf_diff_type), intent(inout) :: Tri_surf
 ! needed only when coupled to an external ocean: surface stress on the atmosphere [Pa],
 ! precipitation reaching the surface [kg/m2/s] and surface pressure [Pa]
 real, intent(in), dimension(:,:), optional :: flux_u, flux_v, precip, psurf
-! with surface_tiles: the tile being stepped (1 ocean, 2 land), and the cell's total
+! with surface_tiles: the tile being stepped (1 ocean, 2 land, 3 slab ocean), and the cell's total
 ! d(sensible heat)/d(T_atm) and d(evaporation)/d(q_atm) over all tiles, which set the
 ! implicit response of the lowest atmospheric level. The caller combines the tiles'
 ! increments to the lowest level, Tri_surf%delta_t and delta_tr, weighted by area.
 integer, intent(in), optional :: tile
 real, intent(in), dimension(:,:), optional :: dhdt_atm_grid, dedq_atm_grid
-logical :: ocean_tile, grid_diags
+logical :: ocean_tile, grid_diags, ice_tile
 real, dimension(size(t_surf,1),size(t_surf,2)) :: sens_out, evap_out, lwnet_out, swnet_out, dts_flux
 real, dimension(size(t_surf,1),size(t_surf,2)) :: h_ice_old, t_surf_old, frac_cpl, basal_flux, melt_excess
 real, dimension(size(t_surf,1),size(t_surf,2)) :: h_old_save, t_surf_save, frazil_here
@@ -911,9 +934,13 @@ endif
 ! coupling, and diagnostics of the whole cell are sent by mixed_layer_tile_diagnostics.
 ocean_tile = .true.
 grid_diags = .true.
+ice_tile = .false.
 if (present(tile)) then
   if (.not. surface_tiles) call error_mesg('mixed_layer', 'tile given but surface_tiles is off', FATAL)
   ocean_tile = (tile == 1)
+  ice_tile = (tile == 4)
+  if (ice_tile .and. .not. coupled_ice) call error_mesg('mixed_layer', &
+      'sea-ice tile without a sea-ice model in the ocean component', FATAL)
   grid_diags = .false.
   land_mask = (tile == 2)
   land_sea_heat_capacity = heat_cap_tile(:,:,tile)
@@ -1049,6 +1076,7 @@ if (coupled .and. ocean_tile) then
   ! SST from the ocean component: only changes at coupling times, so between
   ! them delta_t_surf is zero over the coupled points.
   call ocean_coupler_get(Time, sst_coupled, ocean_frac_coupled, sst_received, frazil_coupled)
+  if (coupled_ice) call ocean_coupler_get_ice(Time, ice_frac_cpl, ice_ts_cpl, ice_alb_cpl)
   coupled_mask = (ocean_frac_coupled > coupled_ocean_frac_threshold) .and. .not. land_ice_mask
   ! with tiles the ocean tile is the ocean model's ocean wherever there is any
   if (surface_tiles) coupled_mask = (ocean_frac_coupled > 0.)
@@ -1118,7 +1146,17 @@ if (do_ape_sst) then
 endif
 
 
-if (.not. do_thermo_ice) then ! NTL 01/23 thermodynamic sea ice switch 
+if (ice_tile) then
+    ! sea ice of the ocean component's ice model: its surface temperature and albedo are
+    ! prescribed here, and the ice model steps them
+    where (ice_frac_cpl > 0.)
+      delta_t_surf = ice_ts_cpl - t_surf
+      t_surf = ice_ts_cpl
+      albedo_out = ice_alb_cpl
+    elsewhere
+      delta_t_surf = 0.
+    end where
+else if (.not. do_thermo_ice) then ! NTL 01/23 thermodynamic sea ice switch 
 
     if (do_calc_eff_heat_cap) then
       !s use the land_sea_heat_capacity calculated in mixed_layer_init
@@ -1296,6 +1334,19 @@ if (coupled .and. surface_tiles) then
   if (do_explicit) dts_flux = 0.
   tile_evap(:,:,tile) = 0.
   if (evaporation) tile_evap(:,:,tile) = alpha_q + beta_q * dts_flux
+endif
+
+if (coupled .and. ice_tile) then
+  ! fluxes over the ice, at the surface temperature the ice model sent, with their
+  ! derivatives so it can apply them at each ice category's own temperature
+  sens_out = CP_AIR * (alpha_t + beta_t * dts_flux)
+  evap_out = 0.
+  if (evaporation) evap_out = alpha_q + beta_q * dts_flux
+  swnet_out = net_surf_sw_down   ! here the downward shortwave, before the ice albedo
+  where (ice_alb_rad < 1.) swnet_out = net_surf_sw_down / (1. - ice_alb_rad)
+  call ocean_coupler_put_ice(Time, -flux_u, -flux_v, swnet_out, surf_lw_down, sens_out, &
+                             dhdt_surf, evap_out, dedt_surf, precip, 0.*precip)
+  ice_alb_rad = albedo_out
 endif
 
 if (coupled .and. ocean_tile) then
@@ -1498,13 +1549,15 @@ end subroutine read_ice_conc
 
 subroutine mixed_layer_tile_albedo(albedo, albedo_tile)
 ! Initial albedo of each surface tile (surface_tiles). With do_thermo_ice or
-! do_prescribe_albedo the albedo is part of the state, and both tiles start from the
+! do_prescribe_albedo the albedo is part of the state, and all tiles start from the
 ! albedo of the cell.
 real, intent(in),  dimension(:,:)   :: albedo
 real, intent(out), dimension(:,:,:) :: albedo_tile
+integer :: k
 if (do_thermo_ice .or. do_prescribe_albedo) then
-  albedo_tile(:,:,1) = albedo
-  albedo_tile(:,:,2) = albedo
+  do k = 1, size(albedo_tile, 3)
+    albedo_tile(:,:,k) = albedo
+  enddo
 else
   albedo_tile = albedo_initial_tile
 endif
@@ -1512,16 +1565,19 @@ end subroutine mixed_layer_tile_albedo
 
 !=================================================================================================================================
 
-subroutine mixed_layer_tile_coupling(ocean_frac, evap)
+subroutine mixed_layer_tile_coupling(ocean_frac, evap, ice_frac)
 ! With surface_tiles and a coupled ocean: the fraction of each cell the ocean model covers,
-! as last received, and each tile's evaporation from the last step [kg/m2/s].
-real, intent(out), dimension(:,:)   :: ocean_frac
+! as last received, each tile's evaporation from the last step [kg/m2/s], and the fraction
+! of that ocean covered by the ocean component's sea ice (zero without a sea-ice model).
+real, intent(out), dimension(:,:)   :: ocean_frac, ice_frac
 real, intent(out), dimension(:,:,:) :: evap
 ocean_frac = 0.
 evap = 0.
+ice_frac = 0.
 if (.not. coupled) return
 ocean_frac = min(max(ocean_frac_coupled, 0.), 1.)
 if (allocated(tile_evap)) evap = tile_evap
+if (coupled_ice) ice_frac = min(max(ice_frac_cpl, 0.), 1.)
 end subroutine mixed_layer_tile_coupling
 
 !=================================================================================================================================

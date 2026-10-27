@@ -18,7 +18,7 @@ import shutil
 import netCDF4
 import numpy as np
 
-from isca.coupling import OceanComponent, OCEAN_RESTART, OCEAN_TO_ISCA
+from isca.coupling import OceanComponent, OCEAN_RESTART, OCEAN_TO_ISCA, ISCA_TO_OCEAN
 
 ISCA_RADIUS = 6376.0e3     # constants_mod RADIUS
 ISCA_CP_OCEAN = 3989.24495292815
@@ -636,3 +636,107 @@ class MOM6EarthOcean(MOM6Ocean):
                 v = nc.createVariable(name, 'f8', ('depth', 'lat', 'lon'), fill_value=-1.e20)
                 v.missing_value = -1.e20
                 v[:] = np.where(np.isfinite(data), data, -1.e20)
+
+
+# Sea-ice fields Isca sends with SIS2 (Isca name -> ocean name): fluxes over its sea-ice
+# tile at the ice surface temperature it was sent, with their derivatives
+ISCA_TO_SIS2 = [('ISCA_ITAUX', 'ICE_TAUX'), ('ISCA_ITAUY', 'ICE_TAUY'),
+                ('ISCA_ISWDN', 'ICE_SWDN'), ('ISCA_ILWDN', 'ICE_LWDN'),
+                ('ISCA_ISENS', 'ICE_SENS'), ('ISCA_IDHDT', 'ICE_DHDT'),
+                ('ISCA_IEVAP', 'ICE_EVAP'), ('ISCA_IDEDT', 'ICE_DEDT'),
+                ('ISCA_IRAIN', 'ICE_RAIN'), ('ISCA_ISNOW', 'ICE_SNOW')]
+# ... and the ice state SIS2 sends (ocean name -> Isca name)
+SIS2_TO_ISCA = [('ICE_FRAC', 'OCN_ICEFR'), ('ICE_TSRF', 'OCN_ICETS'), ('ICE_ALB', 'OCN_ICEAL')]
+
+SIS2_DIAG_TABLE = """
+"ice_month", 1, "months", 1, "days", "time"
+"ice_model", "siconc", "siconc", "ice_month", "all", .true., "none", 2
+"ice_model", "sithick", "sithick", "ice_month", "all", .true., "none", 2
+"ice_model", "EXT", "EXT", "ice_month", "all", .true., "none", 2
+"ice_model", "HI", "HI", "ice_month", "all", .true., "none", 2
+"ice_model", "TS", "TS", "ice_month", "all", .true., "none", 2
+"ice_model", "ALB", "ALB", "ice_month", "all", .true., "none", 2
+"ice_model", "FRAZIL", "FRAZIL", "ice_month", "all", .true., "none", 2
+"ice_model", "SH", "SH", "ice_month", "all", .true., "none", 2
+"ice_model", "LW", "LW", "ice_month", "all", .true., "none", 2
+"ice_model", "SW", "SW", "ice_month", "all", .true., "none", 2
+"ice_model", "BHEAT", "BHEAT", "ice_month", "all", .true., "none", 2
+"""
+
+# SIS2 parameters (beyond the grid and topography, which are copied from MOM_input)
+BASE_SIS_INPUT = {
+    'CONSTANT_COSZEN_IC': 0.5,   # no diurnal cycle in the idealised setups
+    'ADD_DIURNAL_SW': False,
+    'ICE_STATS_INTERVAL': 30.0,
+    'MERGED_CONTINUITY': True,   # needed when ice and ocean steps are interspersed
+}
+# the MOM_input entries SIS2 needs too
+SIS_FROM_MOM = ('REENTRANT_X', 'REENTRANT_Y', 'TRIPOLAR_N', 'NIGLOBAL', 'NJGLOBAL', 'NIHALO', 'NJHALO',
+                'LAYOUT', 'INPUTDIR', 'GRID_CONFIG', 'GRID_FILE', 'TOPO_CONFIG', 'TOPO_FILE',
+                'TOPO_VARNAME', 'MAXIMUM_DEPTH', 'MINIMUM_DEPTH', 'MASKING_DEPTH')
+
+
+class SIS2Mixin(object):
+    """MOM6 with GFDL's SIS2 sea ice in the same executable (mom6_sis2_isca.x), stepped
+    together by SIS2's combined ice-ocean driver. Isca must run with surface_tiles: its
+    sea-ice tile sends fluxes over the ice (ISCA_TO_SIS2), and SIS2 sends back the ice
+    fraction, surface temperature and albedo (SIS2_TO_ISCA)."""
+    fields_to_isca = OCEAN_TO_ISCA + SIS2_TO_ISCA
+    fields_from_isca = ISCA_TO_OCEAN + ISCA_TO_SIS2
+    sis_input = {}
+
+    def prepare_rundir(self, exp, cold_start):
+        super(SIS2Mixin, self).prepare_rundir(exp, cold_start)
+        odir = self.ocean_dir(exp)
+        mom = {}
+        with open(os.path.join(odir, 'MOM_input')) as f:
+            for line in f:
+                if '=' in line:
+                    k, v = line.split('=', 1)
+                    mom[k.strip()] = v.split('!')[0].strip()
+        sis = {k: mom[k] for k in SIS_FROM_MOM if k in mom}
+        sis.update(BASE_SIS_INPUT)
+        sis['DT_ICE_DYNAMICS'] = float(exp.coupling_period)
+        sis.update(self.sis_input)
+        with open(os.path.join(odir, 'SIS_input'), 'w') as f:
+            f.write(format_mom_input(sis))
+        open(os.path.join(odir, 'SIS_override'), 'w').close()
+        # the combined ice-ocean driver: ice slow thermodynamics, then ocean thermodynamics,
+        # then dynamics of both, within each coupling step
+        with open(os.path.join(odir, 'CIOD_input'), 'w') as f:
+            f.write(format_mom_input({'INTERSPERSE_ICE_OCEAN': True, 'SINGLE_MOM_CALL': False}))
+        with open(os.path.join(odir, 'diag_table'), 'a') as f:
+            f.write(SIS2_DIAG_TABLE)
+        with open(os.path.join(odir, 'input.nml'), 'a') as f:
+            # the ice starts from nothing if there is no ice restart (e.g. a run without
+            # SIS2 continued with it)
+            ice_restart = os.path.exists(os.path.join(odir, 'INPUT', 'ice_model.res.nc'))
+            f.write("&SIS_input_nml\n  output_directory = './'\n  input_filename = '%s'\n"
+                    "  restart_input_dir = 'INPUT/'\n  restart_output_dir = 'RESTART/'\n"
+                    "  parameter_filename = 'SIS_input', 'SIS_override'\n/\n"
+                    % ('r' if ice_restart else 'n'))
+            f.write("&ice_ocean_driver_nml\n  output_directory = './'\n"
+                    "  parameter_filename = 'CIOD_input'\n/\n")
+            f.write("&ice_model_nml\n/\n")
+
+    def save_output(self, exp, outdir):
+        super(SIS2Mixin, self).save_output(exp, outdir)
+        odir = self.ocean_dir(exp)
+        dest = os.path.join(outdir, 'ocean')
+        for f in sorted(os.listdir(odir)):
+            if (f.startswith('ice_') and '.nc' in f) or f in ('SIS_parameter_doc.all', 'SIS_input',
+                                                               'seaice.stats.nc'):
+                shutil.copy(os.path.join(odir, f), dest)
+
+
+class MOM6SIS2Ocean(SIS2Mixin, MOM6Ocean):
+    """MOM6Ocean (idealised domains) with SIS2 sea ice."""
+
+    def __init__(self, executable=None, **kwargs):
+        executable = executable or os.path.expanduser(
+            '~/project_specific_codes/isca_ocean_coupling/mom6_isca/build_sis2/mom6_sis2_isca.x')
+        super(MOM6SIS2Ocean, self).__init__(executable, **kwargs)
+
+
+class MOM6SIS2EarthOcean(SIS2Mixin, MOM6EarthOcean):
+    """MOM6EarthOcean with SIS2 sea ice."""

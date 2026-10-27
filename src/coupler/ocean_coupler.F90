@@ -40,6 +40,14 @@ module ocean_coupler_mod
 !   OCN_FRAZIL           : (optional) heat the ocean added to stop water cooling below
 !                          freezing [W/m2 of ocean], averaged over the last coupling period.
 !                          With Isca's thermodynamic sea ice this heat grows ice instead.
+! With a sea-ice model in the ocean component (SIS2), also (all optional):
+!   sent, over Isca's sea-ice tile, per unit area of ice, at the ice surface temperature
+!   Isca was sent: ISCA_ITAUX, ISCA_ITAUY [Pa, on the ice], ISCA_ISWDN, ISCA_ILWDN [W/m2,
+!   downward, before the ice albedo / emission], ISCA_ISENS [W/m2, up], ISCA_IDHDT
+!   [W/m2/K], ISCA_IEVAP [kg/m2/s, up], ISCA_IDEDT [kg/m2/s/K], ISCA_IRAIN, ISCA_ISNOW
+!   [kg/m2/s, down];
+!   received: OCN_ICEFR [fraction of the ocean covered by ice], OCN_ICETS [K, ice
+!   surface temperature], OCN_ICEAL [broadband ice albedo].
 
 #ifdef ISCA_OASIS
 use mod_oasis
@@ -56,16 +64,19 @@ private
 
 public :: ocean_coupler_init_comp, ocean_coupler_init, ocean_coupler_put, &
           ocean_coupler_get, ocean_coupler_end, ocean_coupler_terminate,  &
-          ocean_coupler_active, ocean_coupler_put_runoff
+          ocean_coupler_active, ocean_coupler_put_runoff, ocean_coupler_put_ice, &
+          ocean_coupler_get_ice, ocean_coupler_has_ice
 
 character(len=128), parameter :: version = '$Id: ocean_coupler.F90 2026-10-23 $'
 character(len=128), parameter :: tagname = '$Name: coupled_ocean_oasis $'
 
-integer, parameter :: n_out = 9, n_in = 3
+integer, parameter :: n_out = 19, n_in = 6
 character(len=11), parameter :: out_names(n_out) = (/ 'ISCA_TAUX  ', 'ISCA_TAUY  ', &
      'ISCA_SWNET ', 'ISCA_LWNET ', 'ISCA_SENS  ', 'ISCA_EVAP  ', 'ISCA_PRECIP', 'ISCA_PSURF ', &
-     'ISCA_RUNOFF' /)
-character(len=10), parameter :: in_names(n_in) = (/ 'OCN_SST   ', 'OCN_FRAC  ', 'OCN_FRAZIL' /)
+     'ISCA_RUNOFF', 'ISCA_ITAUX ', 'ISCA_ITAUY ', 'ISCA_ISWDN ', 'ISCA_ILWDN ', 'ISCA_ISENS ', &
+     'ISCA_IDHDT ', 'ISCA_IEVAP ', 'ISCA_IDEDT ', 'ISCA_IRAIN ', 'ISCA_ISNOW ' /)
+character(len=10), parameter :: in_names(n_in) = (/ 'OCN_SST   ', 'OCN_FRAC  ', 'OCN_FRAZIL', &
+     'OCN_ICEFR ', 'OCN_ICETS ', 'OCN_ICEAL ' /)
 character(len=4),  parameter :: grid_name = 'isca'
 character(len=4),  parameter :: grid_name_runoff = 'iscr'   ! unmasked copy, for runoff
 real, parameter :: frac_min_routed = 1.e-3   ! least ocean fraction a cell needs to receive routed runoff
@@ -356,6 +367,62 @@ endif
 received = .false.
 #endif
 end subroutine ocean_coupler_get
+
+!#######################################################################
+
+logical function ocean_coupler_has_ice()
+! The ocean component has a sea-ice model (it sends the ice state).
+ocean_coupler_has_ice = (in_ids(4) >= 0)
+end function ocean_coupler_has_ice
+
+!#######################################################################
+
+subroutine ocean_coupler_get_ice(Time, ice_frac, ice_tsurf, ice_albedo)
+! The ice state from the ocean component's sea-ice model; unchanged until it arrives.
+type(time_type), intent(in) :: Time
+real, intent(inout), dimension(:,:) :: ice_frac, ice_tsurf, ice_albedo
+#ifdef ISCA_OASIS
+real(kind=8) :: buf(size(ice_frac,1), size(ice_frac,2))
+integer :: date, info, n
+date = seconds_since_start(Time)
+do n = 4, 6
+  if (in_ids(n) < 0) cycle
+  call oasis_get(in_ids(n), date, buf, info)
+  if (.not. is_received(info)) cycle
+  select case (n)
+    case (4) ; ice_frac = buf
+    case (5) ; ice_tsurf = buf
+    case (6) ; ice_albedo = buf
+  end select
+enddo
+#endif
+end subroutine ocean_coupler_get_ice
+
+!#######################################################################
+
+subroutine ocean_coupler_put_ice(Time, taux, tauy, swdn, lwdn, sens, dhdt, evap, dedt, rain, snow)
+! Fluxes over Isca's sea-ice tile (see the field list above). Called every atmospheric
+! timestep; OASIS averages them over the coupling period.
+type(time_type), intent(in) :: Time
+real, intent(in), dimension(:,:) :: taux, tauy, swdn, lwdn, sens, dhdt, evap, dedt, rain, snow
+#ifdef ISCA_OASIS
+real(kind=8) :: buf(size(taux,1), size(taux,2))
+integer :: date, info
+date = seconds_since_start(Time)
+call put_one(10, taux) ; call put_one(11, tauy) ; call put_one(12, swdn)
+call put_one(13, lwdn) ; call put_one(14, sens) ; call put_one(15, dhdt)
+call put_one(16, evap) ; call put_one(17, dedt) ; call put_one(18, rain)
+call put_one(19, snow)
+contains
+subroutine put_one(n, field)
+integer, intent(in) :: n
+real, intent(in) :: field(:,:)
+if (out_ids(n) < 0) return
+buf = field
+call oasis_put(out_ids(n), date, buf, info)
+end subroutine put_one
+#endif
+end subroutine ocean_coupler_put_ice
 
 !#######################################################################
 

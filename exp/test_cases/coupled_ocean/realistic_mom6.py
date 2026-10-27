@@ -6,6 +6,10 @@ M2LiNES), initialised from an OM4 state, coupled hourly through OASIS3-MCT. Poin
 the prescribed AMIP sea-ice climatology keep Isca's slab with ice albedo, and
 the ocean beneath them receives no fluxes.
 
+THERMO_ICE=1 replaces the prescribed ice with Isca's thermodynamic sea ice (zero-layer,
+PR #266) on top of the coupled ocean, grown by MOM6's frazil. SURFACE_TILES=1 turns on
+Isca's fractional surface tiles (ocean, land and slab ocean); it needs THERMO_ICE=1.
+
 Usage:
     NMONTHS=12 python realistic_mom6.py
 """
@@ -33,6 +37,11 @@ with netCDF4.Dataset(land_file) as nc:
     land = np.asarray(nc['land_mask'][:]) > 0.
     zsurf = np.asarray(nc['zsurf'][:])
 
+THERMO_ICE = bool(int(os.environ.get('THERMO_ICE', 0)))
+SURFACE_TILES = bool(int(os.environ.get('SURFACE_TILES', 0)))
+if SURFACE_TILES and not THERMO_ICE:
+    raise ValueError('SURFACE_TILES=1 needs THERMO_ICE=1 (tiles do not support the prescribed-ice lid)')
+
 cb = IscaCodeBase.from_directory(GFDL_BASE)
 ocean = MOM6EarthOcean(MOM6_EXE, OM4, num_cores=int(os.environ.get('NCORES_OCEAN', 16)))
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=3600,
@@ -46,12 +55,15 @@ for mod, field in [('dynamics', 'ps'), ('dynamics', 'bk'), ('dynamics', 'pk'), (
                    ('atmosphere', 'precipitation'), ('mixed_layer', 't_surf'),
                    ('mixed_layer', 'flux_t'), ('mixed_layer', 'flux_lhe'),
                    ('mixed_layer', 'coupled_ocean_frac'), ('mixed_layer', 'cpl_net_heat'),
-                   ('mixed_layer', 'ice_conc'), ('atmosphere', 'cpl_runoff'),
+                   ('atmosphere', 'cpl_runoff'),
                    ('dynamics', 'ucomp'), ('dynamics', 'vcomp'), ('dynamics', 'temp'),
                    ('dynamics', 'sphum'), ('rrtm_radiation', 'olr'), ('rrtm_radiation', 'toa_sw'),
                    ('mixed_layer', 'cpl_evap'), ('mixed_layer', 'cpl_precip'),
                    ('atmosphere', 'bucket_depth')]:
     diag.add_field(mod, field, time_avg=True)
+ice_fields = ('h_thermo_ice', 't_ml', 'albedo', 'cpl_frazil', 'ice_ocean_heat') if THERMO_ICE else ('ice_conc',)
+for field in ice_fields:
+    diag.add_field('mixed_layer', field, time_avg=True)
 exp.diag_table = diag
 
 exp.namelist = f90nml.read(os.path.join(rc_dir, 'namelist_basefile.nml'))
@@ -62,6 +74,18 @@ exp.namelist['mixed_layer_nml'].update({'do_qflux': False, 'load_qflux': False})
 # Without it there are no rivers, and land P-E is spread over the whole ocean.
 exp.namelist['idealized_moist_phys_nml'].update({
     'bucket': True, 'init_bucket_depth_land': 0.15, 'max_bucket_depth_land': 0.15})
+if THERMO_ICE:
+    # ice forms and its base sits at MOM6's surface freezing point (linear, -0.054 K/psu at
+    # about 34.7 psu); thermodynamic ice requires the explicit surface step
+    t_freeze = 273.15 - 0.054 * 34.7
+    exp.namelist['mixed_layer_nml'].update({
+        'update_albedo_from_ice': False,
+        'do_thermo_ice': True, 'do_explicit': True,
+        'thermo_ice_albedo': float(os.environ.get('THERMO_ICE_ALBEDO', 0.55)),
+        't_thermo_ice_base': t_freeze, 't_surf_freeze': t_freeze,
+        'read_const_correct': False, 'read_nudge_out': False})
+if SURFACE_TILES:
+    exp.namelist['idealized_moist_phys_nml']['surface_tiles'] = True
 
 if __name__ == '__main__':
     if not os.environ.get('SKIP_COMPILE'):

@@ -28,7 +28,7 @@ use       cloud_spookie_mod, only: cloud_spookie_init, cloud_spookie
 use         mixed_layer_mod, only: mixed_layer_init, mixed_layer, mixed_layer_end, albedo_calc, &
                                      mixed_layer_uncoupled_pme, mixed_layer_tile_albedo, &
                                      mixed_layer_tile_diagnostics, mixed_layer_tile_coupling
-use       ocean_coupler_mod, only: ocean_coupler_active, ocean_coupler_put_runoff
+use       ocean_coupler_mod, only: ocean_coupler_active, ocean_coupler_put_runoff, ocean_coupler_has_ice
 
 use         lscale_cond_mod, only: lscale_cond_init, lscale_cond, lscale_cond_end
 
@@ -167,9 +167,13 @@ logical :: finite_bucket_depth_over_land = .true. !When using bucket model do we
 logical :: do_local_heating = .false.
 !s end Adding localised heating option from Held-Suarez
 
-! Fractional surface tiles. Every cell has an ocean tile (1) and a land tile (2), covering
-! the fractions tile_frac (land: the land file's values, which may lie between 0 and 1;
-! with a coupled ocean, the ocean tile is the ocean model's coverage wherever it has any).
+! Fractional surface tiles. Every cell has an ocean tile (1), a land tile (2), a
+! slab-ocean tile (3) and a sea-ice tile (4), covering the fractions tile_frac. Land is the land file's value,
+! which may lie between 0 and 1, and the rest is ocean tile. With a coupled ocean, the
+! ocean tile is what the ocean model covers, the slab-ocean tile is the rest of the cell's
+! ocean in the land file (e.g. polar caps beyond the ocean model's edge, inland seas),
+! and land is what remains. If the ocean component has a sea-ice model, the sea-ice
+! tile is its ice and the ocean tile the open water between.
 ! Each tile has its own surface temperature, sea ice, albedo, roughness and humidity;
 ! surface fluxes and the mixed layer are computed on each, and the atmosphere feels the
 ! area-weighted sum, as with an exchange grid. Off by default; with 0/1 fractions it
@@ -197,12 +201,13 @@ real, allocatable, dimension(:,:    ) :: dt_bucket, filt, bucket_diffusion
 real, allocatable, dimension(:,:    ) :: bucket_overflow   ! water above the land bucket capacity [kg/m2/s]
 
 ! surface tiles (see surface_tiles): state, inputs and fluxes of each tile, last index the tile
-integer, parameter :: n_tiles = 2
+integer, parameter :: n_tiles = 4
 real, allocatable, dimension(:,:,:) :: tile_frac, t_surf_tile, h_ice_tile, t_ml_tile, albedo_tile, &
      q_surf_tile, rough_mom_tile, rough_heat_tile, rough_moist_tile, sw_tile, dts_tile, lh_tile, &
      flux_t_tile, flux_q_tile, flux_r_tile, flux_u_tile, flux_v_tile, dhdt_surf_tile, dedt_surf_tile, &
      dedq_surf_tile, drdt_surf_tile, dhdt_atm_tile, dedq_atm_tile, tile_diag, evap_tile
-real, allocatable, dimension(:,:) :: bucket_tile, cc_tile, nudge_tile, cpl_frac
+real, allocatable, dimension(:,:) :: bucket_tile, cc_tile, nudge_tile, cpl_frac, cpl_ice_frac
+real, allocatable, dimension(:,:) :: land_frac_file   ! land fraction from the land file
 
 real, allocatable, dimension(:,:)   ::                                        &
      z_surf,               &   ! surface height
@@ -689,15 +694,24 @@ if (surface_tiles) then
   call alloc_tile(drdt_surf_tile); call alloc_tile(dhdt_atm_tile); call alloc_tile(dedq_atm_tile)
   allocate(tile_diag(is:ie, js:je, 15))
   allocate(bucket_tile(is:ie, js:je), cc_tile(is:ie, js:je), nudge_tile(is:ie, js:je), cpl_frac(is:ie, js:je))
-  cc_tile = 0. ; nudge_tile = 0. ; cpl_frac = 0.
-  tile_frac(:,:,2) = 0.
-  if (trim(land_option) == 'input') tile_frac(:,:,2) = min(max(land_ones, 0.), 1.)
+  allocate(cpl_ice_frac(is:ie, js:je))
+  cc_tile = 0. ; nudge_tile = 0. ; cpl_frac = 0. ; cpl_ice_frac = 0.
+  allocate(land_frac_file(is:ie, js:je)); land_frac_file = 0.
+  if (trim(land_option) == 'input') land_frac_file = min(max(land_ones, 0.), 1.)
+  tile_frac(:,:,2) = land_frac_file
   tile_frac(:,:,1) = 1. - tile_frac(:,:,2)
+  tile_frac(:,:,3) = 0.
+  tile_frac(:,:,4) = 0.
   ! roughness as above, for a tile entirely ocean or land
   rough_mom_tile(:,:,1) = roughness_mom ; rough_heat_tile(:,:,1) = roughness_heat
   rough_moist_tile(:,:,1) = roughness_moist
   rough_mom_tile(:,:,2) = rough_mom_tile(:,:,1) ; rough_heat_tile(:,:,2) = rough_heat_tile(:,:,1)
   rough_moist_tile(:,:,2) = rough_moist_tile(:,:,1)
+  rough_mom_tile(:,:,3) = rough_mom_tile(:,:,1) ; rough_heat_tile(:,:,3) = rough_heat_tile(:,:,1)
+  rough_moist_tile(:,:,3) = rough_moist_tile(:,:,1)
+  ! sea ice: the ocean's roughness for now
+  rough_mom_tile(:,:,4) = rough_mom_tile(:,:,1) ; rough_heat_tile(:,:,4) = rough_heat_tile(:,:,1)
+  rough_moist_tile(:,:,4) = rough_moist_tile(:,:,1)
   if (trim(land_option) == 'input') then
     rough_mom_tile(:,:,2)   = land_roughness_prefactor * rough_mom_tile(:,:,2)
     rough_heat_tile(:,:,2)  = land_roughness_prefactor * rough_heat_tile(:,:,2)
@@ -736,7 +750,8 @@ if(mixed_layer_bc) then
     call mixed_layer_init(is, ie, js, je, num_levels, t_surf, &
                           h_thermo_ice, t_ml, const_correct,nudge_out, &
                           bucket_depth, get_axis_id(), Time, albedo, rad_lonb_2d(:,:), rad_latb_2d(:,:), land, bucket, &
-                          tiles=.true., land_full=(tile_frac(:,:,1) <= 0.))
+                          tiles=.true., land_full=(tile_frac(:,:,1) < 0.))   ! all active: the ocean
+                          ! model may cover part of any cell, and then that cell has an ocean tile
     call init_tile_state()
   else
   call mixed_layer_init(is, ie, js, je, num_levels, t_surf, &
@@ -1560,10 +1575,10 @@ endif
 if (mixed_layer_bc .and. ocean_coupler_active()) then
    runoff = 0.
    if (surface_tiles) then
-      ! the ocean tile's P-E reaches the ocean model directly where it covers the cell and is
-      ! spread elsewhere; the land tile's is held by the bucket, whose overflow is routed
-      pme_spread = 0.
-      where (cpl_frac <= 0.) pme_spread = tile_frac(:,:,1) * (precip - evap_tile(:,:,1))
+      ! the ocean tile's P-E reaches the ocean model directly and the slab-ocean tile's is
+      ! spread; the land tile's is held by the bucket, whose overflow is routed
+      pme_spread = tile_frac(:,:,3) * (precip - evap_tile(:,:,3))
+      where (cpl_frac <= 0.) pme_spread = pme_spread + tile_frac(:,:,1) * (precip - evap_tile(:,:,1))
       if (bucket) then
          if (finite_bucket_depth_over_land) runoff = tile_frac(:,:,2) * bucket_overflow
       else
@@ -1657,12 +1672,10 @@ real, dimension(size(t_surf,1), size(t_surf,2)) :: lh
 logical, dimension(size(t_surf,1), size(t_surf,2)) :: landm
 tile_diag = 0.
 do k = 1, n_tiles
-  if (k == 1) then
-    bucket_tile = bucket_depth(:,:,current)
-    where (tile_frac(:,:,2) > 0.) bucket_tile = init_bucket_depth
-  else
-    bucket_tile = bucket_depth(:,:,current)
-  endif
+  if (.not. tile_active(k)) cycle
+  bucket_tile = bucket_depth(:,:,current)
+  ! the bucket is land's: an ocean tile sharing a cell with land never dries out
+  if (k /= 2) where (tile_frac(:,:,2) > 0.) bucket_tile = init_bucket_depth
   lh = depth_change_lh
   landm = (k == 2)
   call call_surface_flux(t_surf_tile(:,:,k), q_surf_tile(:,:,k), bucket_tile, lh, landm, &
@@ -1704,6 +1717,7 @@ subroutine tile_mixed_layer()
 ! fn + sum_k f_k en_k dTs_k (see mixed_layer).
 integer :: k
 real, dimension(size(t_surf,1), size(t_surf,2)) :: dt_save, dq_save, dt_acc, dq_acc, ts_old
+real, dimension(size(t_surf,1), size(t_surf,2), n_tiles) :: new_frac
 dt_save = Tri_surf%delta_t
 dq_save = Tri_surf%delta_tr(:,:,nsphum)
 dt_acc = 0. ; dq_acc = 0.
@@ -1714,6 +1728,7 @@ do k = 1, n_tiles
   where (albedo < 1.) sw_tile(:,:,k) = net_surf_sw_down * ((1. - albedo_tile(:,:,k)) / (1. - albedo))
 enddo
 do k = 1, n_tiles
+  if (.not. tile_active(k)) cycle
   Tri_surf%delta_t = dt_save
   Tri_surf%delta_tr(:,:,nsphum) = dq_save
   ts_old = t_surf_tile(:,:,k)
@@ -1734,22 +1749,31 @@ Tri_surf%delta_t = dt_acc
 Tri_surf%delta_tr(:,:,nsphum) = dq_acc
 call combine_tile_surface()
 call mixed_layer_tile_diagnostics(Time+Time_step, t_surf, flux_t, HLV*flux_q, tile_sum(dts_tile), albedo)
-! with a coupled ocean the ocean tile is what the ocean model covers, wherever it covers any
+! with a coupled ocean the ocean tile is what the ocean model covers, the slab-ocean tile
+! the rest of the land file's ocean, and land the remainder
 if (ocean_coupler_active()) then
-  call mixed_layer_tile_coupling(cpl_frac, evap_tile)
+  call mixed_layer_tile_coupling(cpl_frac, evap_tile, cpl_ice_frac)
+  new_frac(:,:,1) = cpl_frac * (1. - cpl_ice_frac)
+  new_frac(:,:,4) = cpl_frac * cpl_ice_frac
+  new_frac(:,:,3) = max(1. - land_frac_file - cpl_frac, 0.)
+  new_frac(:,:,2) = max(1. - cpl_frac - new_frac(:,:,3), 0.)
   ! land the coupled fractions add to a cell the land file had as ocean starts a land bucket
   if (bucket) then
     do k = 1, size(bucket_depth, 3)
-      where (cpl_frac > 0. .and. cpl_frac < 1. .and. tile_frac(:,:,2) <= 0.) &
-        bucket_depth(:,:,k) = init_bucket_depth_land
+      where (new_frac(:,:,2) > 0. .and. tile_frac(:,:,2) <= 0.) bucket_depth(:,:,k) = init_bucket_depth_land
     enddo
   endif
-  where (cpl_frac > 0.)
-    tile_frac(:,:,1) = cpl_frac
-    tile_frac(:,:,2) = 1. - cpl_frac
-  end where
+  tile_frac = new_frac
 endif
 end subroutine tile_mixed_layer
+
+logical function tile_active(k)
+! A tile with no area on this PE is skipped. The ocean tile always runs: it does the
+! (collective) ocean coupling; so does the sea-ice tile when the ocean has a sea-ice model.
+integer, intent(in) :: k
+tile_active = (k == 1) .or. any(tile_frac(:,:,k) > 0.)
+if (k == 4 .and. ocean_coupler_active()) tile_active = tile_active .or. ocean_coupler_has_ice()
+end function tile_active
 
 subroutine add_tile(acc, x, k)
 real, intent(inout), dimension(:,:) :: acc
@@ -1771,7 +1795,11 @@ function tile_sum(x)
 ! area-weighted sum over the surface tiles
 real, intent(in) :: x(:,:,:)
 real, dimension(size(x,1), size(x,2)) :: tile_sum
-tile_sum = tile_frac(:,:,1) * x(:,:,1) + tile_frac(:,:,2) * x(:,:,2)
+integer :: k
+tile_sum = tile_frac(:,:,1) * x(:,:,1)
+do k = 2, n_tiles
+  tile_sum = tile_sum + tile_frac(:,:,k) * x(:,:,k)
+enddo
 end function tile_sum
 
 !=================================================================================================================================
@@ -1780,13 +1808,11 @@ subroutine combine_tile_surface()
 ! The cell's surface as the radiation sees it: albedo weighted by area, and the temperature
 ! whose sigma*T**4 is the area-weighted upward longwave (exactly a tile's where it is alone).
 ! The cell's sea ice and mixed-layer temperature are the ocean tile's.
-where (tile_frac(:,:,2) <= 0.)
-  t_surf = t_surf_tile(:,:,1)
-elsewhere (tile_frac(:,:,1) <= 0.)
-  t_surf = t_surf_tile(:,:,2)
-elsewhere
-  t_surf = (tile_frac(:,:,1) * t_surf_tile(:,:,1)**4 + tile_frac(:,:,2) * t_surf_tile(:,:,2)**4)**0.25
-end where
+integer :: k
+t_surf = tile_sum(t_surf_tile**4)**0.25
+do k = 1, n_tiles
+  where (tile_frac(:,:,k) >= 1.) t_surf = t_surf_tile(:,:,k)
+enddo
 albedo = tile_sum(albedo_tile)
 h_thermo_ice = h_ice_tile(:,:,1)
 t_ml = t_ml_tile(:,:,1)
@@ -1797,7 +1823,7 @@ end subroutine combine_tile_surface
 subroutine init_tile_state()
 ! Each tile starts from the cell's surface state, unless the tiles' own restart file exists.
 integer :: k
-character(len=5), dimension(n_tiles) :: tname = (/ 'ocean', 'land ' /)
+character(len=5), dimension(n_tiles) :: tname = (/ 'ocean', 'land ', 'slab ', 'ice  ' /)
 do k = 1, n_tiles
   t_surf_tile(:,:,k) = t_surf
   h_ice_tile(:,:,k) = h_thermo_ice
@@ -1813,8 +1839,9 @@ if (file_exist('INPUT/surface_tiles.res.nc')) then
     call read_data('INPUT/surface_tiles.res', 't_ml_'//trim(tname(k)), t_ml_tile(:,:,k), grid_domain)
     call read_data('INPUT/surface_tiles.res', 'albedo_'//trim(tname(k)), albedo_tile(:,:,k), grid_domain)
   enddo
-  call read_data('INPUT/surface_tiles.res', 'frac_ocean', tile_frac(:,:,1), grid_domain)
-  tile_frac(:,:,2) = 1. - tile_frac(:,:,1)
+  do k = 1, n_tiles
+    call read_data('INPUT/surface_tiles.res', 'frac_'//trim(tname(k)), tile_frac(:,:,k), grid_domain)
+  enddo
 endif
 call combine_tile_surface()
 end subroutine init_tile_state
@@ -1823,7 +1850,7 @@ end subroutine init_tile_state
 
 subroutine write_tile_restart()
 integer :: k
-character(len=5), dimension(n_tiles) :: tname = (/ 'ocean', 'land ' /)
+character(len=5), dimension(n_tiles) :: tname = (/ 'ocean', 'land ', 'slab ', 'ice  ' /)
 call nullify_domain()
 do k = 1, n_tiles
   call write_data('RESTART/surface_tiles.res', 't_surf_'//trim(tname(k)), t_surf_tile(:,:,k), grid_domain)
@@ -1831,7 +1858,9 @@ do k = 1, n_tiles
   call write_data('RESTART/surface_tiles.res', 't_ml_'//trim(tname(k)), t_ml_tile(:,:,k), grid_domain)
   call write_data('RESTART/surface_tiles.res', 'albedo_'//trim(tname(k)), albedo_tile(:,:,k), grid_domain)
 enddo
-call write_data('RESTART/surface_tiles.res', 'frac_ocean', tile_frac(:,:,1), grid_domain)
+do k = 1, n_tiles
+  call write_data('RESTART/surface_tiles.res', 'frac_'//trim(tname(k)), tile_frac(:,:,k), grid_domain)
+enddo
 end subroutine write_tile_restart
 
 !=================================================================================================================================

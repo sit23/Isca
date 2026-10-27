@@ -40,6 +40,7 @@ class OceanComponent(object):
     """Interface for an ocean program that Isca can be coupled to."""
     grid_name = ISCA_GRID   # OASIS grid name used by the ocean
     fields_to_isca = OCEAN_TO_ISCA   # (ocean name, Isca name) of the fields the ocean sends
+    fields_from_isca = ISCA_TO_OCEAN # (Isca name, ocean name) of the fields Isca sends
     num_cores = 1
     # Lag of the ocean-to-Isca fields [s]. None: one coupling period (concurrent
     # coupling, both models run at once). 0: sequential, Isca waits for the
@@ -169,7 +170,7 @@ def write_runoff_routing(fname, dest):
 
 def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean_shape,
                     ocean_grid, ocean_coupling_period=None, nlogprt=1, sst_lag=None,
-                    ocean_to_isca=OCEAN_TO_ISCA, surface_tiles=False):
+                    ocean_to_isca=OCEAN_TO_ISCA, surface_tiles=False, isca_to_ocean=ISCA_TO_OCEAN):
     """Write the OASIS3-MCT namcouple file.
 
     Fluxes from Isca are averaged by OASIS over the coupling period (LOCTRANS
@@ -189,14 +190,14 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
     same_grid = (ocean_grid == ISCA_GRID)
     nx, ny = isca_shape
     ox, oy = ocean_shape
-    lines = ['$NFIELDS', '  %d' % (len(ISCA_TO_OCEAN) + len(ocean_to_isca)), '$END',
+    lines = ['$NFIELDS', '  %d' % (len(isca_to_ocean) + len(ocean_to_isca)), '$END',
              '$RUNTIME', '  %d' % runtime, '$END',
              '$NLOGPRT', '  %d 0' % nlogprt, '$END',
              '$STRINGS']
     conserv = 'CONSERV LR SCALAR LATLON 1 FRACAREA FIRST'
     # ocean cells under Isca land (coastlines differ) take the nearest Isca ocean value
     conserv_to_ocean = 'CONSERV LR SCALAR LATLON 1 FRACNNEI FIRST'
-    for src, tgt in ISCA_TO_OCEAN:
+    for src, tgt in isca_to_ocean:
         ntrans = 1 if same_grid else 2
         # Runoff arrives in coastal cells that the ocean may barely cover. Isca has already
         # divided it by the covered fraction, so it must be remapped from the unmasked grid
@@ -236,14 +237,14 @@ def write_namcouple(fname, runtime, coupling_period, atmos_dt, isca_shape, ocean
         f.write('\n'.join(lines) + '\n')
 
 
-def write_zero_flux_restart(fname, isca_shape):
+def write_zero_flux_restart(fname, isca_shape, isca_to_ocean=ISCA_TO_OCEAN):
     """Cold-start OASIS restart file for the Isca fluxes: zero fluxes for the
     ocean's first coupling period (surface pressure set to 1e5 Pa)."""
     nx, ny = isca_shape
     with netCDF4.Dataset(fname, 'w') as nc:
         nc.createDimension('nx', nx)
         nc.createDimension('ny', ny)
-        for src, _ in ISCA_TO_OCEAN:
+        for src, _ in isca_to_ocean:
             v = nc.createVariable(src, 'f8', ('ny', 'nx'))
             v[:] = 1.e5 if src == 'ISCA_PSURF' else 0.
 
@@ -298,6 +299,7 @@ class CoupledExperiment(Experiment):
                         self.coupling_period, int(self.namelist['main_nml']['dt_atmos']),
                         (nlon, nlat), ocean_shape, self.ocean.grid_name, sst_lag=self.ocean.sst_lag,
                         ocean_to_isca=self.ocean.fields_to_isca,
+                        isca_to_ocean=self.ocean.fields_from_isca,
                         surface_tiles=bool(self.namelist['idealized_moist_phys_nml'].get('surface_tiles', False)))
 
         coupled = self.ocean.isca_ocean_mask(nlon, nlat)
@@ -314,7 +316,8 @@ class CoupledExperiment(Experiment):
                 cold_start = False
         if cold_start:
             self.log.info('Coupled cold start: zero fluxes for the first ocean coupling period')
-            write_zero_flux_restart(os.path.join(self.rundir, ISCA_RESTART), (nlon, nlat))
+            write_zero_flux_restart(os.path.join(self.rundir, ISCA_RESTART), (nlon, nlat),
+                                    self.ocean.fields_from_isca)
         else:
             self.ocean.load_restart(self, indir)
         self.ocean.prepare_rundir(self, cold_start)
