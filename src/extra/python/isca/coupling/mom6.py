@@ -734,6 +734,9 @@ BASE_SIS_INPUT = {
     'ADD_DIURNAL_SW': False,
     'ICE_STATS_INTERVAL': 30.0,
     'MERGED_CONTINUITY': True,   # needed when ice and ocean steps are interspersed
+    # Isca sends the stress on the surface (eastward positive, as MOM6 takes it); the default
+    # True expects the atmosphere's sign and flips it, which reverses every wind stress
+    'ICE_SEES_ATMOS_WINDS': False,
 }
 # the MOM_input entries SIS2 needs too
 SIS_FROM_MOM = ('REENTRANT_X', 'REENTRANT_Y', 'TRIPOLAR_N', 'NIGLOBAL', 'NJGLOBAL', 'NIHALO', 'NJHALO',
