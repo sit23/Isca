@@ -72,13 +72,14 @@ if TRIPOLAR:
         raise ValueError('TRIPOLAR=1 is for the aquaplanet only')
     cls = MOM6SIS2TripolarOcean if SIS2 else MOM6TripolarOcean
     ocean = cls(os.environ.get('MOM6_ISCA_EXE') if SIS2 else MOM6_EXE, num_cores=NCORES_OCEAN,
-                lat_south=float(os.environ.get('TRIPOLAR_SOUTH', -85.)))
+                lat_south=float(os.environ.get('TRIPOLAR_SOUTH', -85.)),
+                ts_init_file=os.environ.get('TS_INIT_FILE'))
 elif SIS2:
     ocean = MOM6SIS2Ocean(os.environ.get('MOM6_ISCA_EXE'), num_cores=NCORES_OCEAN, max_lat=MAX_LAT,
-                          land_mask=land, regular_dlat=OCEAN_DLAT)
+                          land_mask=land, regular_dlat=OCEAN_DLAT, ts_init_file=os.environ.get('TS_INIT_FILE'))
 else:
     ocean = MOM6Ocean(MOM6_EXE, num_cores=NCORES_OCEAN, max_lat=MAX_LAT, land_mask=land,
-                      regular_dlat=OCEAN_DLAT)
+                      regular_dlat=OCEAN_DLAT, ts_init_file=os.environ.get('TS_INIT_FILE'))
 if 'MOM6_KD' in os.environ:
     ocean.mom_input['KD'] = float(os.environ['MOM6_KD'])
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=COUPLING_PERIOD,

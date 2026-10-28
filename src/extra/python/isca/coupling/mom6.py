@@ -409,7 +409,8 @@ class MOM6Ocean(OceanComponent):
     fields_to_isca = OCEAN_TO_ISCA + [('FRAZIL_OCN', 'OCN_FRAZIL')]
 
     def __init__(self, executable, num_cores=4, max_lat=80., nk=30, depth=4000.,
-                 layout=None, mom_input=None, sst_func=None, land_mask=None, regular_dlat=None):
+                 layout=None, mom_input=None, sst_func=None, land_mask=None, regular_dlat=None,
+                 ts_init_file=None):
         """land_mask: optional (nlat, nlon) boolean array on the Isca grid (e.g. a
         ridge); MOM6 gets zero depth there. Give the same mask to Isca
         (CoupledExperiment land_mask, and an Isca land file) so they agree."""
@@ -430,6 +431,14 @@ class MOM6Ocean(OceanComponent):
         self.mom_input.update(mom_input or {})
         # default initial SST: Isca's prescribe_initial_dist with tconst=285, delta_T=40
         self.sst_func = sst_func or (lambda lat: 285. - 40. * (3. * np.sin(np.radians(lat))**2 - 1.) / 3.)
+        # optional initial T/S file (same format as write_initial_ts) instead of sst_func
+        self.ts_init_file = ts_init_file
+
+    def write_ts_init(self, indir, nlon, nlat, max_lat):
+        if self.ts_init_file:
+            shutil.copy(self.ts_init_file, os.path.join(indir, 'ts_init.nc'))
+        else:
+            write_initial_ts(os.path.join(indir, 'ts_init.nc'), nlon, nlat, max_lat, self.sst_func)
 
     def ocean_grid_shape(self, nlon, nlat):
         if self.regular_dlat is not None:
@@ -464,7 +473,7 @@ class MOM6Ocean(OceanComponent):
         else:
             ni = nlon
             nj = write_supergrid(os.path.join(indir, 'ocean_hgrid.nc'), nlon, nlat, self.max_lat)
-        write_initial_ts(os.path.join(indir, 'ts_init.nc'), nlon, nlat, self.max_lat, self.sst_func)
+        self.write_ts_init(indir, nlon, nlat, self.max_lat)
         if self.land_mask is not None:
             write_topography(os.path.join(indir, 'topog.nc'), nlon, nlat, self.max_lat,
                              self.land_mask, self.depth)
@@ -595,7 +604,7 @@ class MOM6TripolarOcean(MOM6Ocean):
             v = nc.createVariable('depth', 'f8', ('ny', 'nx')); v.units = 'm'
             v[:] = np.where(land, 0., self.depth)
         params.update({'TOPO_CONFIG': '"file"', 'TOPO_FILE': '"topog.nc"', 'TOPO_VARNAME': '"depth"'})
-        write_initial_ts(os.path.join(indir, 'ts_init.nc'), nlon, nlat, 90., self.sst_func)
+        self.write_ts_init(indir, nlon, nlat, 90.)
         return ni, nj
 
 
