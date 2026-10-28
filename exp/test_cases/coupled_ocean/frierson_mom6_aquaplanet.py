@@ -51,14 +51,16 @@ NCORES = int(os.environ.get('NCORES', 8))
 NCORES_OCEAN = int(os.environ.get('NCORES_OCEAN', 8))
 NMONTHS = int(os.environ.get('NMONTHS', 1))
 DAYS = int(os.environ.get('DAYS', 30))
-DT_ATMOS = 720
+# RESOLUTION=T85 doubles Isca's resolution (MOM6 follows Isca's grid); for scaling tests
+RESOLUTION = os.environ.get('RESOLUTION', 'T42')
+DT_ATMOS = int(os.environ.get('DT_ATMOS', {'T42': 720, 'T85': 600}[RESOLUTION]))
 COUPLING_PERIOD = 3600
 MOM6_EXE = os.environ.get('MOM6_ISCA_EXE', os.path.expanduser(
     '~/project_specific_codes/isca_ocean_coupling/mom6_isca/build/mom6_isca.x'))
 EXP_NAME = os.environ.get('EXP_NAME', 'coupled_ocean_mom6_aquaplanet')
 CONFIG = os.environ.get('CONFIG', 'aqua')
 COUPLING_PERIOD = int(os.environ.get('COUPLING_PERIOD', COUPLING_PERIOD))
-NLON, NLAT = 128, 64
+NLON, NLAT = {'T42': (128, 64), 'T85': (256, 128)}[RESOLUTION]
 
 land = None
 depth_map = None
@@ -142,6 +144,8 @@ exp.diag_table = diag
 exp.namelist = frierson_exp.namelist.copy()
 exp.namelist['main_nml']['days'] = DAYS
 exp.namelist['main_nml']['dt_atmos'] = DT_ATMOS
+if RESOLUTION != 'T42':
+    exp.set_resolution(RESOLUTION, 25)
 if SURFACE_TILES:
     exp.namelist['idealized_moist_phys_nml']['surface_tiles'] = True
 # slab depth used only for the polar caps outside the MOM6 domain
