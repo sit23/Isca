@@ -124,11 +124,13 @@ if THERMO_ICE:
         'read_const_correct': False, 'read_nudge_out': False})
 
 if land is not None:
-    land_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'land_%s.nc' % CONFIG)
+    # one file per land configuration, as several runs may use this script at once
+    land_name = 'land_%s_%dcol.nc' % (CONFIG, land.sum(axis=1).max())
+    land_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), land_name)
     write_isca_land_file(land_file, land)
     exp.inputfiles = [land_file]
     exp.namelist['idealized_moist_phys_nml'].update({
-        'land_option': 'input', 'land_file_name': 'INPUT/land_%s.nc' % CONFIG,
+        'land_option': 'input', 'land_file_name': 'INPUT/' + land_name,
         'bucket': True, 'init_bucket_depth_land': 0.15, 'max_bucket_depth_land': 0.15})
     exp.namelist['mixed_layer_nml'].update({
         'land_option': 'input', 'land_h_capacity_prefactor': 0.05})   # ~1 m of water on land
