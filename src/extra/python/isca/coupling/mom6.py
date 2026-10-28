@@ -728,7 +728,7 @@ class SIS2Mixin(object):
         dest = os.path.join(outdir, 'ocean')
         for f in sorted(os.listdir(odir)):
             if (f.startswith('ice_') and '.nc' in f) or f in ('SIS_parameter_doc.all', 'SIS_input',
-                                                               'seaice.stats.nc'):
+                                                               'seaice.stats', 'seaice.stats.nc'):
                 shutil.copy(os.path.join(odir, f), dest)
 
 
