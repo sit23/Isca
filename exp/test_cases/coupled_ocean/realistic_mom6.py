@@ -99,6 +99,13 @@ if SIS2:
                                             'update_land_mask_from_ice': False})
 if SURFACE_TILES:
     exp.namelist['idealized_moist_phys_nml']['surface_tiles'] = True
+# POLAR_ALBEDO=1: surface albedo rising towards the poles, albedo_value + (HIGHER_ALBEDO -
+# albedo_value)*(|lat|/90)**ALBEDO_EXP, standing in for the polar clouds the clear-sky RRTM
+# lacks. Applies to land too (albedo_choice other than 1 drops land_albedo_prefactor).
+if int(os.environ.get('POLAR_ALBEDO', 0)):
+    exp.namelist['mixed_layer_nml'].update({
+        'albedo_choice': 4, 'higher_albedo': float(os.environ.get('HIGHER_ALBEDO', 0.55)),
+        'albedo_exp': float(os.environ.get('ALBEDO_EXP', 4.))})
 
 if __name__ == '__main__':
     if not os.environ.get('SKIP_COMPILE'):
