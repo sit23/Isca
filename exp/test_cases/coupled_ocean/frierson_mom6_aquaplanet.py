@@ -16,6 +16,10 @@ what the ocean model covers, and all fluxes reach the ocean by overlap area.
 SIS2=1 runs GFDL's SIS2 sea ice with MOM6 (mom6_sis2_isca.x) instead of Isca's sea ice;
 Isca sees it as a sea-ice tile. Implies SURFACE_TILES=1 and needs THERMO_ICE=0.
 
+TRIPOLAR=1 puts MOM6 on a tripolar grid reaching the North Pole (two small islands at
+the grid's northern poles; southern wall at TRIPOLAR_SOUTH, default -85). Implies
+SURFACE_TILES=1; aquaplanet only.
+
 The ocean is 4 km deep everywhere with no continents, on a grid whose cells
 are exactly Isca's Gaussian-grid cells equatorward of +-80 degrees (MOM6
 cannot include the poles); poleward of that Isca's own slab ocean is used.
@@ -30,7 +34,8 @@ import sys
 
 from isca import IscaCodeBase, DiagTable, GFDL_BASE
 from isca.coupling import CoupledExperiment
-from isca.coupling.mom6 import MOM6Ocean, MOM6SIS2Ocean, write_isca_land_file
+from isca.coupling.mom6 import (MOM6Ocean, MOM6SIS2Ocean, MOM6TripolarOcean, MOM6SIS2TripolarOcean,
+                                write_isca_land_file)
 import numpy as np
 
 sys.path.insert(0, os.path.join(GFDL_BASE, 'exp', 'test_cases', 'frierson'))
@@ -61,7 +66,14 @@ cb = IscaCodeBase.from_directory(GFDL_BASE)
 MAX_LAT = float(os.environ.get('MAX_LAT', 80.))
 OCEAN_DLAT = float(os.environ['OCEAN_DLAT']) if 'OCEAN_DLAT' in os.environ else None
 SIS2 = bool(int(os.environ.get('SIS2', 0)))
-if SIS2:
+TRIPOLAR = bool(int(os.environ.get('TRIPOLAR', 0)))
+if TRIPOLAR:
+    if land is not None:
+        raise ValueError('TRIPOLAR=1 is for the aquaplanet only')
+    cls = MOM6SIS2TripolarOcean if SIS2 else MOM6TripolarOcean
+    ocean = cls(os.environ.get('MOM6_ISCA_EXE') if SIS2 else MOM6_EXE, num_cores=NCORES_OCEAN,
+                lat_south=float(os.environ.get('TRIPOLAR_SOUTH', -85.)))
+elif SIS2:
     ocean = MOM6SIS2Ocean(os.environ.get('MOM6_ISCA_EXE'), num_cores=NCORES_OCEAN, max_lat=MAX_LAT,
                           land_mask=land, regular_dlat=OCEAN_DLAT)
 else:
@@ -85,7 +97,7 @@ for mod, field in [('dynamics', 'ps'), ('dynamics', 'bk'), ('dynamics', 'pk'),
                    ('mixed_layer', 'cpl_precip'), ('atmosphere', 'cpl_runoff')]:
     diag.add_field(mod, field, time_avg=True)
 THERMO_ICE = bool(int(os.environ.get('THERMO_ICE', 0)))
-SURFACE_TILES = bool(int(os.environ.get('SURFACE_TILES', 0))) or SIS2
+SURFACE_TILES = bool(int(os.environ.get('SURFACE_TILES', 0))) or SIS2 or TRIPOLAR
 if SIS2 and THERMO_ICE:
     raise ValueError('SIS2=1 replaces Isca\'s sea ice: use THERMO_ICE=0')
 if THERMO_ICE:

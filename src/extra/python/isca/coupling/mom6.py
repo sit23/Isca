@@ -549,6 +549,56 @@ class MOM6Ocean(OceanComponent):
                 shutil.copy(os.path.join(src, f), dest)
 
 
+class MOM6TripolarOcean(MOM6Ocean):
+    """MOM6 on a tripolar grid (see tripolar.py) that reaches the North Pole, for aquaplanet
+    and ridge configurations without northern polar caps. South of lat_join the rows are
+    Isca's Gaussian rows from lat_south (the ocean's southern wall); north of it, n_cap rows
+    of the bipolar cap, with the two northern poles at 0E and 180E on lat_join. Cells
+    narrower than island_size around those poles are land (two small islands, as OM4 puts
+    its poles on land). land_func(lon, lat) -> bool, if given, adds land (e.g. a ridge)
+    by cell centre. Isca and this grid never match, so use Isca's surface tiles."""
+
+    def __init__(self, executable, lat_south=-85., lat_join=65., n_cap=26, island_size=20.e3,
+                 land_func=None, **kwargs):
+        super(MOM6TripolarOcean, self).__init__(executable, **kwargs)
+        self.lat_south, self.lat_join, self.n_cap = lat_south, lat_join, n_cap
+        self.island_size, self.land_func = island_size, land_func
+        self.mom_input['TRIPOLAR_N'] = True
+
+    def _edges(self, nlon, nlat):
+        _, e = gaussian_grid(nlat)
+        join = e[np.argmin(abs(e - self.lat_join))]       # the Gaussian edge nearest lat_join
+        south = e[(e >= self.lat_south) & (e < join)]
+        return np.linspace(0., 360., nlon + 1), south, join
+
+    def ocean_grid_shape(self, nlon, nlat):
+        _, south, _ = self._edges(nlon, nlat)
+        return nlon, len(south) + self.n_cap
+
+    def isca_ocean_mask(self, nlon, nlat):
+        _, e = gaussian_grid(nlat)
+        mask = np.zeros((nlat, nlon), dtype=bool)
+        mask[e[:-1] >= self.lat_south, :] = True
+        return mask
+
+    def write_grid_files(self, indir, nlon, nlat, params):
+        from isca.coupling.tripolar import write_tripolar_supergrid, tripolar_points, pole_island_mask
+        lon_e, south, join = self._edges(nlon, nlat)
+        ni, nj = write_tripolar_supergrid(os.path.join(indir, 'ocean_hgrid.nc'), lon_e, south, join,
+                                          self.n_cap, ISCA_RADIUS)
+        x, y = tripolar_points(lon_e, south, join, self.n_cap)
+        land = pole_island_mask(x, y, ISCA_RADIUS, self.island_size)
+        if self.land_func is not None:
+            land |= np.asarray(self.land_func(x[1::2, 1::2] % 360., y[1::2, 1::2]), dtype=bool)
+        with netCDF4.Dataset(os.path.join(indir, 'topog.nc'), 'w') as nc:
+            nc.createDimension('ny', nj); nc.createDimension('nx', ni)
+            v = nc.createVariable('depth', 'f8', ('ny', 'nx')); v.units = 'm'
+            v[:] = np.where(land, 0., self.depth)
+        params.update({'TOPO_CONFIG': '"file"', 'TOPO_FILE': '"topog.nc"', 'TOPO_VARNAME': '"depth"'})
+        write_initial_ts(os.path.join(indir, 'ts_init.nc'), nlon, nlat, 90., self.sst_func)
+        return ni, nj
+
+
 class MOM6EarthOcean(MOM6Ocean):
     """MOM6 with Earth geometry derived from GFDL OM4 data (as regridded by M2LiNES for
     Samudra): bathymetry from the per-level ocean fractions, initial temperature and
@@ -743,3 +793,12 @@ class MOM6SIS2Ocean(SIS2Mixin, MOM6Ocean):
 
 class MOM6SIS2EarthOcean(SIS2Mixin, MOM6EarthOcean):
     """MOM6EarthOcean with SIS2 sea ice."""
+
+
+class MOM6SIS2TripolarOcean(SIS2Mixin, MOM6TripolarOcean):
+    """MOM6TripolarOcean with SIS2 sea ice."""
+
+    def __init__(self, executable=None, **kwargs):
+        executable = executable or os.path.expanduser(
+            '~/project_specific_codes/isca_ocean_coupling/mom6_isca/build_sis2/mom6_sis2_isca.x')
+        super(MOM6SIS2TripolarOcean, self).__init__(executable, **kwargs)
