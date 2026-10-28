@@ -1740,7 +1740,8 @@ do k = 1, n_tiles
                    drdt_surf_tile(:,:,k), dhdt_atm_tile(:,:,k), dedq_atm_tile(:,:,k), &
                    albedo_tile(:,:,k), flux_u=flux_u_tile(:,:,k), flux_v=flux_v_tile(:,:,k), &
                    precip=precip, psurf=p_half(:,:,num_levels+1,previous), &
-                   tile=k, dhdt_atm_grid=dhdt_atm, dedq_atm_grid=dedq_atm)
+                   tile=k, dhdt_atm_grid=dhdt_atm, dedq_atm_grid=dedq_atm, &
+                   t_atm=tg(:,:,num_levels,previous))
   call add_tile(dt_acc, Tri_surf%delta_t, k)
   call add_tile(dq_acc, Tri_surf%delta_tr(:,:,nsphum), k)
   dts_tile(:,:,k) = t_surf_tile(:,:,k) - ts_old
