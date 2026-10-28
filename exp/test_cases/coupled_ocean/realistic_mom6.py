@@ -89,13 +89,14 @@ if THERMO_ICE:
     # about 34.7 psu); thermodynamic ice requires the explicit surface step
     t_freeze = 273.15 - 0.054 * 34.7
     exp.namelist['mixed_layer_nml'].update({
-        'update_albedo_from_ice': False,
+        'update_albedo_from_ice': False, 'update_land_mask_from_ice': False,
         'do_thermo_ice': True, 'do_explicit': True,
         'thermo_ice_albedo': float(os.environ.get('THERMO_ICE_ALBEDO', 0.55)),
         't_thermo_ice_base': t_freeze, 't_surf_freeze': t_freeze,
         'read_const_correct': False, 'read_nudge_out': False})
 if SIS2:
-    exp.namelist['mixed_layer_nml']['update_albedo_from_ice'] = False
+    exp.namelist['mixed_layer_nml'].update({'update_albedo_from_ice': False,
+                                            'update_land_mask_from_ice': False})
 if SURFACE_TILES:
     exp.namelist['idealized_moist_phys_nml']['surface_tiles'] = True
 
