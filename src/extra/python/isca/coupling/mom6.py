@@ -704,7 +704,10 @@ class SIS2Mixin(object):
         # the combined ice-ocean driver: ice slow thermodynamics, then ocean thermodynamics,
         # then dynamics of both, within each coupling step
         with open(os.path.join(odir, 'CIOD_input'), 'w') as f:
-            f.write(format_mom_input({'INTERSPERSE_ICE_OCEAN': True, 'SINGLE_MOM_CALL': False}))
+            # USE_INTERSPERSE_BUG (default True) never passes the ocean state, frazil included,
+            # to the ice after the first step
+            f.write(format_mom_input({'INTERSPERSE_ICE_OCEAN': True, 'SINGLE_MOM_CALL': False,
+                                      'USE_INTERSPERSE_BUG': False}))
         with open(os.path.join(odir, 'diag_table'), 'a') as f:
             f.write(SIS2_DIAG_TABLE)
         with open(os.path.join(odir, 'input.nml'), 'a') as f:
