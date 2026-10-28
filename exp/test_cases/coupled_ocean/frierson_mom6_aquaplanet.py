@@ -4,6 +4,7 @@ CONFIG=iccm is the geometry of GFDL's ICCM (Vallis & Farneti 2009, Farneti & Val
 repeated round the globe: their 120-degree sector holds one 60-degree basin from 70S to 70N
 and a re-entrant channel at 65-51S (2500 m sill), so here three 60-degree basins centred on
 0, 120 and 240E, land between and poleward of 70 degrees, and a southern channel all round.
+BASIN_WIDTH (degrees, default 60) changes the width of each basin.
 
 CONFIG=ridge adds a pole-to-pole ridge (two grid columns at 0E) in both models,
 with a land bucket whose overflow is routed to the ocean (Ridge world, cf.
@@ -66,7 +67,7 @@ if CONFIG == 'iccm':
     lat_c = gaussian_grid(NLAT)[0][:, None]
     lon_c = (np.arange(NLON) * 360. / NLON)[None, :]
     dlon = np.min([abs((lon_c - c + 180.) % 360. - 180.) for c in (0., 120., 240.)], axis=0)
-    basin = (abs(lat_c) < 70.) & (dlon < 30.)
+    basin = (abs(lat_c) < 70.) & (dlon < 0.5 * float(os.environ.get('BASIN_WIDTH', 60.)))
     channel = (lat_c > -65.) & (lat_c < -51.)
     depth_map = np.where(basin, 4000., np.where(channel, 2500., 0.)) * np.ones((NLAT, NLON))
     land = depth_map <= 0.
