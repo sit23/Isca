@@ -1,5 +1,10 @@
 """Isca (Frierson grey-radiation aquaplanet, T42) coupled to a MOM6 aquaplanet ocean.
 
+CONFIG=iccm is the geometry of GFDL's ICCM (Vallis & Farneti 2009, Farneti & Vallis 2013)
+repeated round the globe: their 120-degree sector holds one 60-degree basin from 70S to 70N
+and a re-entrant channel at 65-51S (2500 m sill), so here three 60-degree basins centred on
+0, 120 and 240E, land between and poleward of 70 degrees, and a southern channel all round.
+
 CONFIG=ridge adds a pole-to-pole ridge (two grid columns at 0E) in both models,
 with a land bucket whose overflow is routed to the ocean (Ridge world, cf.
 Enderton & Marshall 2009). RIDGE_WIDTH widens it to that many degrees of longitude
@@ -55,7 +60,17 @@ COUPLING_PERIOD = int(os.environ.get('COUPLING_PERIOD', COUPLING_PERIOD))
 NLON, NLAT = 128, 64
 
 land = None
-if CONFIG == 'ridge':
+depth_map = None
+if CONFIG == 'iccm':
+    from isca.coupling.mom6 import gaussian_grid
+    lat_c = gaussian_grid(NLAT)[0][:, None]
+    lon_c = (np.arange(NLON) * 360. / NLON)[None, :]
+    dlon = np.min([abs((lon_c - c + 180.) % 360. - 180.) for c in (0., 120., 240.)], axis=0)
+    basin = (abs(lat_c) < 70.) & (dlon < 30.)
+    channel = (lat_c > -65.) & (lat_c < -51.)
+    depth_map = np.where(basin, 4000., np.where(channel, 2500., 0.)) * np.ones((NLAT, NLON))
+    land = depth_map <= 0.
+elif CONFIG == 'ridge':
     land = np.zeros((NLAT, NLON), dtype=bool)
     # cells centred on 0E and 357.2E by default
     ncol = int(round(float(os.environ.get('RIDGE_WIDTH', 2 * 360. / NLON)) * NLON / 360.))
@@ -76,10 +91,12 @@ if TRIPOLAR:
                 ts_init_file=os.environ.get('TS_INIT_FILE'))
 elif SIS2:
     ocean = MOM6SIS2Ocean(os.environ.get('MOM6_ISCA_EXE'), num_cores=NCORES_OCEAN, max_lat=MAX_LAT,
-                          land_mask=land, regular_dlat=OCEAN_DLAT, ts_init_file=os.environ.get('TS_INIT_FILE'))
+                          land_mask=land, regular_dlat=OCEAN_DLAT, ts_init_file=os.environ.get('TS_INIT_FILE'),
+                          depth_map=depth_map)
 else:
     ocean = MOM6Ocean(MOM6_EXE, num_cores=NCORES_OCEAN, max_lat=MAX_LAT, land_mask=land,
-                      regular_dlat=OCEAN_DLAT, ts_init_file=os.environ.get('TS_INIT_FILE'))
+                      regular_dlat=OCEAN_DLAT, ts_init_file=os.environ.get('TS_INIT_FILE'),
+                      depth_map=depth_map)
 if 'MOM6_KD' in os.environ:
     ocean.mom_input['KD'] = float(os.environ['MOM6_KD'])
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=COUPLING_PERIOD,

@@ -9,6 +9,7 @@ the ocean beneath them receives no fluxes.
 THERMO_ICE=1 replaces the prescribed ice with Isca's thermodynamic sea ice (zero-layer,
 PR #266) on top of the coupled ocean, grown by MOM6's frazil. SURFACE_TILES=1 turns on
 Isca's fractional surface tiles (ocean, land and slab ocean); it needs THERMO_ICE=1.
+SIS2=1 instead runs GFDL's SIS2 sea ice with MOM6 (implies SURFACE_TILES=1, no THERMO_ICE).
 
 Usage:
     NMONTHS=12 python realistic_mom6.py
@@ -21,7 +22,7 @@ import numpy as np
 
 from isca import IscaCodeBase, DiagTable, GFDL_BASE
 from isca.coupling import CoupledExperiment
-from isca.coupling.mom6 import MOM6EarthOcean
+from isca.coupling.mom6 import MOM6EarthOcean, MOM6SIS2EarthOcean
 
 NCORES = int(os.environ.get('NCORES', 16))
 NMONTHS = int(os.environ.get('NMONTHS', 1))
@@ -38,12 +39,20 @@ with netCDF4.Dataset(land_file) as nc:
     zsurf = np.asarray(nc['zsurf'][:])
 
 THERMO_ICE = bool(int(os.environ.get('THERMO_ICE', 0)))
-SURFACE_TILES = bool(int(os.environ.get('SURFACE_TILES', 0)))
-if SURFACE_TILES and not THERMO_ICE:
-    raise ValueError('SURFACE_TILES=1 needs THERMO_ICE=1 (tiles do not support the prescribed-ice lid)')
+SIS2 = bool(int(os.environ.get('SIS2', 0)))
+SURFACE_TILES = bool(int(os.environ.get('SURFACE_TILES', 0))) or SIS2
+if SIS2 and THERMO_ICE:
+    raise ValueError('SIS2=1 replaces Isca\'s sea ice: use THERMO_ICE=0')
+if SURFACE_TILES and not (THERMO_ICE or SIS2):
+    raise ValueError('SURFACE_TILES=1 needs THERMO_ICE=1 or SIS2=1 (tiles do not support the prescribed-ice lid)')
 
 cb = IscaCodeBase.from_directory(GFDL_BASE)
-ocean = MOM6EarthOcean(MOM6_EXE, OM4, num_cores=int(os.environ.get('NCORES_OCEAN', 16)))
+if SIS2:
+    ocean = MOM6SIS2EarthOcean(os.environ.get('MOM6_SIS2_EXE', os.path.expanduser(
+        '~/project_specific_codes/isca_ocean_coupling/mom6_isca/build_sis2/mom6_sis2_isca.x')),
+        OM4, num_cores=int(os.environ.get('NCORES_OCEAN', 16)))
+else:
+    ocean = MOM6EarthOcean(MOM6_EXE, OM4, num_cores=int(os.environ.get('NCORES_OCEAN', 16)))
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=3600,
                         land_mask=land, zsurf=zsurf)
 exp.inputfiles = [land_file, os.path.join(GFDL_BASE, 'input/rrtm_input_files/ozone_1990.nc'),
@@ -61,7 +70,8 @@ for mod, field in [('dynamics', 'ps'), ('dynamics', 'bk'), ('dynamics', 'pk'), (
                    ('mixed_layer', 'cpl_evap'), ('mixed_layer', 'cpl_precip'),
                    ('atmosphere', 'bucket_depth')]:
     diag.add_field(mod, field, time_avg=True)
-ice_fields = ('h_thermo_ice', 't_ml', 'albedo', 'cpl_frazil', 'ice_ocean_heat') if THERMO_ICE else ('ice_conc',)
+ice_fields = (('h_thermo_ice', 't_ml', 'albedo', 'cpl_frazil', 'ice_ocean_heat') if THERMO_ICE else
+              () if SIS2 else ('ice_conc',))
 for field in ice_fields:
     diag.add_field('mixed_layer', field, time_avg=True)
 exp.diag_table = diag
@@ -84,6 +94,8 @@ if THERMO_ICE:
         'thermo_ice_albedo': float(os.environ.get('THERMO_ICE_ALBEDO', 0.55)),
         't_thermo_ice_base': t_freeze, 't_surf_freeze': t_freeze,
         'read_const_correct': False, 'read_nudge_out': False})
+if SIS2:
+    exp.namelist['mixed_layer_nml']['update_albedo_from_ice'] = False
 if SURFACE_TILES:
     exp.namelist['idealized_moist_phys_nml']['surface_tiles'] = True
 

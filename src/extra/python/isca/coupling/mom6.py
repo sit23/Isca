@@ -263,6 +263,7 @@ def write_topography(fname, nlon, nlat, max_lat, land_mask, depth):
     land_mask is (nlat, nlon) on the Isca grid; the MOM6 grid is the Isca grid's
     ocean rows, so the two masks agree exactly."""
     rows = ocean_rows(nlat, max_lat)
+    depth = np.broadcast_to(depth, (nlat, nlon))[rows, :]   # a constant or an (nlat, nlon) map
     d = np.where(np.asarray(land_mask, dtype=bool)[rows, :], 0., depth)
     with netCDF4.Dataset(fname, 'w') as nc:
         nc.createDimension('ny', len(rows)); nc.createDimension('nx', nlon)
@@ -410,11 +411,16 @@ class MOM6Ocean(OceanComponent):
 
     def __init__(self, executable, num_cores=4, max_lat=80., nk=30, depth=4000.,
                  layout=None, mom_input=None, sst_func=None, land_mask=None, regular_dlat=None,
-                 ts_init_file=None):
+                 ts_init_file=None, depth_map=None):
         """land_mask: optional (nlat, nlon) boolean array on the Isca grid (e.g. a
         ridge); MOM6 gets zero depth there. Give the same mask to Isca
         (CoupledExperiment land_mask, and an Isca land file) so they agree."""
         self.land_mask = land_mask
+        # optional (nlat, nlon) ocean depth [m] on the Isca grid, 0 on land (e.g. sills);
+        # land_mask is then where it is zero
+        self.depth_map = None if depth_map is None else np.asarray(depth_map, dtype=float)
+        if self.depth_map is not None:
+            self.land_mask = land_mask = self.depth_map <= 0.
         # None: MOM6 cells are exactly Isca's cells. A number: a regular grid of that
         # spacing instead (tests real remapping; land masks not supported then).
         self.regular_dlat = regular_dlat
@@ -476,7 +482,7 @@ class MOM6Ocean(OceanComponent):
         self.write_ts_init(indir, nlon, nlat, self.max_lat)
         if self.land_mask is not None:
             write_topography(os.path.join(indir, 'topog.nc'), nlon, nlat, self.max_lat,
-                             self.land_mask, self.depth)
+                             self.land_mask, self.depth if self.depth_map is None else self.depth_map)
             params.update({'TOPO_CONFIG': '"file"', 'TOPO_FILE': '"topog.nc"', 'TOPO_VARNAME': '"depth"'})
         return ni, nj
 
