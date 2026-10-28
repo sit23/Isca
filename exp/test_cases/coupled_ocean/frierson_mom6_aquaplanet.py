@@ -23,7 +23,7 @@ Isca sees it as a sea-ice tile. Implies SURFACE_TILES=1 and needs THERMO_ICE=0.
 
 TRIPOLAR=1 puts MOM6 on a tripolar grid reaching the North Pole (two small islands at
 the grid's northern poles; southern wall at TRIPOLAR_SOUTH, default -85). Implies
-SURFACE_TILES=1; aquaplanet only.
+SURFACE_TILES=1. With CONFIG=ridge the ridge carries on over the cap to the North Pole.
 
 The ocean is 4 km deep everywhere with no continents, on a grid whose cells
 are exactly Isca's Gaussian-grid cells equatorward of +-80 degrees (MOM6
@@ -83,12 +83,27 @@ OCEAN_DLAT = float(os.environ['OCEAN_DLAT']) if 'OCEAN_DLAT' in os.environ else 
 SIS2 = bool(int(os.environ.get('SIS2', 0)))
 TRIPOLAR = bool(int(os.environ.get('TRIPOLAR', 0)))
 if TRIPOLAR:
-    if land is not None:
-        raise ValueError('TRIPOLAR=1 is for the aquaplanet only')
+    land_func = None
+    if CONFIG == 'ridge':
+        # the same longitudes as Isca's ridge columns, carried over the cap to the North
+        # Pole: a pole-to-pole ridge as in Ferreira et al. (2011). Near the pole that band
+        # is narrower than a cell, so on the cap the ridge is also at least RIDGE_MIN_KM
+        # (default 150 km) either side of its central meridian.
+        west = -(ncol // 2 + 0.5) * 360. / NLON
+        east = west + ncol * 360. / NLON
+        mid, min_km = 0.5 * (west + east), float(os.environ.get('RIDGE_MIN_KM', 150.))
+
+        def land_func(lon, lat):
+            dlon = (lon - mid + 180.) % 360. - 180.
+            band = (dlon >= west - mid) & (dlon < east - mid)
+            dist = 6376. * np.arcsin(np.minimum(1., abs(np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(dlon)))))
+            return band | ((dist < min_km) & (np.cos(np.deg2rad(dlon)) > 0.) & (lat > 60.))
+    elif land is not None:
+        raise ValueError('TRIPOLAR=1 supports CONFIG=aqua and CONFIG=ridge only')
     cls = MOM6SIS2TripolarOcean if SIS2 else MOM6TripolarOcean
     ocean = cls(os.environ.get('MOM6_ISCA_EXE') if SIS2 else MOM6_EXE, num_cores=NCORES_OCEAN,
                 lat_south=float(os.environ.get('TRIPOLAR_SOUTH', -85.)),
-                ts_init_file=os.environ.get('TS_INIT_FILE'))
+                ts_init_file=os.environ.get('TS_INIT_FILE'), land_func=land_func)
 elif SIS2:
     ocean = MOM6SIS2Ocean(os.environ.get('MOM6_ISCA_EXE'), num_cores=NCORES_OCEAN, max_lat=MAX_LAT,
                           land_mask=land, regular_dlat=OCEAN_DLAT, ts_init_file=os.environ.get('TS_INIT_FILE'),
