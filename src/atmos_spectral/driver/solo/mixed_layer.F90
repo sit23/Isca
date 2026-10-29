@@ -943,7 +943,7 @@ subroutine mixed_layer (                                               &
      dhdt_atm,                                                         &
      dedq_atm,                                                         &
      albedo_out,                                                       &
-     flux_u, flux_v, precip, psurf, tile, dhdt_atm_grid, dedq_atm_grid)
+     flux_u, flux_v, precip, psurf, tile, dhdt_atm_grid, dedq_atm_grid, t_atm)
 
 ! ---- arguments -----------------------------------------------------------
 type(time_type), intent(in)         :: Time, Time_next
@@ -960,6 +960,7 @@ type(surf_diff_type), intent(inout) :: Tri_surf
 ! needed only when coupled to an external ocean: surface stress on the atmosphere [Pa],
 ! precipitation reaching the surface [kg/m2/s] and surface pressure [Pa]
 real, intent(in), dimension(:,:), optional :: flux_u, flux_v, precip, psurf
+real, intent(in), dimension(:,:), optional :: t_atm   ! lowest-level air temperature (ice-tile snow)
 ! with surface_tiles: the tile being stepped (1 ocean, 2 land, 3 slab ocean), and the cell's total
 ! d(sensible heat)/d(T_atm) and d(evaporation)/d(q_atm) over all tiles, which set the
 ! implicit response of the lowest atmospheric level. The caller combines the tiles'
@@ -967,7 +968,7 @@ real, intent(in), dimension(:,:), optional :: flux_u, flux_v, precip, psurf
 integer, intent(in), optional :: tile
 real, intent(in), dimension(:,:), optional :: dhdt_atm_grid, dedq_atm_grid
 logical :: ocean_tile, grid_diags, ice_tile
-real, dimension(size(t_surf,1),size(t_surf,2)) :: sens_out, evap_out, lwnet_out, swnet_out, dts_flux
+real, dimension(size(t_surf,1),size(t_surf,2)) :: sens_out, snow_out, evap_out, lwnet_out, swnet_out, dts_flux
 real, dimension(size(t_surf,1),size(t_surf,2)) :: h_ice_old, t_surf_old, frac_cpl, basal_flux, melt_excess
 real, dimension(size(t_surf,1),size(t_surf,2)) :: h_old_save, t_surf_save, frazil_here
 logical, dimension(size(t_surf,1),size(t_surf,2)) :: cpl
@@ -1416,8 +1417,17 @@ if (coupled .and. ice_tile) then
   if (evaporation) evap_out = alpha_q + beta_q * dts_flux
   swnet_out = net_surf_sw_down   ! here the downward shortwave, before the ice albedo
   where (ice_alb_rad < 1.) swnet_out = net_surf_sw_down / (1. - ice_alb_rad)
+  ! Precipitation falls as snow on the ice when the lowest-level air is below freezing
+  ! (without snow SIS2's ice is bare, with a low albedo). Isca's condensation released
+  ! only the latent heat of vaporisation, so the latent heat of fusion the snow carries
+  ! is given back to the ice as heat, which keeps the total energy unchanged.
+  snow_out = 0.
+  if (present(t_atm)) then
+    where (t_atm < TFREEZE_WATER) snow_out = precip
+  endif
+  sens_out = sens_out - HLF_WATER * snow_out
   call ocean_coupler_put_ice(Time, -flux_u, -flux_v, swnet_out, surf_lw_down, sens_out, &
-                             dhdt_surf, evap_out, dedt_surf, precip, 0.*precip)
+                             dhdt_surf, evap_out, dedt_surf, precip - snow_out, snow_out)
   ice_alb_rad = albedo_out
 endif
 

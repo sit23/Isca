@@ -4,6 +4,7 @@ CONFIG=iccm is the geometry of GFDL's ICCM (Vallis & Farneti 2009, Farneti & Val
 repeated round the globe: their 120-degree sector holds one 60-degree basin from 70S to 70N
 and a re-entrant channel at 65-51S (2500 m sill), so here three 60-degree basins centred on
 0, 120 and 240E, land between and poleward of 70 degrees, and a southern channel all round.
+BASIN_WIDTH (degrees, default 60) changes the width of each basin.
 
 CONFIG=ridge adds a pole-to-pole ridge (two grid columns at 0E) in both models,
 with a land bucket whose overflow is routed to the ocean (Ridge world, cf.
@@ -23,7 +24,7 @@ Isca sees it as a sea-ice tile. Implies SURFACE_TILES=1 and needs THERMO_ICE=0.
 
 TRIPOLAR=1 puts MOM6 on a tripolar grid reaching the North Pole (two small islands at
 the grid's northern poles; southern wall at TRIPOLAR_SOUTH, default -85). Implies
-SURFACE_TILES=1; aquaplanet only.
+SURFACE_TILES=1. With CONFIG=ridge the ridge carries on over the cap to the North Pole.
 
 The ocean is 4 km deep everywhere with no continents, on a grid whose cells
 are exactly Isca's Gaussian-grid cells equatorward of +-80 degrees (MOM6
@@ -50,14 +51,16 @@ NCORES = int(os.environ.get('NCORES', 8))
 NCORES_OCEAN = int(os.environ.get('NCORES_OCEAN', 8))
 NMONTHS = int(os.environ.get('NMONTHS', 1))
 DAYS = int(os.environ.get('DAYS', 30))
-DT_ATMOS = 720
+# RESOLUTION=T85 doubles Isca's resolution (MOM6 follows Isca's grid); for scaling tests
+RESOLUTION = os.environ.get('RESOLUTION', 'T42')
+DT_ATMOS = int(os.environ.get('DT_ATMOS', {'T42': 720, 'T85': 600}[RESOLUTION]))
 COUPLING_PERIOD = 3600
 MOM6_EXE = os.environ.get('MOM6_ISCA_EXE', os.path.expanduser(
     '~/project_specific_codes/isca_ocean_coupling/mom6_isca/build/mom6_isca.x'))
 EXP_NAME = os.environ.get('EXP_NAME', 'coupled_ocean_mom6_aquaplanet')
 CONFIG = os.environ.get('CONFIG', 'aqua')
 COUPLING_PERIOD = int(os.environ.get('COUPLING_PERIOD', COUPLING_PERIOD))
-NLON, NLAT = 128, 64
+NLON, NLAT = {'T42': (128, 64), 'T85': (256, 128)}[RESOLUTION]
 
 land = None
 depth_map = None
@@ -66,7 +69,7 @@ if CONFIG == 'iccm':
     lat_c = gaussian_grid(NLAT)[0][:, None]
     lon_c = (np.arange(NLON) * 360. / NLON)[None, :]
     dlon = np.min([abs((lon_c - c + 180.) % 360. - 180.) for c in (0., 120., 240.)], axis=0)
-    basin = (abs(lat_c) < 70.) & (dlon < 30.)
+    basin = (abs(lat_c) < 70.) & (dlon < 0.5 * float(os.environ.get('BASIN_WIDTH', 60.)))
     channel = (lat_c > -65.) & (lat_c < -51.)
     depth_map = np.where(basin, 4000., np.where(channel, 2500., 0.)) * np.ones((NLAT, NLON))
     land = depth_map <= 0.
@@ -83,12 +86,27 @@ OCEAN_DLAT = float(os.environ['OCEAN_DLAT']) if 'OCEAN_DLAT' in os.environ else 
 SIS2 = bool(int(os.environ.get('SIS2', 0)))
 TRIPOLAR = bool(int(os.environ.get('TRIPOLAR', 0)))
 if TRIPOLAR:
-    if land is not None:
-        raise ValueError('TRIPOLAR=1 is for the aquaplanet only')
+    land_func = None
+    if CONFIG == 'ridge':
+        # the same longitudes as Isca's ridge columns, carried over the cap to the North
+        # Pole: a pole-to-pole ridge as in Ferreira et al. (2011). Near the pole that band
+        # is narrower than a cell, so on the cap the ridge is also at least RIDGE_MIN_KM
+        # (default 150 km) either side of its central meridian.
+        west = -(ncol // 2 + 0.5) * 360. / NLON
+        east = west + ncol * 360. / NLON
+        mid, min_km = 0.5 * (west + east), float(os.environ.get('RIDGE_MIN_KM', 150.))
+
+        def land_func(lon, lat):
+            dlon = (lon - mid + 180.) % 360. - 180.
+            band = (dlon >= west - mid) & (dlon < east - mid)
+            dist = 6376. * np.arcsin(np.minimum(1., abs(np.cos(np.deg2rad(lat)) * np.sin(np.deg2rad(dlon)))))
+            return band | ((dist < min_km) & (np.cos(np.deg2rad(dlon)) > 0.) & (lat > 60.))
+    elif land is not None:
+        raise ValueError('TRIPOLAR=1 supports CONFIG=aqua and CONFIG=ridge only')
     cls = MOM6SIS2TripolarOcean if SIS2 else MOM6TripolarOcean
     ocean = cls(os.environ.get('MOM6_ISCA_EXE') if SIS2 else MOM6_EXE, num_cores=NCORES_OCEAN,
                 lat_south=float(os.environ.get('TRIPOLAR_SOUTH', -85.)),
-                ts_init_file=os.environ.get('TS_INIT_FILE'))
+                ts_init_file=os.environ.get('TS_INIT_FILE'), land_func=land_func)
 elif SIS2:
     ocean = MOM6SIS2Ocean(os.environ.get('MOM6_ISCA_EXE'), num_cores=NCORES_OCEAN, max_lat=MAX_LAT,
                           land_mask=land, regular_dlat=OCEAN_DLAT, ts_init_file=os.environ.get('TS_INIT_FILE'),
@@ -126,6 +144,8 @@ exp.diag_table = diag
 exp.namelist = frierson_exp.namelist.copy()
 exp.namelist['main_nml']['days'] = DAYS
 exp.namelist['main_nml']['dt_atmos'] = DT_ATMOS
+if RESOLUTION != 'T42':
+    exp.set_resolution(RESOLUTION, 25)
 if SURFACE_TILES:
     exp.namelist['idealized_moist_phys_nml']['surface_tiles'] = True
 # slab depth used only for the polar caps outside the MOM6 domain
