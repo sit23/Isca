@@ -253,13 +253,17 @@ class CoupledExperiment(Experiment):
     """An Isca Experiment whose surface is coupled to an external ocean through OASIS3-MCT."""
 
     def __init__(self, name, codebase, ocean, coupling_period=3600, land_mask=None, zsurf=None,
-                 **kwargs):
+                 river_network=None, **kwargs):
         """land_mask, zsurf: (nlat, nlon) arrays on the Isca grid, matching the land Isca
-        is configured with, used to route runoff to the ocean (None: aquaplanet)."""
+        is configured with, used to route runoff to the ocean (None: aquaplanet).
+        river_network: None routes runoff downhill on zsurf (idealised land); 'ddm30' (or the
+        path of a DDM30-format flow-direction file) sends each land cell's runoff to the mouth
+        of its real river basin (isca.coupling.rivers), for Earth-like land."""
         super(CoupledExperiment, self).__init__(name, codebase, **kwargs)
         self.ocean = ocean
         self.land_mask = land_mask
         self.zsurf = zsurf
+        self.river_network = river_network
         self.coupling_period = int(coupling_period)
         self.on('run:ready', self._prepare_coupling)
         self.on('run:complete', self._save_coupling_restarts)
@@ -305,8 +309,13 @@ class CoupledExperiment(Experiment):
         coupled = self.ocean.isca_ocean_mask(nlon, nlat)
         if self.land_mask is not None:
             coupled = coupled & ~np.asarray(self.land_mask, dtype=bool)
-        write_runoff_routing(os.path.join(indir, 'runoff_routing.nc'),
-                             runoff_destinations(coupled, self.zsurf))
+        if self.river_network is None:
+            dest = runoff_destinations(coupled, self.zsurf)
+        else:
+            from isca.coupling import rivers
+            path = rivers.DDM30_FILE if self.river_network == 'ddm30' else self.river_network
+            dest = rivers.basin_runoff_destinations(coupled, rivers.gaussian_edges(nlat), self.zsurf, path)
+        write_runoff_routing(os.path.join(indir, 'runoff_routing.nc'), dest)
 
         cold_start = True
         for rst in (ISCA_RESTART, OCEAN_RESTART):

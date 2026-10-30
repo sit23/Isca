@@ -5,7 +5,8 @@ present-day Earth.
 The atmosphere is the published SimCloud setup (exp/test_cases/simple_clouds/socrates_simcloud.py:
 T42, 25 levels, simple Betts-Miller convection, linear cloud scheme with marine stratocumulus),
 but with the prescribed SST and ice replaced by MOM6 + SIS2 as in realistic_mom6.py (SIS2=1):
-fractional surface tiles, SIS2 sea ice with snow, land-bucket rivers routed to the ocean.
+fractional surface tiles, SIS2 sea ice with snow, land-bucket rivers routed to the mouths of
+their real basins (DDM30 network).
 There is a full seasonal cycle; the forcing is the same every year (present day):
   CO2 = CO2_PPMV (default 380, the 1991-2020 mean), CH4 and N2O on at Socrates' defaults
   (about 1.8 ppmv and 325 ppbv), 1990 ozone climatology, solar constant 1361 W/m2.
@@ -35,6 +36,9 @@ CO2_PPMV = float(os.environ.get('CO2_PPMV', 380.))
 MOM6_SIS2_EXE = os.environ.get('MOM6_SIS2_EXE', os.path.expanduser(
     '~/project_specific_codes/isca_ocean_coupling/mom6_isca/build_sis2/mom6_sis2_isca.x'))
 OM4 = os.environ.get('OM4_ZARR', 'https://nyu1.osn.mghpcc.org/m2lines-pubs/Samudra/v2026-09/om4_twodeg/OM4.zarr')
+# rivers: 'ddm30' routes land runoff to the mouths of the real basins (isca.coupling.rivers);
+# RIVERS=downhill uses the idealised default (steepest descent on the T42 topography)
+RIVERS = None if os.environ.get('RIVERS', 'ddm30') == 'downhill' else os.environ.get('RIVERS', 'ddm30')
 
 sc_dir = os.path.join(GFDL_BASE, 'exp/test_cases/simple_clouds')
 land_file = os.path.join(sc_dir, 'input/era_land_t42_filtered.nc')
@@ -45,7 +49,7 @@ with netCDF4.Dataset(land_file) as nc:
 cb = SocratesCodeBase.from_directory(GFDL_BASE)
 ocean = MOM6SIS2EarthOcean(MOM6_SIS2_EXE, OM4, num_cores=NCORES_OCEAN)
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=3600,
-                        land_mask=land, zsurf=zsurf)
+                        land_mask=land, zsurf=zsurf, river_network=RIVERS)
 exp.inputfiles = [land_file, os.path.join(GFDL_BASE, 'input/rrtm_input_files/ozone_1990.nc')]
 
 diag = DiagTable()

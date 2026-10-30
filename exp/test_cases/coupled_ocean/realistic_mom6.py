@@ -10,6 +10,8 @@ THERMO_ICE=1 replaces the prescribed ice with Isca's thermodynamic sea ice (zero
 PR #266) on top of the coupled ocean, grown by MOM6's frazil. SURFACE_TILES=1 turns on
 Isca's fractional surface tiles (ocean, land and slab ocean); it needs THERMO_ICE=1.
 SIS2=1 instead runs GFDL's SIS2 sea ice with MOM6 (implies SURFACE_TILES=1, no THERMO_ICE).
+Land-bucket runoff goes to the mouths of the real river basins (DDM30 network, isca.coupling.rivers);
+RIVERS=downhill gives the idealised steepest-descent routing used before 30 Oct.
 
 Usage:
     NMONTHS=12 python realistic_mom6.py
@@ -31,6 +33,9 @@ EXP_NAME = os.environ.get('EXP_NAME', 'realistic_mom6')
 MOM6_EXE = os.environ.get('MOM6_ISCA_EXE', os.path.expanduser(
     '~/project_specific_codes/isca_ocean_coupling/mom6_isca/build/mom6_isca.x'))
 OM4 = os.environ.get('OM4_ZARR', 'https://nyu1.osn.mghpcc.org/m2lines-pubs/Samudra/v2026-09/om4_twodeg/OM4.zarr')
+# rivers: 'ddm30' routes land runoff to the mouths of the real basins (isca.coupling.rivers);
+# RIVERS=downhill uses the idealised default (steepest descent on the T42 topography)
+RIVERS = None if os.environ.get('RIVERS', 'ddm30') == 'downhill' else os.environ.get('RIVERS', 'ddm30')
 
 rc_dir = os.path.join(GFDL_BASE, 'exp/test_cases/realistic_continents')
 land_file = os.path.join(GFDL_BASE, 'input/land_masks/era_land_t42.nc')
@@ -54,7 +59,7 @@ if SIS2:
 else:
     ocean = MOM6EarthOcean(MOM6_EXE, OM4, num_cores=int(os.environ.get('NCORES_OCEAN', 16)))
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=3600,
-                        land_mask=land, zsurf=zsurf)
+                        land_mask=land, zsurf=zsurf, river_network=RIVERS)
 exp.inputfiles = [land_file, os.path.join(GFDL_BASE, 'input/rrtm_input_files/ozone_1990.nc'),
                   os.path.join(rc_dir, 'input/siconc_clim_amip.nc')]
 
