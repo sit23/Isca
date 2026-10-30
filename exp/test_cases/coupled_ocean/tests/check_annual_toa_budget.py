@@ -1,4 +1,4 @@
-"""Annual energy budget from the top of the atmosphere, for runs without surface radiation diagnostics.
+"""Annual energy budget from the top of the atmosphere (RRTM or Socrates runs).
 
 Over a whole year the atmosphere stores almost no energy, so the global net downward flux at
 the TOA should equal the change in MOM6's heat content (ocean.stats) plus the change in
@@ -22,8 +22,10 @@ At = 4 * np.pi * R**2
 
 
 def toa_net(a):
-    # RRTM only: the grey scheme does not output the reflected SW, which sea ice makes uneven
-    # (use check_sis2_budget.py, the surface budget, for grey runs)
+    # RRTM or Socrates: the grey scheme does not output the reflected SW, which sea ice makes
+    # uneven (use check_sis2_budget.py, the surface budget, for grey runs)
+    if 'soc_toa_sw' in a:
+        return a.soc_toa_sw - a.soc_olr
     return a.toa_sw - a.olr
 
 

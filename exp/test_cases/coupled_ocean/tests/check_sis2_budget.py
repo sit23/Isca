@@ -43,7 +43,10 @@ def main(exp):
         _, w = np.polynomial.legendre.leggauss(nlat)
         area = (2 * np.pi * R**2 * w / nlon)[:, None] * np.ones(nlon)
         f = a.coupled_ocean_frac.values
-        net = (a.swdn_sfc + a.lwdn_sfc - a.lwup_sfc - a.flux_t - a.flux_lhe).values
+        if 'soc_surf_flux_sw' in a:      # Socrates: net SW down, net LW up
+            net = (a.soc_surf_flux_sw - a.soc_surf_flux_lw - a.flux_t - a.flux_lhe).values
+        else:
+            net = (a.swdn_sfc + a.lwdn_sfc - a.lwup_sfc - a.flux_t - a.flux_lhe).values
         sfc = np.sum(np.where(f > 0, net * f, 0.) * area) / At
         st = xr.open_dataset(os.path.join(o, 'ocean.stats.nc'), decode_times=False)
         days = st.Time.values if 'Time' in st else np.arange(st.sizes[list(st.dims)[0]])
