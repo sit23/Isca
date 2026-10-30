@@ -133,6 +133,9 @@ if all(os.path.exists(f) for f in ocn_files):
               % ((o.hfds.fillna(0.).values * ocn_area).sum() / ocn_area.sum(),
                  (storage * ocn_area).sum() / ocn_area.sum()))
 print('AHT peak: NH %.2f PW, SH %.2f PW; total peak NH %.2f PW' % (aht.max(), aht.min(), total.max()))
+nh = (latb >= 20) & (latb <= 60)
+print('20-60N mean: AHT %.2f, OHT (implied) %.2f PW, ratio %.2f' % (aht[nh].mean(), oht_implied[nh].mean(),
+                                                                   oht_implied[nh].mean() / aht[nh].mean()))
 
 if ref:
     rref = runs(ref)
