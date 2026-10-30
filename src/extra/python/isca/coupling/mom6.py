@@ -374,6 +374,7 @@ DIAG_TABLE = """Isca coupled MOM6
 "ocean_model", "geolat", "geolat", "ocean_static", "all", .false., "none", 2
 "ocean_model", "area_t", "area_t", "ocean_static", "all", .false., "none", 2
 "ocean_model", "wet", "wet", "ocean_static", "all", .false., "none", 2
+"ocean_model", "deptho", "deptho", "ocean_static", "all", .false., "none", 2
 "ocean_model", "tos", "tos", "ocean_month", "all", .true., "none", 2
 "ocean_model", "sos", "sos", "ocean_month", "all", .true., "none", 2
 "ocean_model", "zos", "zos", "ocean_month", "all", .true., "none", 2
@@ -393,6 +394,8 @@ DIAG_TABLE = """Isca coupled MOM6
 "ocean_model", "T_ady_2d", "T_ady_2d", "ocean_month", "all", .true., "none", 2
 "ocean_model", "T_diffy_2d", "T_diffy_2d", "ocean_month", "all", .true., "none", 2
 "ocean_model", "vmo", "vmo", "ocean_month", "all", .true., "none", 2
+"ocean_model", "umo", "umo", "ocean_month", "all", .true., "none", 2
+"ocean_model", "thkcello", "thkcello", "ocean_month", "all", .true., "none", 2
 "ocean_model", "uo", "uo", "ocean_month", "all", .true., "none", 2
 "ocean_model", "vo", "vo", "ocean_month", "all", .true., "none", 2
 "ocean_model", "thetao", "thetao", "ocean_month", "all", .true., "none", 2
