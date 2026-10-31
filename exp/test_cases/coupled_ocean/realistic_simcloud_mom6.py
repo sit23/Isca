@@ -116,8 +116,10 @@ exp.namelist = Namelist({
         'update_albedo_from_ice': False, 'update_land_mask_from_ice': False},
     'qe_moist_convection_nml': {'rhbm': 0.7, 'Tmin': 160., 'Tmax': 350.},
     'lscale_cond_nml': {'do_simple': True, 'do_evap': True},
+    # tcmin/tcmax: with do_simple=False (saturation over ice below freezing) the default table
+    # stops at -160 C, and the 0.1 hPa level reaches 113 K in the southern polar night
     'sat_vapor_pres_nml': {'do_simple': True, 'construct_table_wrt_liq_and_ice': True,
-                           'show_all_bad_values': True},
+                           'show_all_bad_values': True, 'tcmin': -200, 'tcmax': 150},
     'damping_driver_nml': {'do_rayleigh': True, 'trayfric': -0.5, 'sponge_pbottom': 150.,
                            'do_conserve_energy': True},
     'diag_manager_nml': {'mix_snapshot_average_fields': False},
