@@ -294,6 +294,11 @@ EARTH_STRAITS_2DEG = (
     + [(29., 42.8, 50.), (29., 40.8, 50.), (27., 40.8, 50.), (27., 38.8, 50.)]    # Bosporus/Dardanelles
     + [(lo, 62.7, 300.) for lo in range(283, 295, 2)])                            # Hudson Strait
 
+# (lon, lat) cells that regridding to 2 degrees leaves wet but that are land bridges: the
+# isthmus of Panama (open at 9N, which let ~17 Sv flow from the Atlantic to the Pacific in the
+# runs before 2 Nov 2026) and the Malay peninsula at 7N
+EARTH_LAND_2DEG = [(279., 9.0), (281., 9.0), (283., 9.0), (99., 7.0)]
+
 
 def connect_basins(depth, max_channel=4, max_sill=300., min_sill=20.):
     """Join every enclosed basin to the largest one through the shortest channel of at most
@@ -649,6 +654,10 @@ class MOM6EarthOcean(MOM6Ocean):
                 j = np.argmin(abs(lat_c[rows] - la)); i = np.argmin(abs(lon_c - lo))
                 depth[j, i] = max(depth[j, i], sill)
             depth = fill_dead_end_cells(connect_basins(depth, max_channel=2))
+            for lo, la in EARTH_LAND_2DEG:
+                j = np.argmin(abs(lat_c[rows] - la)); i = np.argmin(abs(lon_c - lo))
+                depth[j, i] = 0.
+            depth = fill_dead_end_cells(depth)
             self._grid = dict(ds=ds, rows=rows, lat_e=lat_b[rows[0]:rows[-1] + 2], lat_c=lat_c[rows],
                               lon_e=lon_b, depth=depth)
         return self._grid
@@ -666,7 +675,7 @@ class MOM6EarthOcean(MOM6Ocean):
 
     def write_grid_files(self, indir, nlon, nlat, params):
         # generated once from the (remote) OM4 data, then reused for every run
-        tag = '%s_%s_%g_v3' % (os.path.basename(os.path.dirname(self.om4_zarr.rstrip('/'))),
+        tag = '%s_%s_%g_v4' % (os.path.basename(os.path.dirname(self.om4_zarr.rstrip('/'))),
                             self.init_date, self.max_lat)
         cache = os.path.join(os.environ.get('GFDL_WORK', '.'), 'mom6_earth_cache', tag)
         files = ('ocean_hgrid.nc', 'topog.nc', 'ts_init.nc')
