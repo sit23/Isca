@@ -27,7 +27,8 @@ use       cloud_spookie_mod, only: cloud_spookie_init, cloud_spookie
 
 use         mixed_layer_mod, only: mixed_layer_init, mixed_layer, mixed_layer_end, albedo_calc, &
                                      mixed_layer_uncoupled_pme, mixed_layer_tile_albedo, &
-                                     mixed_layer_tile_diagnostics, mixed_layer_tile_coupling
+                                     mixed_layer_tile_diagnostics, mixed_layer_tile_coupling, &
+                                     mixed_layer_tile_cpl_heat
 use       ocean_coupler_mod, only: ocean_coupler_active, ocean_coupler_put_runoff, ocean_coupler_has_ice
 
 use         lscale_cond_mod, only: lscale_cond_init, lscale_cond, lscale_cond_end
@@ -326,6 +327,7 @@ integer ::           &
      id_bucket_depth_cond, &   ! bucket depth variation induced by condensation
      id_bucket_depth_lh,   &   ! bucket depth variation induced by LH
      id_cpl_runoff,        &   ! runoff arriving at coupled ocean cells
+     id_tile_heat_ocn, id_tile_heat_ice, & ! heat felt over the coupled ocean / ice tiles, per m2 of cell
      id_bucket_diffusion,  &   ! diffused surface water depth 
      id_rh,           & ! Relative humidity
      id_diss_heat_ray,&  ! Heat dissipated by rayleigh bottom drag if gp_surface=.True.
@@ -821,6 +823,10 @@ id_e_sat = register_diag_field(mod_name, 'e_sat', axes(1:2), Time, 'e_sat', '.')
 
 id_cpl_runoff = register_diag_field(mod_name, 'cpl_runoff', axes(1:2), Time, &
        'river runoff routed to the coupled ocean (arriving cells)', 'kg/m2/s')
+id_tile_heat_ocn = register_diag_field(mod_name, 'tile_heat_ocean', axes(1:2), Time, &
+       'net downward heat flux felt over the coupled open-ocean tile, times its fraction', 'W/m2')
+id_tile_heat_ice = register_diag_field(mod_name, 'tile_heat_ice', axes(1:2), Time, &
+       'net downward heat flux felt over the coupled sea-ice tile, times its fraction', 'W/m2')
 if(bucket) then
   id_bucket_depth = register_diag_field(mod_name, 'bucket_depth',            &
        axes(1:2), Time, 'Depth of surface reservoir', 'm')
@@ -1753,6 +1759,12 @@ call mixed_layer_tile_diagnostics(Time+Time_step, t_surf, flux_t, HLV*flux_q, ti
 ! with a coupled ocean the ocean tile is what the ocean model covers, the slab-ocean tile
 ! the rest of the land file's ocean, and land the remainder
 if (ocean_coupler_active()) then
+  ! the heat the atmosphere felt this step over the coupled tiles, with this step's fractions
+  if (id_tile_heat_ocn > 0 .or. id_tile_heat_ice > 0) then
+    call mixed_layer_tile_cpl_heat(new_frac)
+    if (id_tile_heat_ocn > 0) used = send_data(id_tile_heat_ocn, tile_frac(:,:,1) * new_frac(:,:,1), Time+Time_step)
+    if (id_tile_heat_ice > 0) used = send_data(id_tile_heat_ice, tile_frac(:,:,4) * new_frac(:,:,4), Time+Time_step)
+  endif
   call mixed_layer_tile_coupling(cpl_frac, evap_tile, cpl_ice_frac)
   new_frac(:,:,1) = cpl_frac * (1. - cpl_ice_frac)
   new_frac(:,:,4) = cpl_frac * cpl_ice_frac

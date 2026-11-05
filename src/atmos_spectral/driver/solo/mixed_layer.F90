@@ -82,7 +82,8 @@ character(len=128), parameter :: mod_name='mixed_layer'
 !=================================================================================================================================
 
 public :: mixed_layer_init, mixed_layer, mixed_layer_end, albedo_calc, mixed_layer_uncoupled_pme
-public :: mixed_layer_tile_albedo, mixed_layer_tile_diagnostics, mixed_layer_tile_coupling
+public :: mixed_layer_tile_albedo, mixed_layer_tile_diagnostics, mixed_layer_tile_coupling, &
+          mixed_layer_tile_cpl_heat
 
 !=================================================================================================================================
 
@@ -197,6 +198,9 @@ real :: snow_albedo_land = -1.
 real :: snow_t_full = 263.15
 real :: snow_t_none = 273.15
 real, allocatable, dimension(:,:) :: land_ice_frac
+! net downward heat flux the atmosphere felt over the coupled ocean (1) and ice (4) tiles, per
+! m2 of tile, for budget diagnostics (mixed_layer_tile_cpl_heat)
+real, allocatable, dimension(:,:,:) :: tile_net_cpl
 
 namelist/mixed_layer_nml/ evaporation, depth, qflux_amp, qflux_width, tconst,&
                               delta_T, prescribe_initial_dist,albedo_value,  &
@@ -920,6 +924,7 @@ if (trim(ocean_coupling) == 'oasis') then
   frazil_coupled = 0. ; ice_ocean_heat = 0. ; ice_covered_coupled = .false.
   if (surface_tiles) then
     allocate(tile_evap(is:ie, js:je, 4)); tile_evap = 0.
+    allocate(tile_net_cpl(is:ie, js:je, 4)); tile_net_cpl = 0.
     coupled_ice = ocean_coupler_has_ice()
     if (coupled_ice) then
       if (do_thermo_ice) call error_mesg('mixed_layer', 'the ocean component has a sea-ice '// &
@@ -1466,6 +1471,9 @@ if (coupled .and. ice_tile) then
     where (t_atm < TFREEZE_WATER) snow_out = precip
   endif
   sens_out = sens_out - HLF_WATER * snow_out
+  ! what the atmosphere felt over the ice (the snow's latent heat of fusion included, as sent)
+  tile_net_cpl(:,:,4) = net_surf_sw_down + surf_lw_down - (alpha_lw + beta_lw * dts_flux) &
+                        - sens_out - HLV * evap_out
   call ocean_coupler_put_ice(Time, -flux_u, -flux_v, swnet_out, surf_lw_down, sens_out, &
                              dhdt_surf, evap_out, dedt_surf, precip - snow_out, snow_out)
   ice_alb_rad = albedo_out
@@ -1507,6 +1515,7 @@ if (coupled .and. ocean_tile) then
                          ice_lid(precip), psurf)
   if (id_cpl_heat > 0) used = send_data(id_cpl_heat, &
         swnet_out + lwnet_out - sens_out - HLV*evap_out, Time)
+  if (surface_tiles) tile_net_cpl(:,:,1) = swnet_out + lwnet_out - sens_out - HLV*evap_out
   if (do_thermo_ice) then
     if (id_cpl_frazil > 0) used = send_data(id_cpl_frazil, frazil_coupled, Time)
     if (id_ice_ocean_heat > 0) used = send_data(id_ice_ocean_heat, ice_ocean_heat, Time)
@@ -1684,6 +1693,15 @@ else
   albedo_tile = albedo_initial_tile
 endif
 end subroutine mixed_layer_tile_albedo
+
+!=================================================================================================================================
+
+subroutine mixed_layer_tile_cpl_heat(net)
+! the net heat flux the atmosphere felt over the coupled ocean and ice tiles (per m2 of tile)
+real, intent(out), dimension(:,:,:) :: net
+net = 0.
+if (allocated(tile_net_cpl)) net = tile_net_cpl
+end subroutine mixed_layer_tile_cpl_heat
 
 !=================================================================================================================================
 

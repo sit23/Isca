@@ -63,7 +63,8 @@ if LAND_ICE == 'era5':
 diag = DiagTable()
 diag.add_file('atmos_monthly', 30, 'days', time_units='days')
 fields = [('dynamics', f) for f in ('ps', 'bk', 'pk', 'zsurf', 'sphum', 'ucomp', 'vcomp', 'omega', 'temp')]
-fields += [('atmosphere', 'precipitation'), ('atmosphere', 'cpl_runoff'), ('atmosphere', 'bucket_depth')]
+fields += [('atmosphere', 'precipitation'), ('atmosphere', 'cpl_runoff'), ('atmosphere', 'bucket_depth'),
+           ('atmosphere', 'tile_heat_ocean'), ('atmosphere', 'tile_heat_ice')]
 fields += [('mixed_layer', f) for f in ('t_surf', 'flux_t', 'flux_lhe', 'coupled_ocean_frac',
                                          'cpl_net_heat', 'cpl_evap', 'cpl_precip', 'albedo')]
 fields += [('socrates', f) for f in (
