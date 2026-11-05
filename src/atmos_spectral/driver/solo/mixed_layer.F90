@@ -590,7 +590,9 @@ id_heat_cap = register_static_field(mod_name, 'ml_heat_cap',        &
                                  axes(1:2), 'mixed layer heat capacity','joules/m^2/deg C')
 id_delta_t_surf = register_diag_field(mod_name, 'delta_t_surf',        &
                                  axes(1:2), Time, 'change in sst','K')
-if (update_albedo_from_ice .or. do_thermo_ice .or. do_prescribe_albedo) then
+! with surface tiles the cell's albedo changes with its sea ice (and snow), so it is sent every step
+if (update_albedo_from_ice .or. do_thermo_ice .or. do_prescribe_albedo .or. surface_tiles &
+    .or. snow_albedo_land > 0.) then
     id_albedo = register_diag_field(mod_name, 'albedo',    &
                                  axes(1:2), Time, 'surface albedo', 'none')
     if (do_thermo_ice) then 
@@ -805,7 +807,7 @@ if ((.not. do_thermo_ice) .and. (.not. do_prescribe_albedo)) then ! NTL 01/23 th
         call read_ice_conc(Time)
         call albedo_calc(albedo,Time)
     else
-        if ( id_albedo > 0 ) used = send_data ( id_albedo, albedo )
+        if ( id_albedo > 0 .and. .not. (surface_tiles .or. snow_albedo_land > 0.) ) used = send_data ( id_albedo, albedo )
     endif
 else ! NTL 01/23 thermodynamic sea ice 
     if ( id_albedo > 0 ) used = send_data ( id_albedo, albedo, Time) 
@@ -1711,7 +1713,7 @@ if(id_t_surf > 0) used = send_data(id_t_surf, t_surf, Time_next)
 if(id_flux_t > 0) used = send_data(id_flux_t, flux_t, Time_next)
 if(id_flux_lhe > 0) used = send_data(id_flux_lhe, flux_lhe, Time_next)
 if(id_delta_t_surf > 0) used = send_data(id_delta_t_surf, delta_t_surf, Time_next)
-if(id_albedo > 0 .and. (do_thermo_ice .or. do_prescribe_albedo)) used = send_data(id_albedo, albedo, Time_next)
+if(id_albedo > 0) used = send_data(id_albedo, albedo, Time_next)
 end subroutine mixed_layer_tile_diagnostics
 
 !=================================================================================================================================
