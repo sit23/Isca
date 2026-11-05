@@ -183,6 +183,21 @@ logical :: read_const_correct = .true. ! set to false if doing nudging, and want
 logical :: read_nudge_out = .true. 
 logical :: albedo_from_nudge_file = .false.
 
+! Land ice and snow (land only, without do_thermo_ice or do_prescribe_albedo).
+! Ice sheets: land_ice_file_name (in INPUT, without .nc, on the model grid) holds the
+! fraction of the land in each cell covered by ice sheet, field land_ice_field_name; that fraction of the
+! land has albedo land_ice_albedo. Snow: with snow_albedo_land > 0 the land albedo rises
+! towards snow_albedo_land as the surface temperature falls from snow_t_none to snow_t_full
+! (a temperature-dependent snow cover; there is no snow mass on land). Neither lowers an
+! albedo that is already higher.
+character(len=256) :: land_ice_file_name = ''
+character(len=256) :: land_ice_field_name = 'land_ice'
+real :: land_ice_albedo = 0.8
+real :: snow_albedo_land = -1.
+real :: snow_t_full = 263.15
+real :: snow_t_none = 273.15
+real, allocatable, dimension(:,:) :: land_ice_frac
+
 namelist/mixed_layer_nml/ evaporation, depth, qflux_amp, qflux_width, tconst,&
                               delta_T, prescribe_initial_dist,albedo_value,  &
                               land_depth,trop_depth,                         &  !mj
@@ -213,7 +228,9 @@ namelist/mixed_layer_nml/ evaporation, depth, qflux_amp, qflux_width, tconst,&
                               do_explicit, do_thermo_ice, thermo_ice_albedo, t_surf_freeze, t_thermo_ice_base, & ! NTL ice 
                               do_nudge_ice, nudge_ice_file_name, thermo_ice_nudge_timescale, time_varying_nudge_ice, &
                               do_nudging_correction, do_prescribe_albedo, time_varying_albedo, albedo_file_name, &
-                              prescribe_nh_albedo_only, read_const_correct, read_nudge_out, albedo_from_nudge_file
+                              prescribe_nh_albedo_only, read_const_correct, read_nudge_out, albedo_from_nudge_file, &
+                              land_ice_file_name, land_ice_field_name, land_ice_albedo, &
+                              snow_albedo_land, snow_t_full, snow_t_none
 
 !=================================================================================================================================
 
@@ -768,6 +785,21 @@ if ((.not. do_thermo_ice) .and. (.not. do_prescribe_albedo)) then ! NTL 01/23 th
       albedo_initial_tile(:,:,4) = albedo_initial_tile(:,:,1)
     endif
 
+    if (trim(land_ice_file_name) /= '') then
+      allocate(land_ice_frac(is:ie, js:je))
+      call read_data(trim('INPUT/'//trim(land_ice_file_name)//'.nc'), trim(land_ice_field_name), &
+                     land_ice_frac, grid_domain)
+      land_ice_frac = min(max(land_ice_frac, 0.), 1.)
+      where (land .and. land_ice_albedo > albedo_initial) &
+        albedo_initial = albedo_initial + (land_ice_albedo - albedo_initial) * land_ice_frac
+      albedo = albedo_initial
+      if (surface_tiles) then
+        ! the land tile is land wherever it has area
+        where (land_ice_albedo > albedo_initial_tile(:,:,2)) albedo_initial_tile(:,:,2) = &
+          albedo_initial_tile(:,:,2) + (land_ice_albedo - albedo_initial_tile(:,:,2)) * land_ice_frac
+      endif
+    endif
+
     if (update_albedo_from_ice) then
         ! the ice interpolator is initialised earlier (with update_land_mask_from_ice etc.)
         call read_ice_conc(Time)
@@ -1015,6 +1047,12 @@ endif
 
 if (.not. do_thermo_ice) then ! NTL 01/23 thermodynamic sea ice
     call albedo_calc(albedo_out,Time_next)
+    if (snow_albedo_land > 0. .and. .not. do_prescribe_albedo) then
+      ! snow on land, from the surface temperature at the start of the step
+      where (land_mask .and. snow_albedo_land > albedo_out) &
+        albedo_out = albedo_out + (snow_albedo_land - albedo_out) * &
+                     min(max((snow_t_none - t_surf) / (snow_t_none - snow_t_full), 0.), 1.)
+    endif
 endif 
 
 !s Add latent heat flux anomalies before any of the calculations take place

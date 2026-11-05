@@ -38,6 +38,12 @@ MOM6_SIS2_EXE = os.environ.get('MOM6_SIS2_EXE', os.path.expanduser(
 OM4 = os.environ.get('OM4_ZARR', 'https://nyu1.osn.mghpcc.org/m2lines-pubs/Samudra/v2026-09/om4_twodeg/OM4.zarr')
 # rivers: 'ddm30' routes land runoff to the mouths of the real basins (isca.coupling.rivers);
 # RIVERS=downhill uses the idealised default (steepest descent on the T42 topography)
+# land ice: LAND_ICE=era5 (default) gives the ice sheets (ERA5 snow depth, input/land_ice)
+# albedo LAND_ICE_ALBEDO; LAND_ICE=none leaves them at the land albedo. SNOW_ALBEDO > 0 raises
+# the albedo of other land towards it below freezing (mixed_layer_nml snow_*); 0 turns it off.
+LAND_ICE = os.environ.get('LAND_ICE', 'era5')
+LAND_ICE_ALBEDO = float(os.environ.get('LAND_ICE_ALBEDO', 0.8))
+SNOW_ALBEDO = float(os.environ.get('SNOW_ALBEDO', 0.5))
 RIVERS = None if os.environ.get('RIVERS', 'ddm30') == 'downhill' else os.environ.get('RIVERS', 'ddm30')
 
 sc_dir = os.path.join(GFDL_BASE, 'exp/test_cases/simple_clouds')
@@ -51,6 +57,8 @@ ocean = MOM6SIS2EarthOcean(MOM6_SIS2_EXE, OM4, num_cores=NCORES_OCEAN)
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=3600,
                         land_mask=land, zsurf=zsurf, river_network=RIVERS)
 exp.inputfiles = [land_file, os.path.join(GFDL_BASE, 'input/rrtm_input_files/ozone_1990.nc')]
+if LAND_ICE == 'era5':
+    exp.inputfiles.append(os.path.join(GFDL_BASE, 'input/land_ice/era5_land_ice_t42.nc'))
 
 diag = DiagTable()
 diag.add_file('atmos_monthly', 30, 'days', time_units='days')
@@ -113,7 +121,9 @@ exp.namelist = Namelist({
         'land_option': 'input', 'land_h_capacity_prefactor': 0.1,
         'albedo_value': 0.12, 'land_albedo_prefactor': 1.3,
         'do_qflux': False, 'load_qflux': False,
-        'update_albedo_from_ice': False, 'update_land_mask_from_ice': False},
+        'update_albedo_from_ice': False, 'update_land_mask_from_ice': False,
+        'land_ice_file_name': 'era5_land_ice_t42' if LAND_ICE == 'era5' else '',
+        'land_ice_albedo': LAND_ICE_ALBEDO, 'snow_albedo_land': SNOW_ALBEDO if SNOW_ALBEDO > 0 else -1.},
     'qe_moist_convection_nml': {'rhbm': 0.7, 'Tmin': 160., 'Tmax': 350.},
     'lscale_cond_nml': {'do_simple': True, 'do_evap': True},
     # tcmin/tcmax: with do_simple=False (saturation over ice below freezing) the default table
