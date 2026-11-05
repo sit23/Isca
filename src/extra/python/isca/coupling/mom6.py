@@ -643,7 +643,8 @@ class MOM6EarthOcean(MOM6Ocean):
             lat_b = np.asarray(ds.lat_b.values)[:, 0]
             lon_b = np.asarray(ds.lon_b.values)[0, :]
             lat_c = np.asarray(ds.y.values)
-            rows = np.where((lat_b[:-1] >= -self.max_lat) & (lat_b[1:] <= self.max_lat))[0]
+            north = getattr(self, 'north_lat', self.max_lat)
+            rows = np.where((lat_b[:-1] >= -self.max_lat) & (lat_b[1:] <= north))[0]
             frac = ds.ocean_fraction.isel(y=rows).values           # (lev, ny, nx)
             dz = np.asarray(ds.dz.values)
             depth = (frac * dz[:, None, None]).sum(0)
@@ -713,6 +714,113 @@ class MOM6EarthOcean(MOM6Ocean):
                 v = nc.createVariable(name, 'f8', ('depth', 'lat', 'lon'), fill_value=-1.e20)
                 v.missing_value = -1.e20
                 v[:] = np.where(np.isfinite(data), data, -1.e20)
+
+
+def _largest_basin_tripolar(wet):
+    """The largest connected ocean of a tripolar grid (zonally periodic, and the top row folded
+    onto itself: column i meets column ni-1-i), as a boolean array."""
+    from scipy import ndimage
+    lab, n = ndimage.label(wet)
+    parent = list(range(n + 1))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def union(a, b):
+        if a and b:
+            parent[find(a)] = find(b)
+    nj, ni = wet.shape
+    for j in range(nj):
+        union(lab[j, 0], lab[j, -1])
+    for i in range(ni):
+        union(lab[-1, i], lab[-1, ni - 1 - i])
+    roots = np.array([find(k) for k in range(n + 1)])[lab]
+    sizes = np.bincount(roots[wet])
+    return wet & (roots == np.argmax(sizes))
+
+
+class MOM6EarthTripolarOcean(MOM6EarthOcean):
+    """MOM6 with Earth geometry from OM4 on a tripolar grid that reaches the North Pole, as
+    OM4 itself does. South of lat_join (an OM4 cell edge) the grid is OM4's 2-degree
+    lat-lon grid; north of it, n_cap rows of a bipolar cap (tripolar.py) whose two poles sit
+    on land at lat_join, lon0 and lon0 + 180 (80E in Siberia and 260E in Nunavut by default).
+    The bathymetry is built on the OM4 lat-lon grid up to 90N (straits opened, land bridges
+    closed as for MOM6EarthOcean) and taken by nearest cell in the cap. The southern wall
+    stays at -max_lat."""
+
+    def __init__(self, executable, om4_zarr, lat_join=65., lon0=80., n_cap=18, island_size=20.e3,
+                 **kwargs):
+        super(MOM6EarthTripolarOcean, self).__init__(executable, om4_zarr, **kwargs)
+        self.north_lat = 90.
+        self.lat_join_target, self.lon0, self.n_cap, self.island_size = lat_join, lon0, n_cap, island_size
+        self.mom_input['TRIPOLAR_N'] = True
+        self._tgrid = None
+
+    def _tripolar(self):
+        if self._tgrid is None:
+            from isca.coupling.tripolar import tripolar_points, pole_island_mask
+            g = self._om4()
+            lat_e = g['lat_e']
+            join = lat_e[np.argmin(abs(lat_e - self.lat_join_target))]
+            south = lat_e[lat_e < join]
+            dlon = np.diff(g['lon_e'])[0]
+            ni = len(g['lon_e']) - 1
+            lon_e = self.lon0 + dlon * np.arange(ni + 1)
+            x, y = tripolar_points(lon_e, south, join, self.n_cap)
+            xc, yc = x[1::2, 1::2] % 360., y[1::2, 1::2]
+            # depth by nearest cell of the lat-lon field (exact south of the join)
+            lon_c = (0.5 * (g['lon_e'][:-1] + g['lon_e'][1:])) % 360.
+            jj = np.searchsorted(g['lat_e'], yc) - 1
+            jj = np.clip(jj, 0, len(g['lat_c']) - 1)
+            ii = np.argmin(abs(((xc[..., None] - lon_c) + 180.) % 360. - 180.), axis=-1)
+            depth = g['depth'][jj, ii]
+            depth = np.where(pole_island_mask(x, y, ISCA_RADIUS, self.island_size), 0., depth)
+            depth = fill_dead_end_cells(depth)
+            depth = np.where(_largest_basin_tripolar(depth > 0), depth, 0.)
+            self._tgrid = dict(lon_e=lon_e, south=south, join=join, x=x, y=y, depth=depth)
+        return self._tgrid
+
+    def ocean_grid_shape(self, nlon, nlat):
+        t = self._tripolar()
+        return t['depth'].shape[1], t['depth'].shape[0]
+
+    def isca_ocean_mask(self, nlon, nlat):
+        _, edges = gaussian_grid(nlat)
+        s = np.sin(np.radians(edges)); m = np.sin(np.radians(self.max_lat))
+        covered = (s[1:] - np.maximum(s[:-1], -m)).clip(0) / np.diff(s)
+        return np.broadcast_to((covered > 0.5)[:, None], (nlat, nlon)).copy()
+
+    def write_grid_files(self, indir, nlon, nlat, params):
+        tag = '%s_%s_%g_tripolar_%g_%g_%d_v1' % (
+            os.path.basename(os.path.dirname(self.om4_zarr.rstrip('/'))), self.init_date,
+            self.max_lat, self.lat_join_target, self.lon0, self.n_cap)
+        cache = os.path.join(os.environ.get('GFDL_WORK', '.'), 'mom6_earth_cache', tag)
+        files = ('ocean_hgrid.nc', 'topog.nc', 'ts_init.nc')
+        if not all(os.path.exists(os.path.join(cache, f)) for f in files):
+            os.makedirs(cache, exist_ok=True)
+            self._write_grid_files(cache)
+        for f in files:
+            shutil.copy(os.path.join(cache, f), indir)
+        params.update({'TOPO_CONFIG': '"file"', 'TOPO_FILE': '"topog.nc"', 'TOPO_VARNAME': '"depth"',
+                       'MINIMUM_DEPTH': 9.5, 'MASKING_DEPTH': 9.0})
+        with netCDF4.Dataset(os.path.join(indir, 'topog.nc')) as nc:
+            nj, ni = nc['depth'].shape
+        return ni, nj
+
+    def _write_grid_files(self, indir):
+        from isca.coupling.tripolar import write_tripolar_supergrid
+        t = self._tripolar()
+        # the lat-lon files (hgrid, topog, ts_init) first, then the grid and topography replaced
+        super(MOM6EarthTripolarOcean, self)._write_grid_files(indir)
+        ni, nj = write_tripolar_supergrid(os.path.join(indir, 'ocean_hgrid.nc'), t['lon_e'], t['south'],
+                                          t['join'], self.n_cap, ISCA_RADIUS)
+        os.remove(os.path.join(indir, 'topog.nc'))
+        with netCDF4.Dataset(os.path.join(indir, 'topog.nc'), 'w') as nc:
+            nc.createDimension('ny', nj); nc.createDimension('nx', ni)
+            nc.createVariable('depth', 'f8', ('ny', 'nx'))[:] = t['depth']
 
 
 # Sea-ice fields Isca sends with SIS2 (Isca name -> ocean name): fluxes over its sea-ice
@@ -823,6 +931,10 @@ class MOM6SIS2Ocean(SIS2Mixin, MOM6Ocean):
 
 class MOM6SIS2EarthOcean(SIS2Mixin, MOM6EarthOcean):
     """MOM6EarthOcean with SIS2 sea ice."""
+
+
+class MOM6SIS2EarthTripolarOcean(SIS2Mixin, MOM6EarthTripolarOcean):
+    """MOM6EarthTripolarOcean with SIS2 sea ice (mom6_sis2_isca.x)."""
 
 
 class MOM6SIS2TripolarOcean(SIS2Mixin, MOM6TripolarOcean):

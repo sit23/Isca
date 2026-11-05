@@ -26,7 +26,7 @@ import numpy as np
 
 from isca import SocratesCodeBase, DiagTable, Namelist, GFDL_BASE
 from isca.coupling import CoupledExperiment
-from isca.coupling.mom6 import MOM6SIS2EarthOcean
+from isca.coupling.mom6 import MOM6SIS2EarthOcean, MOM6SIS2EarthTripolarOcean
 
 NCORES = int(os.environ.get('NCORES', 8))
 NCORES_OCEAN = int(os.environ.get('NCORES_OCEAN', 8))
@@ -53,7 +53,12 @@ with netCDF4.Dataset(land_file) as nc:
     zsurf = np.asarray(nc['zsurf'][:])
 
 cb = SocratesCodeBase.from_directory(GFDL_BASE)
-ocean = MOM6SIS2EarthOcean(MOM6_SIS2_EXE, OM4, num_cores=NCORES_OCEAN)
+# OCEAN_GRID=tripolar: OM4's grid south of 65.6N and a bipolar cap to the North Pole (poles on
+# land at 80E and 260E); the default stops at 76.6N
+if os.environ.get('OCEAN_GRID', 'latlon') == 'tripolar':
+    ocean = MOM6SIS2EarthTripolarOcean(MOM6_SIS2_EXE, OM4, num_cores=NCORES_OCEAN)
+else:
+    ocean = MOM6SIS2EarthOcean(MOM6_SIS2_EXE, OM4, num_cores=NCORES_OCEAN)
 exp = CoupledExperiment(EXP_NAME, codebase=cb, ocean=ocean, coupling_period=3600,
                         land_mask=land, zsurf=zsurf, river_network=RIVERS)
 exp.inputfiles = [land_file, os.path.join(GFDL_BASE, 'input/rrtm_input_files/ozone_1990.nc')]
