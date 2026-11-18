@@ -87,6 +87,15 @@ export GFDL_DATA=/path/to/isca_data       # model output
   at a missing directory, any Socrates codebase raises `OSError`.
 - Building writes `Makefile`, `*.o` and `*.x` into `$GFDL_WORK`, not the
   repo. Full compiles take minutes, so don't recompile in a loop.
+- Builds are incremental (mkmf). After switching branches, or changing
+  preprocessor flags, `path_names` or module interfaces, stale `.mod`/`.o`
+  files can cause confusing build failures. Delete that codebase's build
+  directory under `$GFDL_WORK/codebase/` and rebuild. Don't edit the
+  generated `Makefile`.
+- `exp.run(i, ...)` stops without running if
+  `$GFDL_DATA/<exp_name>/run000i` already exists, unless you pass
+  `overwrite_data=True` or clear the directory. Remember this in your own
+  comparison scripts, not just in the trip tests.
 
 ## Testing
 
@@ -112,6 +121,14 @@ Points that trip people (and agents) up:
   pass a local path (`-r $GFDL_BASE`, which works if both commits exist
   locally) or an HTTPS URL. A permission error here is easy to misread as
   "commit not found".
+- **Local-repo checkout cache.** With `-r <local path>` (or
+  `CodeBase.from_repo`), Isca clones into
+  `$GFDL_WORK/codebase/<repo>-<commit>` and checks out the commit. Both
+  commits must be reachable from local branches of that repo, not only from
+  remote-tracking refs or another worktree. If a checkout fails once, the
+  half-made directory is left behind, and later runs fail with
+  `NotImplementedError: commit requested ... but commit supplied ...` until
+  you delete it.
 - **`-e` selects which cases to run** (default `all`); it is an
   include list, not an exclude list. If Socrates is not set up, list the
   cases explicitly, omitting `socrates_aquaplanet`,
@@ -138,6 +155,8 @@ Points that trip people (and agents) up:
   xarray.
 - Trip tests compare two commits **on the same machine and compiler**.
   There is no stored reference output, so don't add one.
+- **Restarts are not tested.** Each case runs one continuous 3-day segment
+  with `use_restart=False`. See the restart bullet under Coding conventions.
 
 ## Coding conventions
 
@@ -164,6 +183,31 @@ Points that trip people (and agents) up:
 - **Docs:** reST under `docs/source/`. Start new pages from `_template.rst`,
   link them from the local `index.rst`, and add citations to
   `references.rst` (see `docs/source/contributing.rst`).
+- **Restart state.** If a change adds or modifies state that persists
+  across timesteps (prognostic fields, or tendencies only updated on an
+  alarm or at some frequency), write it to the module's `RESTART/*.res(.nc)`
+  file and read it back on start-up. Most Isca modules do this with
+  `write_data`/`read_data`; some use `register_restart_field`. Isca is not
+  yet bit-for-bit restart-reproducible in every configuration (one 2N-day
+  run vs two N-day runs), but new code must not add new discrepancies. Check
+  restarts yourself, because the trip tests don't.
+- **FMS idioms:**
+  - Physics routines work on local compute-domain slices (`is:ie, js:je`, or
+    `1:size(field,1)`). Don't mix local 1-based indexing with global
+    `is:ie` indexing.
+  - Report errors with `error_mesg` (`fms_mod`). Guard debug output with
+    `if (mpp_pe() == mpp_root_pe())`, so it doesn't print from every rank.
+  - Register diagnostics with `register_diag_field` in the module's `*_init`
+    routine, and guard `send_data` with `if (id_x > 0)`.
+- **Shared drivers.** Some files, e.g. `idealized_moist_phys.F90`, are
+  compiled into several codebases (`isca`, `grey`, `socrates`, `column`).
+  Their behaviour depends on preprocessor flags such as `SOC_NO_COMPILE`,
+  `RRTM_NO_COMPILE` and `COLUMN_MODEL`. Keep these guards working when you
+  edit shared code, and check that every affected codebase still compiles.
+- **Forcing files** read through FMS `interpolator_mod` or
+  `time_interp_external_mod` need `time` as an UNLIMITED dimension
+  (`unlimited_dims=['time']` in xarray's `to_netcdf`). The `float64` time
+  values must cover the run period.
 - **Third-party code** (FMS/GFDL, RRTM, Socrates interface code under Crown
   copyright): keep licence headers, and keep changes to vendored code minimal
   and clearly marked.
