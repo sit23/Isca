@@ -44,6 +44,7 @@ use def_bound,    only: StrBound, deallocate_bound
 use def_cld,      only: StrCld,   deallocate_cld, deallocate_cld_prsc
 use def_aer,      only: StrAer,   deallocate_aer, deallocate_aer_prsc
 use def_out,      only: StrOut,   deallocate_out
+use socrates_config_mod, only: do_incloud_condensate
 
 use set_control_mod,   only: set_control
 use set_dimen_mod,     only: set_dimen
@@ -169,6 +170,7 @@ integer(i_def) :: l, i
 logical :: used
 
 real(r_def) :: zeros_cld(n_profile, n_layer), ten_microns_cld(n_profile, n_layer)
+real(r_def) :: mmr_pass(n_profile, n_layer)
 
 
 call set_control(control)
@@ -187,10 +189,20 @@ call set_bound(control, dimen, spectrum, bound, n_profile,                     &
 
 zeros_cld = 0.
 ten_microns_cld = 1.
+
+! The cloud schemes (cloud_simple, cloud_spookie) supply qcl_rad = cf x in-cloud water, a grid-box mean,
+! but Socrates uses condensed_mix_ratio as the IN-CLOUD mixing ratio (weighted by the cloud fraction).
+! With do_incloud_condensate = .true. the grid-box mean is divided by the cloud fraction first.
+! Default (.false.) passes the grid-box mean, as before.
+mmr_pass = mmr_cl_rad
+if (do_incloud_condensate) then
+  where (cld_frac > 1.0e-4_r_def) mmr_pass = mmr_cl_rad / cld_frac
+end if
+
 call set_cld(cld, control, dimen, spectrum, n_profile, n_layer, &
             liq_frac      = cld_frac,     &
             ice_frac      = zeros_cld,     &
-            liq_mmr       = mmr_cl_rad,      &
+            liq_mmr       = mmr_pass,      &
             ice_mmr       = zeros_cld,      &
             liq_dim       = reff_rad,      &
             ice_dim       = zeros_cld )
